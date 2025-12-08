@@ -36,6 +36,24 @@ const navigation = [
 export default function Layout({ children, currentPageName }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
+  // --- NOVA FUNÇÃO DE LOGOUT CORRIGIDA ---
+  const handleLogout = async () => {
+    try {
+      // 1. Tenta avisar ao Supabase para encerrar a sessão
+      await supabase.auth.signOut();
+    } catch (error) {
+      // Se der erro 403 ou qualquer outro, apenas ignoramos
+      console.log("Erro silencioso ao sair:", error);
+    } finally {
+      // 2. FORÇA O REDIRECIONAMENTO (Isso roda sempre)
+      // Limpa dados locais para garantir
+      localStorage.clear(); 
+      // Manda o usuário para a tela de login
+      window.location.href = '/login';
+    }
+  };
+  // ---------------------------------------
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-stone-50 via-white to-emerald-50/30">
       {/* Mobile sidebar backdrop */}
@@ -102,7 +120,7 @@ export default function Layout({ children, currentPageName }) {
             </div>
             
             <button
-              onClick={() => supabase.auth.signOut()}
+              onClick={handleLogout} // <--- AQUI MUDOU: Agora chama a função segura
               className="flex items-center gap-3 w-full px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 rounded-xl transition-colors"
             >
               <LogOut className="w-5 h-5" />
