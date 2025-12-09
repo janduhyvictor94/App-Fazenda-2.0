@@ -14,10 +14,14 @@ import { format, parseISO, isWithinInterval } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, LineChart, Line, CartesianGrid } from 'recharts';
 
-// CORES PADRÃO
-const COLORS = ['#10b981', '#f59e0b', '#3b82f6', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316', '#84cc16', '#6b7280'];
+// CORES PADRÃO (Expandidas para cobrir mais categorias)
+const COLORS = [
+  '#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', 
+  '#ec4899', '#06b6d4', '#f97316', '#84cc16', '#6b7280',
+  '#14b8a6', '#6366f1', '#d946ef', '#f43f5e', '#a855f7'
+];
 
-// LABELS DE CATEGORIA (Vindos do Financeiro para manter consistência)
+// LABELS DE CATEGORIA FINANCEIRA
 const categoriaLabels = {
   funcionario: { label: 'Funcionário', color: 'bg-blue-100 text-blue-700' },
   insumo: { label: 'Insumo', color: 'bg-green-100 text-green-700' },
@@ -29,6 +33,18 @@ const categoriaLabels = {
   equipamento: { label: 'Equipamento', color: 'bg-indigo-100 text-indigo-700' },
   administrativo: { label: 'Administrativo', color: 'bg-pink-100 text-pink-700' },
   outro: { label: 'Outro', color: 'bg-stone-100 text-stone-700' }
+};
+
+// LABELS DE TIPO DE ATIVIDADE
+const tipoAtividadeLabels = {
+  inducao: 'Indução',
+  poda: 'Poda',
+  adubacao: 'Adubação',
+  pulverizacao: 'Pulverização',
+  maturacao: 'Maturação',
+  irrigacao: 'Irrigação',
+  capina: 'Capina',
+  outro: 'Outra Atividade'
 };
 
 export default function Relatorios() {
@@ -72,7 +88,7 @@ export default function Relatorios() {
     }
   });
 
-  // Filtro de período customizado com correção de data
+  // Filtro de período customizado
   const filtrarPorPeriodo = (data, dateField) => {
     if (!data) return data;
     return data.filter(item => {
@@ -107,17 +123,32 @@ export default function Relatorios() {
   const custoTotal = totalCustosFinanceiro + custoAtividades;
   const lucro = totalReceita - custoTotal;
 
-  // --- DADOS PARA O GRÁFICO DE PIZZA (CUSTOS POR CATEGORIA) ---
-  const custoPorCategoria = custosFiltrados.reduce((acc, c) => {
-    const catLabel = categoriaLabels[c.categoria]?.label || 'Outro';
-    acc[catLabel] = (acc[catLabel] || 0) + (c.valor || 0);
-    return acc;
-  }, {});
+  // --- DADOS PARA O GRÁFICO DE PIZZA (CUSTOS POR CATEGORIA DETALHADO) ---
+  const custoPorCategoria = {};
 
-  // Adicionamos as atividades como uma categoria "Atividades (Manejo)"
-  if (custoAtividades > 0) {
-    custoPorCategoria['Atividades (Manejo)'] = (custoPorCategoria['Atividades (Manejo)'] || 0) + custoAtividades;
-  }
+  // 1. Adicionar Custos Financeiros (Lançamentos diretos)
+  custosFiltrados.forEach(c => {
+    const catLabel = categoriaLabels[c.categoria]?.label || 'Outro';
+    custoPorCategoria[catLabel] = (custoPorCategoria[catLabel] || 0) + (c.valor || 0);
+  });
+
+  // 2. Adicionar Custos de Atividades (Separado por Tipo)
+  atividadesFiltradas.forEach(a => {
+    if (a.custo_total > 0) {
+      // Tenta pegar o nome padrão (ex: Indução), se não tiver, usa o personalizado
+      let nomeAtividade = tipoAtividadeLabels[a.tipo] || a.tipo;
+      
+      // Se for do tipo 'outro', usa o nome personalizado se existir
+      if (a.tipo === 'outro' && a.tipo_personalizado) {
+        nomeAtividade = a.tipo_personalizado;
+      }
+      
+      // Capitalizar a primeira letra caso venha cru
+      nomeAtividade = nomeAtividade.charAt(0).toUpperCase() + nomeAtividade.slice(1);
+
+      custoPorCategoria[nomeAtividade] = (custoPorCategoria[nomeAtividade] || 0) + (a.custo_total || 0);
+    }
+  });
 
   const pieDataCustos = Object.entries(custoPorCategoria)
     .map(([name, value]) => ({ name, value }))
@@ -147,7 +178,7 @@ export default function Relatorios() {
     value
   }));
 
-  // Aproveitamento por tipo (receita/kg)
+  // Aproveitamento
   const aproveitamentoPorTipo = colheitasFiltradas.reduce((acc, c) => {
     const tipo = c.tipo_colheita || 'outros';
     if (!acc[tipo]) acc[tipo] = { kg: 0, receita: 0 };
@@ -192,7 +223,6 @@ export default function Relatorios() {
     return acc;
   }, {});
   
-  // Adicionar custos de atividades aos talhões
   atividadesFiltradas.forEach(a => {
       const talhaoNome = a.talhao_id ? (talhoes.find(t => t.id === a.talhao_id)?.nome || 'Desconhecido') : 'Geral';
       custoPorTalhao[talhaoNome] = (custoPorTalhao[talhaoNome] || 0) + (a.custo_total || 0);
@@ -262,11 +292,11 @@ export default function Relatorios() {
           </div>
         </div>
 
-        <h2>Detalhamento de Custos por Categoria</h2>
+        <h2>Detalhamento de Custos por Categoria/Atividade</h2>
         <table>
           <thead>
             <tr>
-              <th>Categoria</th>
+              <th>Categoria/Atividade</th>
               <th>Valor Total</th>
             </tr>
           </thead>
@@ -531,14 +561,13 @@ export default function Relatorios() {
           </Card>
         </TabsContent>
 
-        {/* --- ABA CUSTOS MODIFICADA --- */}
         <TabsContent value="custos" className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             
-            {/* NOVO: Gráfico de Custos por Categoria */}
+            {/* Gráfico de Custos por Categoria/Atividade */}
             <Card className="border-stone-100">
               <CardHeader>
-                <CardTitle className="text-lg">Custos por Categoria</CardTitle>
+                <CardTitle className="text-lg">Custos por Categoria e Atividade</CardTitle>
               </CardHeader>
               <CardContent>
                 {pieDataCustos.length > 0 ? (
@@ -597,24 +626,24 @@ export default function Relatorios() {
             {/* Tabela Resumo */}
             <Card className="border-stone-100 lg:col-span-2">
               <CardHeader>
-                <CardTitle className="text-lg">Resumo de Custos</CardTitle>
+                <CardTitle className="text-lg">Detalhamento dos Custos</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                   <div className="p-4 bg-stone-50 rounded-xl">
-                    <p className="text-sm text-stone-500">Lançamentos Financeiros</p>
+                    <p className="text-sm text-stone-500">Financeiro (Diretos)</p>
                     <p className="text-2xl font-bold text-stone-900">
                       R$ {totalCustosFinanceiro.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                     </p>
                   </div>
                   <div className="p-4 bg-stone-50 rounded-xl">
-                    <p className="text-sm text-stone-500">Custos de Atividades (Manejo)</p>
+                    <p className="text-sm text-stone-500">Atividades (Manejo)</p>
                     <p className="text-2xl font-bold text-stone-900">
                       R$ {custoAtividades.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                     </p>
                   </div>
                   <div className="p-4 bg-red-50 rounded-xl">
-                    <p className="text-sm text-red-600">Custo Total Consolidado</p>
+                    <p className="text-sm text-red-600">Total Consolidado</p>
                     <p className="text-2xl font-bold text-red-600">
                       R$ {custoTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                     </p>
@@ -625,7 +654,7 @@ export default function Relatorios() {
                   <Table>
                     <TableHeader>
                       <TableRow className="bg-stone-50">
-                        <TableHead>Categoria</TableHead>
+                        <TableHead>Categoria / Atividade</TableHead>
                         <TableHead className="text-right">Valor Total</TableHead>
                         <TableHead className="text-right">Participação</TableHead>
                       </TableRow>
