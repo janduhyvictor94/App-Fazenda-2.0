@@ -14,7 +14,22 @@ import { format, parseISO, isWithinInterval } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, LineChart, Line, CartesianGrid } from 'recharts';
 
-const COLORS = ['#10b981', '#f59e0b', '#3b82f6', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316'];
+// CORES PADRÃO
+const COLORS = ['#10b981', '#f59e0b', '#3b82f6', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316', '#84cc16', '#6b7280'];
+
+// LABELS DE CATEGORIA (Vindos do Financeiro para manter consistência)
+const categoriaLabels = {
+  funcionario: { label: 'Funcionário', color: 'bg-blue-100 text-blue-700' },
+  insumo: { label: 'Insumo', color: 'bg-green-100 text-green-700' },
+  manutencao: { label: 'Manutenção', color: 'bg-amber-100 text-amber-700' },
+  energia: { label: 'Energia', color: 'bg-yellow-100 text-yellow-700' },
+  agua: { label: 'Água', color: 'bg-cyan-100 text-cyan-700' },
+  combustivel: { label: 'Combustível', color: 'bg-orange-100 text-orange-700' },
+  terceirizado: { label: 'Terceirizado', color: 'bg-purple-100 text-purple-700' },
+  equipamento: { label: 'Equipamento', color: 'bg-indigo-100 text-indigo-700' },
+  administrativo: { label: 'Administrativo', color: 'bg-pink-100 text-pink-700' },
+  outro: { label: 'Outro', color: 'bg-stone-100 text-stone-700' }
+};
 
 export default function Relatorios() {
   const [filtroTalhao, setFiltroTalhao] = useState('todos');
@@ -62,14 +77,11 @@ export default function Relatorios() {
     if (!data) return data;
     return data.filter(item => {
       if (!item[dateField]) return false;
-      // Correção de fuso horário aqui
       const itemDate = new Date(item[dateField] + 'T12:00:00');
       
-      // Datas dos inputs (já vêm como YYYY-MM-DD, parseISO funciona bem aqui pois queremos meia-noite)
       const dataInicioDate = dataInicio ? parseISO(dataInicio) : new Date(2020, 0, 1);
       const dataFimDate = dataFim ? parseISO(dataFim) : new Date(2040, 11, 31);
       
-      // Ajuste para garantir que a comparação inclua o dia inteiro final
       dataFimDate.setHours(23, 59, 59);
 
       return isWithinInterval(itemDate, { start: dataInicioDate, end: dataFimDate });
@@ -86,14 +98,33 @@ export default function Relatorios() {
   const custosFiltrados = filtrarPorTalhao(filtrarPorPeriodo(custos, 'data'));
   const atividadesFiltradas = filtrarPorTalhao(filtrarPorPeriodo(atividades, 'data_programada'));
 
-  // Estatísticas
+  // Estatísticas Gerais
   const totalColheitaKg = colheitasFiltradas.reduce((acc, c) => acc + (c.quantidade_kg || 0), 0);
   const totalReceita = colheitasFiltradas.reduce((acc, c) => acc + (c.valor_total || 0), 0);
-  const totalCustos = custosFiltrados.reduce((acc, c) => acc + (c.valor || 0), 0);
+  
+  const totalCustosFinanceiro = custosFiltrados.reduce((acc, c) => acc + (c.valor || 0), 0);
   const custoAtividades = atividadesFiltradas.reduce((acc, a) => acc + (a.custo_total || 0), 0);
-  const custoTotal = totalCustos + custoAtividades;
+  const custoTotal = totalCustosFinanceiro + custoAtividades;
   const lucro = totalReceita - custoTotal;
 
+  // --- DADOS PARA O GRÁFICO DE PIZZA (CUSTOS POR CATEGORIA) ---
+  const custoPorCategoria = custosFiltrados.reduce((acc, c) => {
+    const catLabel = categoriaLabels[c.categoria]?.label || 'Outro';
+    acc[catLabel] = (acc[catLabel] || 0) + (c.valor || 0);
+    return acc;
+  }, {});
+
+  // Adicionamos as atividades como uma categoria "Atividades (Manejo)"
+  if (custoAtividades > 0) {
+    custoPorCategoria['Atividades (Manejo)'] = (custoPorCategoria['Atividades (Manejo)'] || 0) + custoAtividades;
+  }
+
+  const pieDataCustos = Object.entries(custoPorCategoria)
+    .map(([name, value]) => ({ name, value }))
+    .sort((a, b) => b.value - a.value); // Ordenar do maior para o menor
+
+  // --- DADOS PARA OUTROS GRÁFICOS ---
+  
   // Colheita por tipo
   const colheitaPorTipo = colheitasFiltradas.reduce((acc, c) => {
     const tipo = c.tipo_colheita || 'outros';
@@ -135,7 +166,6 @@ export default function Relatorios() {
   // Evolução mensal
   const evolucaoMensal = colheitas.reduce((acc, c) => {
     if (!c.data) return acc;
-    // Correção de data
     const mes = format(new Date(c.data + 'T12:00:00'), 'MMM/yy', { locale: ptBR });
     if (!acc[mes]) acc[mes] = { receita: 0, custos: 0 };
     acc[mes].receita += c.valor_total || 0;
@@ -144,7 +174,6 @@ export default function Relatorios() {
 
   custos.forEach(c => {
     if (!c.data) return;
-    // Correção de data
     const mes = format(new Date(c.data + 'T12:00:00'), 'MMM/yy', { locale: ptBR });
     if (!evolucaoMensal[mes]) evolucaoMensal[mes] = { receita: 0, custos: 0 };
     evolucaoMensal[mes].custos += c.valor || 0;
@@ -162,6 +191,12 @@ export default function Relatorios() {
     acc[talhaoNome] = (acc[talhaoNome] || 0) + (c.valor || 0);
     return acc;
   }, {});
+  
+  // Adicionar custos de atividades aos talhões
+  atividadesFiltradas.forEach(a => {
+      const talhaoNome = a.talhao_id ? (talhoes.find(t => t.id === a.talhao_id)?.nome || 'Desconhecido') : 'Geral';
+      custoPorTalhao[talhaoNome] = (custoPorTalhao[talhaoNome] || 0) + (a.custo_total || 0);
+  });
 
   const barDataCusto = Object.entries(custoPorTalhao).map(([name, value]) => ({ name, valor: value }));
 
@@ -227,29 +262,25 @@ export default function Relatorios() {
           </div>
         </div>
 
-        <h2>Colheitas por Tipo</h2>
+        <h2>Detalhamento de Custos por Categoria</h2>
         <table>
           <thead>
             <tr>
-              <th>Tipo de Colheita</th>
-              <th>Quantidade (kg)</th>
-              <th>Receita</th>
-              <th>Preço Médio/kg</th>
+              <th>Categoria</th>
+              <th>Valor Total</th>
             </tr>
           </thead>
           <tbody>
-            ${aproveitamentoData.map(item => `
+            ${pieDataCustos.map(item => `
               <tr>
                 <td>${item.name}</td>
-                <td>${item.kg.toLocaleString('pt-BR')}</td>
-                <td>R$ ${item.receita.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
-                <td>R$ ${item.precoMedio.toFixed(2)}</td>
+                <td>R$ ${item.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
               </tr>
             `).join('')}
           </tbody>
         </table>
 
-        <h2>Custos por Categoria</h2>
+        <h2>Custos por Talhão</h2>
         <table>
           <thead>
             <tr>
@@ -500,8 +531,46 @@ export default function Relatorios() {
           </Card>
         </TabsContent>
 
+        {/* --- ABA CUSTOS MODIFICADA --- */}
         <TabsContent value="custos" className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            
+            {/* NOVO: Gráfico de Custos por Categoria */}
+            <Card className="border-stone-100">
+              <CardHeader>
+                <CardTitle className="text-lg">Custos por Categoria</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {pieDataCustos.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={300}>
+                    <PieChart>
+                      <Pie
+                        data={pieDataCustos}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={60}
+                        outerRadius={100}
+                        paddingAngle={2}
+                        dataKey="value"
+                        label={({ name, percent }) => `${(percent * 100).toFixed(0)}%`}
+                      >
+                        {pieDataCustos.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip formatter={(value) => [`R$ ${value.toLocaleString('pt-BR')}`, 'Valor']} />
+                      <Legend layout="horizontal" verticalAlign="bottom" align="center" />
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-72 flex items-center justify-center text-stone-400">
+                    Nenhum custo registrado no período
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Gráfico de Custos por Talhão */}
             <Card className="border-stone-100">
               <CardHeader>
                 <CardTitle className="text-lg">Custos por Talhão/Área</CardTitle>
@@ -525,38 +594,59 @@ export default function Relatorios() {
               </CardContent>
             </Card>
 
-            <Card className="border-stone-100">
+            {/* Tabela Resumo */}
+            <Card className="border-stone-100 lg:col-span-2">
               <CardHeader>
                 <CardTitle className="text-lg">Resumo de Custos</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                   <div className="p-4 bg-stone-50 rounded-xl">
-                    <p className="text-sm text-stone-500">Custos Diretos (Lançamentos)</p>
+                    <p className="text-sm text-stone-500">Lançamentos Financeiros</p>
                     <p className="text-2xl font-bold text-stone-900">
-                      R$ {totalCustos.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      R$ {totalCustosFinanceiro.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                     </p>
                   </div>
                   <div className="p-4 bg-stone-50 rounded-xl">
-                    <p className="text-sm text-stone-500">Custos de Atividades</p>
+                    <p className="text-sm text-stone-500">Custos de Atividades (Manejo)</p>
                     <p className="text-2xl font-bold text-stone-900">
                       R$ {custoAtividades.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                     </p>
                   </div>
                   <div className="p-4 bg-red-50 rounded-xl">
-                    <p className="text-sm text-red-600">Custo Total</p>
+                    <p className="text-sm text-red-600">Custo Total Consolidado</p>
                     <p className="text-2xl font-bold text-red-600">
                       R$ {custoTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                     </p>
                   </div>
-                  {totalColheitaKg > 0 && (
-                    <div className="p-4 bg-blue-50 rounded-xl">
-                      <p className="text-sm text-blue-600">Custo por kg Produzido</p>
-                      <p className="text-2xl font-bold text-blue-600">
-                        R$ {(custoTotal / totalColheitaKg).toFixed(2)}
-                      </p>
-                    </div>
-                  )}
+                </div>
+
+                <div className="border rounded-lg overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-stone-50">
+                        <TableHead>Categoria</TableHead>
+                        <TableHead className="text-right">Valor Total</TableHead>
+                        <TableHead className="text-right">Participação</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {pieDataCustos.map((item, index) => (
+                        <TableRow key={index}>
+                          <TableCell className="font-medium">
+                            <div className="flex items-center gap-2">
+                              <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }} />
+                              {item.name}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right">R$ {item.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</TableCell>
+                          <TableCell className="text-right">
+                            {custoTotal > 0 ? ((item.value / custoTotal) * 100).toFixed(1) : 0}%
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
                 </div>
               </CardContent>
             </Card>
