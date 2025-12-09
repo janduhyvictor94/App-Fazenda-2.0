@@ -25,13 +25,20 @@ import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, 
 const COLORS = ['#10b981', '#f59e0b', '#3b82f6', '#ef4444', '#8b5cf6', '#ec4899'];
 
 export default function Dashboard() {
+  // Configuração para buscar sempre dados frescos
+  const queryOptions = {
+    refetchOnWindowFocus: true,
+    staleTime: 0 // Considera os dados sempre "velhos" para forçar verificação
+  };
+
   const { data: talhoes = [] } = useQuery({
     queryKey: ['talhoes'],
     queryFn: async () => {
       const { data, error } = await supabase.from('talhoes').select('*');
       if (error) throw error;
       return data;
-    }
+    },
+    ...queryOptions
   });
 
   const { data: colheitas = [] } = useQuery({
@@ -40,7 +47,8 @@ export default function Dashboard() {
       const { data, error } = await supabase.from('colheitas').select('*');
       if (error) throw error;
       return data;
-    }
+    },
+    ...queryOptions
   });
 
   const { data: atividades = [] } = useQuery({
@@ -49,7 +57,8 @@ export default function Dashboard() {
       const { data, error } = await supabase.from('atividades').select('*');
       if (error) throw error;
       return data;
-    }
+    },
+    ...queryOptions
   });
 
   const { data: custos = [] } = useQuery({
@@ -58,7 +67,8 @@ export default function Dashboard() {
       const { data, error } = await supabase.from('custos').select('*');
       if (error) throw error;
       return data;
-    }
+    },
+    ...queryOptions
   });
 
   const { data: funcionarios = [] } = useQuery({
@@ -67,13 +77,24 @@ export default function Dashboard() {
       const { data, error } = await supabase.from('funcionarios').select('*');
       if (error) throw error;
       return data;
-    }
+    },
+    ...queryOptions
   });
 
-  // Cálculos
-  const totalColheita = colheitas.reduce((acc, c) => acc + (c.quantidade_kg || 0), 0);
-  const totalReceita = colheitas.reduce((acc, c) => acc + (c.valor_total || 0), 0);
-  const totalCustos = custos.reduce((acc, c) => acc + (c.valor || 0), 0);
+  // --- CÁLCULOS CORRIGIDOS ---
+
+  // 1. Colheita e Receita (Convertendo para número para garantir)
+  const totalColheita = colheitas.reduce((acc, c) => acc + Number(c.quantidade_kg || 0), 0);
+  const totalReceita = colheitas.reduce((acc, c) => acc + Number(c.valor_total || 0), 0);
+
+  // 2. Custos Totais (Soma do Financeiro + Soma das Atividades)
+  const custosFinanceiros = custos.reduce((acc, c) => acc + Number(c.valor || 0), 0);
+  const custosAtividades = atividades.reduce((acc, a) => acc + Number(a.custo_total || 0), 0);
+  const totalCustos = custosFinanceiros + custosAtividades;
+
+  // 3. Lucro
+  const lucroEstimado = totalReceita - totalCustos;
+
   const funcionariosAtivos = funcionarios.filter(f => f.status === 'ativo').length;
 
   // Atividades próximas
@@ -82,19 +103,21 @@ export default function Dashboard() {
     .sort((a, b) => new Date(a.data_programada) - new Date(b.data_programada))
     .slice(0, 5);
 
-  // Colheitas por tipo
+  // Colheitas por tipo (Gráfico Pizza)
   const colheitasPorTipo = colheitas.reduce((acc, c) => {
     const tipo = c.tipo_colheita || 'Outros';
-    acc[tipo] = (acc[tipo] || 0) + (c.quantidade_kg || 0);
+    // Formatar nome para ficar bonito no gráfico
+    const nomeFormatado = tipo.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
+    acc[nomeFormatado] = (acc[nomeFormatado] || 0) + Number(c.quantidade_kg || 0);
     return acc;
   }, {});
 
   const pieData = Object.entries(colheitasPorTipo).map(([name, value]) => ({ name, value }));
 
-  // Colheitas por cultura
+  // Receita por Cultura (Gráfico Barras)
   const colheitasPorCultura = colheitas.reduce((acc, c) => {
     const cultura = c.cultura || 'Outros';
-    acc[cultura] = (acc[cultura] || 0) + (c.valor_total || 0);
+    acc[cultura] = (acc[cultura] || 0) + Number(c.valor_total || 0);
     return acc;
   }, {});
 
@@ -105,7 +128,6 @@ export default function Dashboard() {
 
   const getActivityLabel = (date) => {
     if (!date) return '';
-    // Correção de data
     const d = new Date(date + 'T12:00:00');
     if (isToday(d)) return 'Hoje';
     if (isTomorrow(d)) return 'Amanhã';
@@ -162,18 +184,18 @@ export default function Dashboard() {
         <StatCard
           title="Custos Totais"
           value={`R$ ${totalCustos.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
-          subtitle="Despesas registradas"
+          subtitle="Despesas + Atividades"
           icon={DollarSign}
           iconBg="bg-red-50"
           iconColor="text-red-600"
         />
         <StatCard
           title="Lucro Estimado"
-          value={`R$ ${(totalReceita - totalCustos).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+          value={`R$ ${lucroEstimado.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
           subtitle="Receita - Custos"
           icon={TrendingUp}
-          iconBg={(totalReceita - totalCustos) >= 0 ? "bg-emerald-50" : "bg-red-50"}
-          iconColor={(totalReceita - totalCustos) >= 0 ? "text-emerald-600" : "text-red-600"}
+          iconBg={lucroEstimado >= 0 ? "bg-emerald-50" : "bg-red-50"}
+          iconColor={lucroEstimado >= 0 ? "text-emerald-600" : "text-red-600"}
         />
       </div>
 
@@ -256,6 +278,8 @@ export default function Dashboard() {
               <div className="space-y-3">
                 {atividadesPendentes.map((atividade) => {
                   const talhao = talhoes.find(t => t.id === atividade.talhao_id);
+                  const nomeAtividade = tipoAtividadeLabels[atividade.tipo] || atividade.tipo_personalizado || atividade.tipo;
+                  
                   return (
                     <div 
                       key={atividade.id}
@@ -272,7 +296,7 @@ export default function Dashboard() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-stone-800 truncate">
-                          {tipoAtividadeLabels[atividade.tipo] || atividade.tipo_personalizado || atividade.tipo}
+                          {nomeAtividade}
                         </p>
                         <p className="text-xs text-stone-500 truncate">
                           {talhao?.nome || 'Talhão não encontrado'}

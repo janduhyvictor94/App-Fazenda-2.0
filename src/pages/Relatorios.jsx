@@ -14,7 +14,7 @@ import { format, parseISO, isWithinInterval } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, LineChart, Line, CartesianGrid } from 'recharts';
 
-// CORES PADRÃO (Expandidas para cobrir mais categorias)
+// CORES PADRÃO
 const COLORS = [
   '#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', 
   '#ec4899', '#06b6d4', '#f97316', '#84cc16', '#6b7280',
@@ -29,7 +29,7 @@ const categoriaLabels = {
   energia: { label: 'Energia', color: 'bg-yellow-100 text-yellow-700' },
   agua: { label: 'Água', color: 'bg-cyan-100 text-cyan-700' },
   combustivel: { label: 'Combustível', color: 'bg-orange-100 text-orange-700' },
-  terceirizado: { label: 'Terceirizado', color: 'bg-purple-100 text-purple-700' },
+  terceirizado: { label: 'Serviço Terceirizado', color: 'bg-purple-100 text-purple-700' }, // Ajustei o label aqui
   equipamento: { label: 'Equipamento', color: 'bg-indigo-100 text-indigo-700' },
   administrativo: { label: 'Administrativo', color: 'bg-pink-100 text-pink-700' },
   outro: { label: 'Outro', color: 'bg-stone-100 text-stone-700' }
@@ -123,28 +123,41 @@ export default function Relatorios() {
   const custoTotal = totalCustosFinanceiro + custoAtividades;
   const lucro = totalReceita - custoTotal;
 
-  // --- DADOS PARA O GRÁFICO DE PIZZA (CUSTOS POR CATEGORIA DETALHADO) ---
+  // --- LÓGICA CORRIGIDA: CUSTOS POR CATEGORIA ---
   const custoPorCategoria = {};
 
-  // 1. Adicionar Custos Financeiros (Lançamentos diretos)
+  // 1. Adicionar Custos Financeiros
   custosFiltrados.forEach(c => {
-    const catLabel = categoriaLabels[c.categoria]?.label || 'Outro';
+    // Se a categoria for undefined ou vazia, joga para "Não categorizado"
+    let catLabel = c.categoria ? (categoriaLabels[c.categoria]?.label || c.categoria) : 'Não categorizado';
+    
+    // Capitaliza para ficar bonito
+    catLabel = catLabel.charAt(0).toUpperCase() + catLabel.slice(1);
+    
     custoPorCategoria[catLabel] = (custoPorCategoria[catLabel] || 0) + (c.valor || 0);
   });
 
-  // 2. Adicionar Custos de Atividades (Separado por Tipo)
+  // 2. Adicionar Custos de Atividades
   atividadesFiltradas.forEach(a => {
     if (a.custo_total > 0) {
-      // Tenta pegar o nome padrão (ex: Indução), se não tiver, usa o personalizado
-      let nomeAtividade = tipoAtividadeLabels[a.tipo] || a.tipo;
+      // Tenta pegar o nome padrão
+      let nomeAtividade = tipoAtividadeLabels[a.tipo] || a.tipo || 'Atividade Geral';
       
-      // Se for do tipo 'outro', usa o nome personalizado se existir
+      // Se for personalizado
       if (a.tipo === 'outro' && a.tipo_personalizado) {
         nomeAtividade = a.tipo_personalizado;
       }
+
+      // Se não tiver nome nenhum, protege
+      if (!nomeAtividade) nomeAtividade = 'Atividade s/ Nome';
       
-      // Capitalizar a primeira letra caso venha cru
+      // Capitalizar
       nomeAtividade = nomeAtividade.charAt(0).toUpperCase() + nomeAtividade.slice(1);
+
+      // --- CORREÇÃO PRINCIPAL: Adicionar (Terceirizada) no nome ---
+      if (a.terceirizada) {
+        nomeAtividade += ' (Terceirizada)';
+      }
 
       custoPorCategoria[nomeAtividade] = (custoPorCategoria[nomeAtividade] || 0) + (a.custo_total || 0);
     }
@@ -152,7 +165,7 @@ export default function Relatorios() {
 
   const pieDataCustos = Object.entries(custoPorCategoria)
     .map(([name, value]) => ({ name, value }))
-    .sort((a, b) => b.value - a.value); // Ordenar do maior para o menor
+    .sort((a, b) => b.value - a.value);
 
   // --- DADOS PARA OUTROS GRÁFICOS ---
   
