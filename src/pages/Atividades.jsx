@@ -11,7 +11,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Switch } from '@/components/ui/switch';
-import { Plus, Edit, Trash2, ClipboardList, Filter, Package, Copy } from 'lucide-react';
+import { Plus, Edit, Trash2, ClipboardList, Filter, Package, Copy, X } from 'lucide-react';
 import EmptyState from '@/components/ui/EmptyState';
 import { format } from 'date-fns';
 
@@ -130,6 +130,7 @@ export default function Atividades() {
     }
   });
 
+  // --- MUTAÇÕES PARA TIPOS DE ATIVIDADE ---
   const createTipoMutation = useMutation({
     mutationFn: async (data) => {
       const { data: result, error } = await supabase.from('tipos_atividade').insert(data).select();
@@ -139,9 +140,20 @@ export default function Atividades() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tipos-atividade'] });
       setNovoTipo('');
-      setOpenTipoDialog(false);
+      // Não fecha o dialog para permitir ver o item criado
     }
   });
+
+  const deleteTipoMutation = useMutation({
+    mutationFn: async (id) => {
+      const { error } = await supabase.from('tipos_atividade').delete().eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tipos-atividade'] });
+    }
+  });
+  // ----------------------------------------
 
   const resetForm = () => {
     setFormData({
@@ -337,10 +349,10 @@ export default function Atividades() {
                       variant="ghost"
                       size="sm"
                       onClick={() => setOpenTipoDialog(true)}
-                      className="h-7 text-xs"
+                      className="h-7 text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50"
                     >
                       <Plus className="w-3 h-3 mr-1" />
-                      Novo Tipo
+                      Gerenciar Tipos
                     </Button>
                   </div>
                   <Select
@@ -573,30 +585,62 @@ export default function Atividades() {
           </DialogContent>
         </Dialog>
 
-        {/* Dialog para criar novo tipo */}
+        {/* --- DIALOG DE GERENCIAR TIPOS (CORRIGIDO) --- */}
         <Dialog open={openTipoDialog} onOpenChange={setOpenTipoDialog}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
-              <DialogTitle>Criar Novo Tipo de Atividade</DialogTitle>
+              <DialogTitle>Gerenciar Tipos de Atividade</DialogTitle>
             </DialogHeader>
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label>Nome do Tipo</Label>
-                <Input
-                  value={novoTipo}
-                  onChange={(e) => setNovoTipo(e.target.value)}
-                  placeholder="Ex: Desbrota, Raleio, etc."
-                />
+            <div className="space-y-6">
+              {/* Criar Novo */}
+              <div className="space-y-2 p-4 bg-stone-50 rounded-lg">
+                <Label className="text-sm font-medium">Adicionar Novo Tipo</Label>
+                <div className="flex gap-2">
+                  <Input
+                    value={novoTipo}
+                    onChange={(e) => setNovoTipo(e.target.value)}
+                    placeholder="Ex: Desbrota"
+                    className="flex-1"
+                  />
+                  <Button 
+                    onClick={() => createTipoMutation.mutate({ nome: novoTipo })}
+                    disabled={!novoTipo || createTipoMutation.isPending}
+                    className="bg-emerald-600 hover:bg-emerald-700"
+                  >
+                    <Plus className="w-4 h-4 mr-1" />
+                    Adicionar
+                  </Button>
+                </div>
               </div>
-              <div className="flex justify-end gap-3">
+
+              {/* Lista de Existentes */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Tipos Personalizados Cadastrados</Label>
+                {tiposCustomizados.length === 0 ? (
+                  <p className="text-sm text-stone-500 italic">Nenhum tipo personalizado cadastrado.</p>
+                ) : (
+                  <div className="border rounded-md divide-y max-h-60 overflow-y-auto">
+                    {tiposCustomizados.map((tipo) => (
+                      <div key={tipo.id} className="flex items-center justify-between p-3 bg-white hover:bg-stone-50">
+                        <span className="text-sm text-stone-700 font-medium">{tipo.nome}</span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => deleteTipoMutation.mutate(tipo.id)}
+                          className="h-8 w-8 p-0 text-stone-400 hover:text-red-600 hover:bg-red-50 rounded-full"
+                          title="Excluir este tipo"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              
+              <div className="flex justify-end pt-2">
                 <Button variant="outline" onClick={() => setOpenTipoDialog(false)}>
-                  Cancelar
-                </Button>
-                <Button 
-                  onClick={() => createTipoMutation.mutate({ nome: novoTipo })}
-                  disabled={!novoTipo || createTipoMutation.isPending}
-                >
-                  Criar
+                  Fechar
                 </Button>
               </div>
             </div>
