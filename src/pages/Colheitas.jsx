@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, Edit, Trash2, Wheat, Filter } from 'lucide-react';
+import { Plus, Edit, Trash2, Wheat, Filter, Package, TrendingUp, TrendingDown } from 'lucide-react';
 import EmptyState from '@/components/ui/EmptyState';
 import StatCard from '@/components/ui/StatCard';
 import { format } from 'date-fns';
@@ -200,7 +200,6 @@ export default function Colheitas() {
       await createMutation.mutateAsync(data);
     }
 
-    // Se tem custo, lançar no financeiro automaticamente
     if (custoTotal > 0) {
       await supabase.from('custos').insert({
         descricao: `Colheita - ${tipoColheitaLabel(formData.tipo_colheita)} - ${getTalhaoNome(formData.talhao_id)}`,
@@ -224,12 +223,10 @@ export default function Colheitas() {
     ...tiposCustomizadosFiltrados.map(t => ({ value: t.nome, label: t.nome }))
   ];
 
-  // Filtros
   const colheitasFiltradas = colheitas.filter(c => {
     if (filtroTalhao !== 'todos' && c.talhao_id !== filtroTalhao) return false;
     if (filtroCultura !== 'todos' && c.cultura !== filtroCultura) return false;
     
-    // Filtro de data
     if (dataInicio && c.data) {
       const dataColheita = new Date(c.data);
       const dataInicioDate = new Date(dataInicio);
@@ -244,11 +241,9 @@ export default function Colheitas() {
     return true;
   });
 
-  // Stats
   const totalKg = colheitasFiltradas.reduce((acc, c) => acc + (c.quantidade_kg || 0), 0);
+  const totalCaixas = colheitasFiltradas.reduce((acc, c) => acc + (c.quantidade_caixas || 0), 0);
   const totalReceita = colheitasFiltradas.reduce((acc, c) => acc + (c.valor_total || 0), 0);
-  const mangaTotal = colheitasFiltradas.filter(c => c.cultura === 'manga').reduce((acc, c) => acc + (c.quantidade_kg || 0), 0);
-  const goiabaTotal = colheitasFiltradas.filter(c => c.cultura === 'goiaba').reduce((acc, c) => acc + (c.quantidade_kg || 0), 0);
 
   const getTalhaoNome = (id) => talhoes.find(t => t.id === id)?.nome || '-';
 
@@ -386,7 +381,7 @@ export default function Colheitas() {
 
               <div className="grid grid-cols-3 gap-4">
                 <div className="space-y-2">
-                  <Label>Preço Unitário (Venda)</Label>
+                  <Label>Preço Unitário</Label>
                   <Input
                     type="number"
                     step="0.01"
@@ -419,10 +414,10 @@ export default function Colheitas() {
               </div>
 
               <div className="p-4 bg-stone-50 rounded-xl">
-                <Label className="text-base font-medium mb-3 block">Custo da Colheita</Label>
+                <Label className="text-base font-medium mb-3 block">Custo da Colheita (Terceirizado)</Label>
                 <div className="grid grid-cols-3 gap-4">
                   <div className="space-y-2">
-                    <Label>Custo Unitário</Label>
+                    <Label>Custo Unit.</Label>
                     <Input
                       type="number"
                       step="0.01"
@@ -530,11 +525,18 @@ export default function Colheitas() {
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
-          title="Total Colhido"
+          title="Total Colhido (Kg)"
           value={`${(totalKg / 1000).toFixed(1)} ton`}
           icon={Wheat}
           iconBg="bg-amber-50"
           iconColor="text-amber-600"
+        />
+         <StatCard
+          title="Total Colhido (Cx)"
+          value={`${totalCaixas.toLocaleString('pt-BR')} cx`}
+          icon={Package}
+          iconBg="bg-blue-50"
+          iconColor="text-blue-600"
         />
         <StatCard
           title="Receita Total"
@@ -542,17 +544,11 @@ export default function Colheitas() {
           iconBg="bg-emerald-50"
           iconColor="text-emerald-600"
         />
-        <StatCard
-          title="Manga"
-          value={`${(mangaTotal / 1000).toFixed(1)} ton`}
-          iconBg="bg-orange-50"
-          iconColor="text-orange-600"
-        />
-        <StatCard
-          title="Goiaba"
-          value={`${(goiabaTotal / 1000).toFixed(1)} ton`}
-          iconBg="bg-pink-50"
-          iconColor="text-pink-600"
+         <StatCard
+          title="Registros"
+          value={colheitasFiltradas.length}
+          iconBg="bg-stone-100"
+          iconColor="text-stone-600"
         />
       </div>
 
@@ -611,7 +607,7 @@ export default function Colheitas() {
         </CardContent>
       </Card>
 
-      {/* Tabela */}
+      {/* Tabela Aprimorada */}
       {colheitasFiltradas.length === 0 ? (
         <EmptyState
           icon={Wheat}
@@ -630,9 +626,8 @@ export default function Colheitas() {
                   <TableHead>Talhão</TableHead>
                   <TableHead>Cultura</TableHead>
                   <TableHead>Tipo</TableHead>
-                  <TableHead className="text-right">Qtd (kg)</TableHead>
-                  <TableHead className="text-right">Preço</TableHead>
-                  <TableHead className="text-right">Valor Total</TableHead>
+                  <TableHead className="text-right">Quantidade</TableHead>
+                  <TableHead className="text-right">Venda Total</TableHead>
                   <TableHead className="w-24"></TableHead>
                 </TableRow>
               </TableHeader>
@@ -647,19 +642,43 @@ export default function Colheitas() {
                       <Badge className={
                         colheita.cultura === 'manga' ? 'bg-orange-100 text-orange-700' : 'bg-pink-100 text-pink-700'
                       }>
-                        {colheita.cultura === 'manga' ? 'Manga' : 'Goiaba'}
+                        {colheita.cultura === 'manga' ? (
+                            <span className="flex items-center gap-1">🥭 Manga</span>
+                        ) : (
+                            <span className="flex items-center gap-1">🍈 Goiaba</span>
+                        )}
                       </Badge>
                     </TableCell>
-                    <TableCell>{tipoColheitaLabel(colheita.tipo_colheita)}</TableCell>
+                    <TableCell className="capitalize">{tipoColheitaLabel(colheita.tipo_colheita)}</TableCell>
+                    
+                    {/* Coluna Quantidade Inteligente */}
                     <TableCell className="text-right">
-                      {colheita.quantidade_kg?.toLocaleString('pt-BR')}
+                        <div className="flex flex-col items-end">
+                            {colheita.quantidade_kg > 0 && (
+                                <span className="font-medium text-stone-700">{colheita.quantidade_kg.toLocaleString('pt-BR')} kg</span>
+                            )}
+                            {colheita.quantidade_caixas > 0 && (
+                                <span className="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full mt-0.5">
+                                    {colheita.quantidade_caixas.toLocaleString('pt-BR')} cx
+                                </span>
+                            )}
+                            {!colheita.quantidade_kg && !colheita.quantidade_caixas && (
+                                <span className="text-stone-400">-</span>
+                            )}
+                        </div>
                     </TableCell>
+
                     <TableCell className="text-right">
-                      R$ {colheita.preco_unitario?.toFixed(2)}/{colheita.unidade_preco}
+                        <div className="flex flex-col items-end">
+                            <span className="font-bold text-emerald-600">
+                                R$ {colheita.valor_total?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            </span>
+                            <span className="text-xs text-stone-400">
+                                (R$ {colheita.preco_unitario?.toFixed(2)}/{colheita.unidade_preco})
+                            </span>
+                        </div>
                     </TableCell>
-                    <TableCell className="text-right font-medium text-emerald-600">
-                      R$ {colheita.valor_total?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                    </TableCell>
+                    
                     <TableCell>
                       <div className="flex items-center justify-end gap-1">
                         <Button 

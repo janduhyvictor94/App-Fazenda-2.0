@@ -124,8 +124,7 @@ export default function Relatorios() {
   const custoTotal = totalCustosFinanceiro + custoAtividades;
   const lucro = totalReceita - custoTotal;
 
-  // --- LÓGICA DE DETECÇÃO DE UNIDADE (KG vs CAIXAS) ---
-  // Se não tiver KG registrado (ou for muito pouco), mas tiver Caixas, usa Caixas como padrão visual
+  // --- LÓGICA DE UNIDADE VISUAL (KG vs CX) ---
   const usarCaixas = totalColheitaKg < 1 && totalColheitaCaixas > 0;
   const unidadeVisual = usarCaixas ? 'cx' : 'ton';
   const totalVisual = usarCaixas ? totalColheitaCaixas : totalColheitaKg;
@@ -142,10 +141,7 @@ export default function Relatorios() {
   atividadesFiltradas.forEach(a => {
     if (a.custo_total > 0) {
       let nomeAtividade = tipoAtividadeLabels[a.tipo] || a.tipo || 'Atividade Geral';
-      
-      if (a.tipo === 'outro' && a.tipo_personalizado) {
-        nomeAtividade = a.tipo_personalizado;
-      }
+      if (a.tipo === 'outro' && a.tipo_personalizado) nomeAtividade = a.tipo_personalizado;
       if (!nomeAtividade) nomeAtividade = 'Atividade s/ Nome';
       
       nomeAtividade = nomeAtividade.charAt(0).toUpperCase() + nomeAtividade.slice(1);
@@ -161,10 +157,9 @@ export default function Relatorios() {
 
   // --- DADOS PARA OUTROS GRÁFICOS ---
   
-  // Colheita por tipo (Ajustado para respeitar a unidade visual)
+  // Colheita por tipo
   const colheitaPorTipo = colheitasFiltradas.reduce((acc, c) => {
     const tipo = c.tipo_colheita || 'outros';
-    // Aqui decidimos o valor baseado na unidade visual
     const valor = usarCaixas ? (c.quantidade_caixas || 0) : (c.quantidade_kg || 0);
     acc[tipo] = (acc[tipo] || 0) + valor;
     return acc;
@@ -185,7 +180,7 @@ export default function Relatorios() {
       name: tipoColheitaLabels[name] || name,
       value
     }))
-    .filter(item => item.value > 0); 
+    .filter(item => item.value > 0);
 
   // Aproveitamento
   const aproveitamentoPorTipo = colheitasFiltradas.reduce((acc, c) => {
@@ -542,10 +537,11 @@ export default function Relatorios() {
                     <BarChart data={aproveitamentoData}>
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="name" />
-                      <YAxis />
+                      <YAxis yAxisId="left" orientation="left" stroke="#10b981" />
+                      {/* EIXO DIREITO REMOVIDO PARA LIMPAR O VISUAL */}
                       <Tooltip />
                       <Legend />
-                      <Bar dataKey="receita" name="Receita (R$)" fill="#10b981" radius={[4, 4, 0, 0]} />
+                      <Bar yAxisId="left" dataKey="receita" name="Receita (R$)" fill="#10b981" radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
 
