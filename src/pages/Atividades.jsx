@@ -11,7 +11,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Switch } from '@/components/ui/switch';
-import { Plus, Edit, Trash2, ClipboardList, Filter, Package, Copy, X } from 'lucide-react';
+import { Plus, Edit, Trash2, ClipboardList, Filter, Package, Copy, MessageCircle } from 'lucide-react';
 import EmptyState from '@/components/ui/EmptyState';
 import { format } from 'date-fns';
 
@@ -130,7 +130,6 @@ export default function Atividades() {
     }
   });
 
-  // --- MUTAÇÕES PARA TIPOS DE ATIVIDADE ---
   const createTipoMutation = useMutation({
     mutationFn: async (data) => {
       const { data: result, error } = await supabase.from('tipos_atividade').insert(data).select();
@@ -140,7 +139,6 @@ export default function Atividades() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tipos-atividade'] });
       setNovoTipo('');
-      // Não fecha o dialog para permitir ver o item criado
     }
   });
 
@@ -153,7 +151,6 @@ export default function Atividades() {
       queryClient.invalidateQueries({ queryKey: ['tipos-atividade'] });
     }
   });
-  // ----------------------------------------
 
   const resetForm = () => {
     setFormData({
@@ -223,7 +220,6 @@ export default function Atividades() {
     const valorUnitario = insumoSelecionado.preco_unitario || 0;
     const valorTotal = quantidade * valorUnitario;
 
-    // Se selecionou "outro", usar o método personalizado
     const metodoFinal = insumoTemp.metodo_aplicacao === 'outro' ? novoMetodo : insumoTemp.metodo_aplicacao;
 
     const novoInsumo = {
@@ -280,7 +276,6 @@ export default function Atividades() {
     }
   };
 
-  // Filtros
   const atividadesFiltradas = atividades.filter(a => {
     if (filtroTalhao !== 'todos' && a.talhao_id !== filtroTalhao) return false;
     if (filtroStatus !== 'todos' && a.status !== filtroStatus) return false;
@@ -295,6 +290,21 @@ export default function Atividades() {
     return customizado ? customizado.nome : tipo;
   };
 
+  const handleShareWhatsApp = (atividade) => {
+    const talhaoNome = getTalhaoNome(atividade.talhao_id);
+    const tipoNome = atividade.tipo === 'outro' ? atividade.tipo_personalizado : getTipoLabel(atividade.tipo);
+    const data = format(new Date(atividade.data_programada + 'T12:00:00'), 'dd/MM/yyyy');
+    
+    const text = `🚜 *Nova Atividade Programada*\n\n` +
+      `📍 *Local:* ${talhaoNome}\n` +
+      `🔧 *Atividade:* ${tipoNome}\n` +
+      `📅 *Data:* ${data}\n` +
+      `${atividade.observacoes ? `📝 *Obs:* ${atividade.observacoes}` : ''}`;
+  
+    const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
+    window.open(url, '_blank');
+  };
+
   const todosTipos = [
     ...tiposAtividadePadrao,
     ...tiposCustomizados.map(t => ({ value: t.nome, label: t.nome }))
@@ -302,7 +312,6 @@ export default function Atividades() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-stone-900">Atividades</h1>
@@ -430,7 +439,6 @@ export default function Atividades() {
                 />
               </div>
 
-              {/* Terceirização */}
               <div className="p-4 bg-stone-50 rounded-xl space-y-4">
                 <div className="flex items-center justify-between">
                   <Label className="text-base font-medium">Atividade Terceirizada</Label>
@@ -453,7 +461,6 @@ export default function Atividades() {
                 )}
               </div>
 
-              {/* Insumos */}
               <div className="p-4 bg-stone-50 rounded-xl space-y-4">
                 <Label className="text-base font-medium">Insumos Utilizados</Label>
                 <div className="flex flex-wrap gap-2">
@@ -551,7 +558,6 @@ export default function Atividades() {
                 )}
               </div>
 
-              {/* Custo Total */}
               <div className="flex items-center justify-between p-4 bg-emerald-50 rounded-xl">
                 <span className="font-medium text-emerald-800">Custo Total da Atividade</span>
                 <span className="text-xl font-bold text-emerald-600">
@@ -585,14 +591,12 @@ export default function Atividades() {
           </DialogContent>
         </Dialog>
 
-        {/* --- DIALOG DE GERENCIAR TIPOS (CORRIGIDO) --- */}
         <Dialog open={openTipoDialog} onOpenChange={setOpenTipoDialog}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
               <DialogTitle>Gerenciar Tipos de Atividade</DialogTitle>
             </DialogHeader>
             <div className="space-y-6">
-              {/* Criar Novo */}
               <div className="space-y-2 p-4 bg-stone-50 rounded-lg">
                 <Label className="text-sm font-medium">Adicionar Novo Tipo</Label>
                 <div className="flex gap-2">
@@ -613,7 +617,6 @@ export default function Atividades() {
                 </div>
               </div>
 
-              {/* Lista de Existentes */}
               <div className="space-y-2">
                 <Label className="text-sm font-medium">Tipos Personalizados Cadastrados</Label>
                 {tiposCustomizados.length === 0 ? (
@@ -648,7 +651,6 @@ export default function Atividades() {
         </Dialog>
       </div>
 
-      {/* Filtros */}
       <Card className="border-stone-100">
         <CardContent className="pt-4">
           <div className="flex flex-wrap items-center gap-4">
@@ -683,7 +685,6 @@ export default function Atividades() {
         </CardContent>
       </Card>
 
-      {/* Tabela */}
       {atividadesFiltradas.length === 0 ? (
         <EmptyState
           icon={ClipboardList}
@@ -733,6 +734,15 @@ export default function Atividades() {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center justify-end gap-1">
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          onClick={() => handleShareWhatsApp(atividade)}
+                          title="Enviar no WhatsApp"
+                          className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+                        >
+                          <MessageCircle className="w-4 h-4" />
+                        </Button>
                         <Button 
                           variant="ghost" 
                           size="sm"

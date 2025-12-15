@@ -2,6 +2,7 @@ import React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabaseClient';
 import StatCard from '@/components/ui/StatCard';
+import WeatherWidget from '@/components/ui/WeatherWidget'; // Importando o novo Widget
 import { 
   Map, 
   Wheat, 
@@ -9,7 +10,6 @@ import {
   Calendar, 
   TrendingUp, 
   Package, 
-  Users, 
   AlertTriangle, 
   CheckCircle, 
   Clock 
@@ -82,7 +82,7 @@ export default function Dashboard() {
 
   // --- CÁLCULOS ---
 
-  // 1. Lógica Inteligente para Unidade (KG vs Caixas)
+  // Lógica Inteligente para Unidade (KG vs Caixas)
   const totalKg = colheitas.reduce((acc, c) => acc + Number(c.quantidade_kg || 0), 0);
   const totalCaixas = colheitas.reduce((acc, c) => acc + Number(c.quantidade_caixas || 0), 0);
   
@@ -94,12 +94,10 @@ export default function Dashboard() {
 
   const totalReceita = colheitas.reduce((acc, c) => acc + Number(c.valor_total || 0), 0);
 
-  // 2. Custos
+  // Custos e Lucro
   const custosFinanceiros = custos.reduce((acc, c) => acc + Number(c.valor || 0), 0);
   const custosAtividades = atividades.reduce((acc, a) => acc + Number(a.custo_total || 0), 0);
   const totalCustos = custosFinanceiros + custosAtividades;
-
-  // 3. Lucro
   const lucroEstimado = totalReceita - totalCustos;
 
   const funcionariosAtivos = funcionarios.filter(f => f.status === 'ativo').length;
@@ -210,124 +208,135 @@ export default function Dashboard() {
         />
       </div>
 
-      {/* Charts and Activities */}
+      {/* Layout Principal: Gráficos e Clima */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Colheita por Tipo */}
-        <Card className="border-stone-100">
-          <CardHeader>
-            <CardTitle className="text-lg font-semibold text-stone-800">Colheita por Tipo</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {pieData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={200}>
-                <PieChart>
-                  <Pie
-                    data={pieData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={50}
-                    outerRadius={80}
-                    paddingAngle={2}
-                    dataKey="value"
-                  >
-                    {pieData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip 
-                    formatter={(value) => [`${value.toLocaleString('pt-BR')} ${unidadeDisplay}`, 'Quantidade']}
-                  />
-                  <Legend />
-                </PieChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="h-48 flex items-center justify-center text-stone-400">
-                Nenhuma colheita registrada
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        
+        {/* Coluna Esquerda (2/3) - Gráficos */}
+        <div className="lg:col-span-2 space-y-6">
+            {/* Colheita por Tipo */}
+            <Card className="border-stone-100">
+              <CardHeader>
+                <CardTitle className="text-lg font-semibold text-stone-800">Colheita por Tipo</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {pieData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={200}>
+                    <PieChart>
+                      <Pie
+                        data={pieData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={50}
+                        outerRadius={80}
+                        paddingAngle={2}
+                        dataKey="value"
+                      >
+                        {pieData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip 
+                        formatter={(value) => [`${value.toLocaleString('pt-BR')} ${unidadeDisplay}`, 'Quantidade']}
+                      />
+                      <Legend />
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-48 flex items-center justify-center text-stone-400">
+                    Nenhuma colheita registrada
+                  </div>
+                )}
+              </CardContent>
+            </Card>
 
-        {/* Receita por Cultura */}
-        <Card className="border-stone-100">
-          <CardHeader>
-            <CardTitle className="text-lg font-semibold text-stone-800">Receita por Cultura</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {barData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={200}>
-                <BarChart data={barData}>
-                  <XAxis dataKey="name" />
-                  <YAxis />
-                  <Tooltip 
-                    formatter={(value) => [`R$ ${value.toLocaleString('pt-BR')}`, 'Receita']}
-                  />
-                  <Bar dataKey="valor" fill="#10b981" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="h-48 flex items-center justify-center text-stone-400">
-                Nenhuma receita registrada
-              </div>
-            )}
-          </CardContent>
-        </Card>
+            {/* Receita por Cultura */}
+            <Card className="border-stone-100">
+              <CardHeader>
+                <CardTitle className="text-lg font-semibold text-stone-800">Receita por Cultura</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {barData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={200}>
+                    <BarChart data={barData}>
+                      <XAxis dataKey="name" />
+                      <YAxis />
+                      <Tooltip 
+                        formatter={(value) => [`R$ ${value.toLocaleString('pt-BR')}`, 'Receita']}
+                      />
+                      <Bar dataKey="valor" fill="#10b981" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-48 flex items-center justify-center text-stone-400">
+                    Nenhuma receita registrada
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+        </div>
 
-        {/* Próximas Atividades */}
-        <Card className="border-stone-100">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-lg font-semibold text-stone-800">Próximas Atividades</CardTitle>
-            <Link 
-              to={createPageUrl('Calendario')}
-              className="text-sm text-emerald-600 hover:text-emerald-700 font-medium"
-            >
-              Ver todas
-            </Link>
-          </CardHeader>
-          <CardContent>
-            {atividadesPendentes.length > 0 ? (
-              <div className="space-y-3">
-                {atividadesPendentes.map((atividade) => {
-                  const talhao = talhoes.find(t => t.id === atividade.talhao_id);
-                  const nomeAtividade = tipoAtividadeLabels[atividade.tipo] || atividade.tipo_personalizado || atividade.tipo;
-                  
-                  return (
-                    <div 
-                      key={atividade.id}
-                      className="flex items-center gap-3 p-3 bg-stone-50 rounded-xl"
-                    >
-                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                        atividade.status === 'em_andamento' ? 'bg-amber-100' : 'bg-emerald-100'
-                      }`}>
-                        {atividade.status === 'em_andamento' ? (
-                          <Clock className="w-5 h-5 text-amber-600" />
-                        ) : (
-                          <Calendar className="w-5 h-5 text-emerald-600" />
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-stone-800 truncate">
-                          {nomeAtividade}
-                        </p>
-                        <p className="text-xs text-stone-500 truncate">
-                          {talhao?.nome || 'Talhão não encontrado'}
-                        </p>
-                      </div>
-                      <Badge variant="outline" className="text-xs shrink-0">
-                        {getActivityLabel(atividade.data_programada)}
-                      </Badge>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="h-48 flex flex-col items-center justify-center text-stone-400">
-                <CheckCircle className="w-8 h-8 mb-2" />
-                <p>Nenhuma atividade pendente</p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        {/* Coluna Direita (1/3) - Clima e Atividades */}
+        <div className="space-y-6">
+            
+            {/* Widget de Previsão do Tempo */}
+            <WeatherWidget />
+
+            {/* Próximas Atividades */}
+            <Card className="border-stone-100 h-fit">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-lg font-semibold text-stone-800">Próximas Atividades</CardTitle>
+                <Link 
+                  to={createPageUrl('Calendario')}
+                  className="text-sm text-emerald-600 hover:text-emerald-700 font-medium"
+                >
+                  Ver todas
+                </Link>
+              </CardHeader>
+              <CardContent>
+                {atividadesPendentes.length > 0 ? (
+                  <div className="space-y-3">
+                    {atividadesPendentes.map((atividade) => {
+                      const talhao = talhoes.find(t => t.id === atividade.talhao_id);
+                      const nomeAtividade = tipoAtividadeLabels[atividade.tipo] || atividade.tipo_personalizado || atividade.tipo;
+                      
+                      return (
+                        <div 
+                          key={atividade.id}
+                          className="flex items-center gap-3 p-3 bg-stone-50 rounded-xl border border-stone-100"
+                        >
+                          <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                            atividade.status === 'em_andamento' ? 'bg-amber-100' : 'bg-emerald-100'
+                          }`}>
+                            {atividade.status === 'em_andamento' ? (
+                              <Clock className="w-5 h-5 text-amber-600" />
+                            ) : (
+                              <Calendar className="w-5 h-5 text-emerald-600" />
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-stone-800 truncate">
+                              {nomeAtividade}
+                            </p>
+                            <p className="text-xs text-stone-500 truncate">
+                              {talhao?.nome || 'Talhão não encontrado'}
+                            </p>
+                          </div>
+                          <Badge variant="outline" className="text-xs shrink-0">
+                            {getActivityLabel(atividade.data_programada)}
+                          </Badge>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="h-40 flex flex-col items-center justify-center text-stone-400">
+                    <CheckCircle className="w-8 h-8 mb-2 opacity-50" />
+                    <p className="text-sm">Nenhuma atividade pendente</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+        </div>
       </div>
 
       {/* Quick Access */}

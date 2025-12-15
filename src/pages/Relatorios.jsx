@@ -14,14 +14,12 @@ import { format, parseISO, isWithinInterval } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, LineChart, Line, CartesianGrid } from 'recharts';
 
-// CORES PADRÃO
 const COLORS = [
   '#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', 
   '#ec4899', '#06b6d4', '#f97316', '#84cc16', '#6b7280',
   '#14b8a6', '#6366f1', '#d946ef', '#f43f5e', '#a855f7'
 ];
 
-// LABELS DE CATEGORIA FINANCEIRA
 const categoriaLabels = {
   funcionario: { label: 'Funcionário', color: 'bg-blue-100 text-blue-700' },
   insumo: { label: 'Insumo', color: 'bg-green-100 text-green-700' },
@@ -35,7 +33,6 @@ const categoriaLabels = {
   outro: { label: 'Outro', color: 'bg-stone-100 text-stone-700' }
 };
 
-// LABELS DE TIPO DE ATIVIDADE
 const tipoAtividadeLabels = {
   inducao: 'Indução',
   poda: 'Poda',
@@ -88,7 +85,6 @@ export default function Relatorios() {
     }
   });
 
-  // Filtro de período customizado
   const filtrarPorPeriodo = (data, dateField) => {
     if (!data) return data;
     return data.filter(item => {
@@ -109,12 +105,10 @@ export default function Relatorios() {
     return data.filter(item => item[talhaoField] === filtroTalhao);
   };
 
-  // Dados filtrados
   const colheitasFiltradas = filtrarPorTalhao(filtrarPorPeriodo(colheitas, 'data'));
   const custosFiltrados = filtrarPorTalhao(filtrarPorPeriodo(custos, 'data'));
   const atividadesFiltradas = filtrarPorTalhao(filtrarPorPeriodo(atividades, 'data_programada'));
 
-  // Estatísticas Gerais
   const totalColheitaKg = colheitasFiltradas.reduce((acc, c) => acc + (c.quantidade_kg || 0), 0);
   const totalColheitaCaixas = colheitasFiltradas.reduce((acc, c) => acc + (c.quantidade_caixas || 0), 0);
   const totalReceita = colheitasFiltradas.reduce((acc, c) => acc + (c.valor_total || 0), 0);
@@ -124,12 +118,10 @@ export default function Relatorios() {
   const custoTotal = totalCustosFinanceiro + custoAtividades;
   const lucro = totalReceita - custoTotal;
 
-  // --- LÓGICA DE UNIDADE VISUAL (KG vs CX) ---
   const usarCaixas = totalColheitaKg < 1 && totalColheitaCaixas > 0;
   const unidadeVisual = usarCaixas ? 'cx' : 'ton';
   const totalVisual = usarCaixas ? totalColheitaCaixas : totalColheitaKg;
 
-  // --- CUSTOS POR CATEGORIA ---
   const custoPorCategoria = {};
 
   custosFiltrados.forEach(c => {
@@ -141,7 +133,10 @@ export default function Relatorios() {
   atividadesFiltradas.forEach(a => {
     if (a.custo_total > 0) {
       let nomeAtividade = tipoAtividadeLabels[a.tipo] || a.tipo || 'Atividade Geral';
-      if (a.tipo === 'outro' && a.tipo_personalizado) nomeAtividade = a.tipo_personalizado;
+      
+      if (a.tipo === 'outro' && a.tipo_personalizado) {
+        nomeAtividade = a.tipo_personalizado;
+      }
       if (!nomeAtividade) nomeAtividade = 'Atividade s/ Nome';
       
       nomeAtividade = nomeAtividade.charAt(0).toUpperCase() + nomeAtividade.slice(1);
@@ -155,9 +150,6 @@ export default function Relatorios() {
     .map(([name, value]) => ({ name, value }))
     .sort((a, b) => b.value - a.value);
 
-  // --- DADOS PARA OUTROS GRÁFICOS ---
-  
-  // Colheita por tipo
   const colheitaPorTipo = colheitasFiltradas.reduce((acc, c) => {
     const tipo = c.tipo_colheita || 'outros';
     const valor = usarCaixas ? (c.quantidade_caixas || 0) : (c.quantidade_kg || 0);
@@ -182,7 +174,6 @@ export default function Relatorios() {
     }))
     .filter(item => item.value > 0);
 
-  // Aproveitamento
   const aproveitamentoPorTipo = colheitasFiltradas.reduce((acc, c) => {
     const tipo = c.tipo_colheita || 'outros';
     if (!acc[tipo]) acc[tipo] = { kg: 0, caixas: 0, receita: 0 };
@@ -202,7 +193,6 @@ export default function Relatorios() {
       : (data.kg > 0 ? (data.receita / data.kg) : 0)
   }));
 
-  // Evolução mensal
   const evolucaoMensal = colheitas.reduce((acc, c) => {
     if (!c.data) return acc;
     const mes = format(new Date(c.data + 'T12:00:00'), 'MMM/yy', { locale: ptBR });
@@ -224,7 +214,6 @@ export default function Relatorios() {
     custos: data.custos
   }));
 
-  // Custo por talhão
   const custoPorTalhao = custosFiltrados.reduce((acc, c) => {
     const talhaoNome = c.talhao_id ? (talhoes.find(t => t.id === c.talhao_id)?.nome || 'Desconhecido') : 'Geral';
     acc[talhaoNome] = (acc[talhaoNome] || 0) + (c.valor || 0);
@@ -238,85 +227,136 @@ export default function Relatorios() {
 
   const barDataCusto = Object.entries(custoPorTalhao).map(([name, value]) => ({ name, valor: value }));
 
-  // Função de impressão
+  
+  // --- LÓGICA DA NOVA ABA: PRODUTIVIDADE ---
+  const talhoesComDados = talhoes.map(talhao => {
+    // 1. Receita e Custo
+    const receitaTalhao = colheitas.filter(c => c.talhao_id === talhao.id).reduce((acc, c) => acc + (c.valor_total || 0), 0);
+    const custoDirTalhao = custos.filter(c => c.talhao_id === talhao.id).reduce((acc, c) => acc + (c.valor || 0), 0);
+    const custoAtivTalhao = atividades.filter(a => a.talhao_id === talhao.id).reduce((acc, a) => acc + (a.custo_total || 0), 0);
+    
+    const custoTotalTalhao = custoDirTalhao + custoAtivTalhao;
+    const lucroTalhao = receitaTalhao - custoTotalTalhao;
+    const area = talhao.area_hectares || 0;
+    
+    // 2. KPI: Lucro por Hectare
+    const lucroPorHa = area > 0 ? (lucroTalhao / area) : 0;
+
+    return {
+      id: talhao.id,
+      nome: talhao.nome,
+      area: area,
+      receita: receitaTalhao,
+      custo: custoTotalTalhao,
+      lucro: lucroTalhao,
+      lucroPorHa: lucroPorHa
+    };
+  }).filter(t => t.receita > 0 || t.custo > 0); // Mostrar só talhões que tiveram atividade financeira
+
+  const barDataLucroHa = talhoesComDados.map(t => ({
+    name: t.nome,
+    'Lucro/ha': t.lucroPorHa
+  })).sort((a, b) => b['Lucro/ha'] - a['Lucro/ha']);
+
+
   const handlePrint = () => {
     const talhaoNome = filtroTalhao === 'todos' ? 'Todos os Talhões' : talhoes.find(t => t.id === filtroTalhao)?.nome || '';
     const periodoLabel = dataInicio && dataFim 
-      ? `${format(parseISO(dataInicio), 'dd/MM/yyyy')} - ${format(parseISO(dataFim), 'dd/MM/yyyy')}`
+      ? `${format(parseISO(dataInicio), 'dd/MM/yyyy')} a ${format(parseISO(dataFim), 'dd/MM/yyyy')}`
       : dataInicio 
       ? `A partir de ${format(parseISO(dataInicio), 'dd/MM/yyyy')}`
       : dataFim
       ? `Até ${format(parseISO(dataFim), 'dd/MM/yyyy')}`
-      : 'Todo o período';
+      : 'Período Completo';
 
     const printWindow = window.open('', '_blank');
     const content = `
       <!DOCTYPE html>
       <html>
       <head>
-        <title>Relatório - Fazenda Cassiano's</title>
+        <title>Relatório Gerencial - Fazenda Cassiano's</title>
         <style>
-          body { font-family: Arial, sans-serif; padding: 40px; max-width: 900px; margin: 0 auto; }
-          h1 { color: #166534; border-bottom: 2px solid #166534; padding-bottom: 10px; }
-          h2 { color: #374151; margin-top: 30px; }
-          .header-info { display: flex; justify-content: space-between; margin-bottom: 30px; padding: 15px; background: #f9fafb; border-radius: 8px; }
-          .stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 15px; margin: 20px 0; }
-          .stat-card { padding: 15px; background: #f9fafb; border-radius: 8px; text-align: center; }
-          .stat-value { font-size: 20px; font-weight: bold; color: #166534; }
-          .stat-label { font-size: 11px; color: #6b7280; }
-          table { width: 100%; border-collapse: collapse; margin: 20px 0; }
-          th, td { padding: 10px; text-align: left; border-bottom: 1px solid #e5e7eb; }
-          th { background: #f9fafb; font-weight: 600; }
-          .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #e5e7eb; text-align: center; color: #6b7280; font-size: 12px; }
-          @media print { body { padding: 20px; } }
+          @page { size: A4; margin: 15mm; }
+          body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #333; line-height: 1.5; }
+          h1 { color: #065f46; border-bottom: 2px solid #059669; padding-bottom: 10px; margin-bottom: 5px; font-size: 22px; text-transform: uppercase; }
+          .subtitle { color: #6b7280; font-size: 14px; margin-bottom: 30px; }
+          
+          .header-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px; background: #f3f4f6; padding: 15px; border-radius: 8px; border: 1px solid #e5e7eb; }
+          .header-item strong { display: block; color: #374151; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+          .header-item span { font-size: 16px; font-weight: 600; color: #111; }
+
+          .stats-container { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 40px; }
+          .stat-box { border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; text-align: center; }
+          .stat-box.highlight { background-color: #ecfdf5; border-color: #10b981; }
+          .stat-label { font-size: 11px; color: #6b7280; text-transform: uppercase; margin-bottom: 5px; }
+          .stat-value { font-size: 16px; font-weight: bold; color: #111; }
+          .text-green { color: #059669; }
+          .text-red { color: #dc2626; }
+
+          h2 { font-size: 16px; color: #374151; margin-top: 30px; margin-bottom: 15px; border-left: 4px solid #059669; padding-left: 10px; }
+          
+          table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 13px; }
+          th { background-color: #f9fafb; text-align: left; padding: 10px; border-bottom: 2px solid #e5e7eb; color: #4b5563; font-weight: 600; text-transform: uppercase; font-size: 11px; }
+          td { padding: 10px; border-bottom: 1px solid #e5e7eb; }
+          tr:nth-child(even) { background-color: #f9fafb; }
+          .text-right { text-align: right; }
+          
+          .footer { margin-top: 50px; padding-top: 20px; border-top: 1px solid #e5e7eb; text-align: center; color: #9ca3af; font-size: 11px; }
         </style>
       </head>
       <body>
-        <h1>FAZENDA CASSIANO'S</h1>
-        <h2>Relatório de Produção e Financeiro</h2>
+        <h1>Fazenda Cassiano's</h1>
+        <div class="subtitle">Relatório Gerencial de Produção e Finanças</div>
         
-        <div class="header-info">
-          <div><strong>Talhão:</strong> ${talhaoNome}</div>
-          <div><strong>Período:</strong> ${periodoLabel}</div>
-          <div><strong>Gerado em:</strong> ${format(new Date(), "dd/MM/yyyy 'às' HH:mm")}</div>
+        <div class="header-grid">
+          <div class="header-item">
+            <strong>Filtro de Talhão</strong>
+            <span>${talhaoNome}</span>
+          </div>
+          <div class="header-item">
+            <strong>Período Analisado</strong>
+            <span>${periodoLabel}</span>
+          </div>
         </div>
 
-        <div class="stats">
-          <div class="stat-card">
+        <div class="stats-container">
+          <div class="stat-box">
+            <div class="stat-label">Colheita (Kg)</div>
             <div class="stat-value">${(totalColheitaKg / 1000).toFixed(1)} ton</div>
-            <div class="stat-label">Total Colhido</div>
           </div>
-          <div class="stat-card">
-            <div class="stat-value">${totalColheitaCaixas.toLocaleString('pt-BR')} cx</div>
-            <div class="stat-label">Total Caixas</div>
+          <div class="stat-box">
+            <div class="stat-label">Colheita (Cx)</div>
+            <div class="stat-value">${totalColheitaCaixas.toLocaleString('pt-BR')}</div>
           </div>
-          <div class="stat-card">
-            <div class="stat-value">R$ ${totalReceita.toLocaleString('pt-BR')}</div>
-            <div class="stat-label">Receita Total</div>
+          <div class="stat-box highlight">
+            <div class="stat-label">Receita Bruta</div>
+            <div class="stat-value text-green">R$ ${totalReceita.toLocaleString('pt-BR')}</div>
           </div>
-          <div class="stat-card">
-            <div class="stat-value">R$ ${custoTotal.toLocaleString('pt-BR')}</div>
+          <div class="stat-box">
             <div class="stat-label">Custos Totais</div>
+            <div class="stat-value text-red">R$ ${custoTotal.toLocaleString('pt-BR')}</div>
           </div>
-          <div class="stat-card">
-            <div class="stat-value" style="color: ${lucro >= 0 ? '#166534' : '#dc2626'}">R$ ${lucro.toLocaleString('pt-BR')}</div>
-            <div class="stat-label">Lucro/Prejuízo</div>
+          <div class="stat-box">
+            <div class="stat-label">Resultado</div>
+            <div class="stat-value ${lucro >= 0 ? 'text-green' : 'text-red'}">R$ ${lucro.toLocaleString('pt-BR')}</div>
           </div>
         </div>
 
-        <h2>Detalhamento de Custos por Categoria/Atividade</h2>
+        <h2>Detalhamento por Atividade/Custo</h2>
         <table>
           <thead>
             <tr>
-              <th>Categoria/Atividade</th>
-              <th>Valor Total</th>
+              <th>Categoria / Atividade</th>
+              <th class="text-right">Valor Total</th>
+              <th class="text-right">Participação</th>
             </tr>
           </thead>
           <tbody>
             ${pieDataCustos.map(item => `
               <tr>
                 <td>${item.name}</td>
-                <td>R$ ${item.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                <td class="text-right">R$ ${item.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                <td class="text-right">${custoTotal > 0 ? ((item.value / custoTotal) * 100).toFixed(1) : 0}%</td>
               </tr>
             `).join('')}
           </tbody>
@@ -326,36 +366,64 @@ export default function Relatorios() {
         <table>
           <thead>
             <tr>
-              <th>Talhão/Área</th>
-              <th>Valor</th>
+              <th>Talhão / Área</th>
+              <th class="text-right">Custo Total</th>
             </tr>
           </thead>
           <tbody>
             ${barDataCusto.map(item => `
               <tr>
                 <td>${item.name}</td>
-                <td>R$ ${item.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                <td class="text-right">R$ ${item.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+        
+        <h2>Análise de Produtividade por Talhão (Lucro/ha)</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Talhão</th>
+              <th class="text-right">Área (ha)</th>
+              <th class="text-right">Receita Total</th>
+              <th class="text-right">Custo Total</th>
+              <th class="text-right">Lucro/Prejuízo</th>
+              <th class="text-right">Lucro por Ha</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${talhoesComDados.map(t => `
+              <tr>
+                <td>${t.nome}</td>
+                <td class="text-right">${t.area.toFixed(2)}</td>
+                <td class="text-right text-green">R$ ${t.receita.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                <td class="text-right text-red">R$ ${t.custo.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                <td class="text-right ${t.lucro >= 0 ? 'text-green' : 'text-red'}">R$ ${t.lucro.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                <td class="text-right ${t.lucroPorHa >= 0 ? 'text-green' : 'text-red'}">R$ ${t.lucroPorHa.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
               </tr>
             `).join('')}
           </tbody>
         </table>
 
         <div class="footer">
-          <p>Sistema de Gestão - Fazenda Cassiano's</p>
+          Documento gerado automaticamente em ${format(new Date(), "dd/MM/yyyy 'às' HH:mm")} pelo Sistema de Gestão Fazenda Cassiano's.
         </div>
       </body>
       </html>
     `;
     printWindow.document.write(content);
     printWindow.document.close();
-    printWindow.print();
+    
+    setTimeout(() => {
+        printWindow.print();
+    }, 500);
   };
 
   const getTalhaoNome = (id) => talhoes.find(t => t.id === id)?.nome || '-';
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-stone-900">Relatórios</h1>
@@ -395,14 +463,13 @@ export default function Relatorios() {
               className="w-40"
             />
           </div>
-          <Button onClick={handlePrint} variant="outline">
+          <Button onClick={handlePrint} variant="outline" className="bg-white border-stone-300 hover:bg-stone-50 text-stone-700">
             <Printer className="w-4 h-4 mr-2" />
             Imprimir Relatório
           </Button>
         </div>
       </div>
 
-      {/* Stats - AGORA COM TOTAL DE CAIXAS */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <StatCard
           title="Total Colhido"
@@ -441,12 +508,12 @@ export default function Relatorios() {
         />
       </div>
 
-      {/* Tabs de relatórios */}
       <Tabs defaultValue="colheitas" className="space-y-6">
         <TabsList className="bg-stone-100">
           <TabsTrigger value="colheitas">Colheitas</TabsTrigger>
           <TabsTrigger value="aproveitamento">Aproveitamento</TabsTrigger>
           <TabsTrigger value="custos">Custos</TabsTrigger>
+          <TabsTrigger value="produtividade">Produtividade</TabsTrigger> {/* NOVA ABA */}
           <TabsTrigger value="evolucao">Evolução</TabsTrigger>
         </TabsList>
 
@@ -538,7 +605,6 @@ export default function Relatorios() {
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="name" />
                       <YAxis yAxisId="left" orientation="left" stroke="#10b981" />
-                      {/* EIXO DIREITO REMOVIDO PARA LIMPAR O VISUAL */}
                       <Tooltip />
                       <Legend />
                       <Bar yAxisId="left" dataKey="receita" name="Receita (R$)" fill="#10b981" radius={[4, 4, 0, 0]} />
@@ -585,8 +651,6 @@ export default function Relatorios() {
 
         <TabsContent value="custos" className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            
-            {/* Gráfico de Custos por Categoria/Atividade */}
             <Card className="border-stone-100">
               <CardHeader>
                 <CardTitle className="text-lg">Custos por Categoria e Atividade</CardTitle>
@@ -621,7 +685,6 @@ export default function Relatorios() {
               </CardContent>
             </Card>
 
-            {/* Gráfico de Custos por Talhão */}
             <Card className="border-stone-100">
               <CardHeader>
                 <CardTitle className="text-lg">Custos por Talhão/Área</CardTitle>
@@ -645,33 +708,11 @@ export default function Relatorios() {
               </CardContent>
             </Card>
 
-            {/* Tabela Resumo */}
             <Card className="border-stone-100 lg:col-span-2">
               <CardHeader>
                 <CardTitle className="text-lg">Detalhamento dos Custos</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                  <div className="p-4 bg-stone-50 rounded-xl">
-                    <p className="text-sm text-stone-500">Financeiro (Diretos)</p>
-                    <p className="text-2xl font-bold text-stone-900">
-                      R$ {totalCustosFinanceiro.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                    </p>
-                  </div>
-                  <div className="p-4 bg-stone-50 rounded-xl">
-                    <p className="text-sm text-stone-500">Atividades (Manejo)</p>
-                    <p className="text-2xl font-bold text-stone-900">
-                      R$ {custoAtividades.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                    </p>
-                  </div>
-                  <div className="p-4 bg-red-50 rounded-xl">
-                    <p className="text-sm text-red-600">Total Consolidado</p>
-                    <p className="text-2xl font-bold text-red-600">
-                      R$ {custoTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                    </p>
-                  </div>
-                </div>
-
                 <div className="border rounded-lg overflow-hidden">
                   <Table>
                     <TableHeader>
@@ -703,6 +744,87 @@ export default function Relatorios() {
             </Card>
           </div>
         </TabsContent>
+
+        <TabsContent value="produtividade" className="space-y-6"> {/* CONTEÚDO DA NOVA ABA */}
+          <Card className="border-stone-100">
+            <CardHeader>
+              <CardTitle className="text-lg">Lucro por Hectare (KPI de Eficiência)</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {barDataLucroHa.length > 0 ? (
+                <ResponsiveContainer width="100%" height={300}>
+                    <BarChart 
+                      data={barDataLucroHa} 
+                      margin={{ top: 5, right: 20, left: 10, bottom: 5 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="name" />
+                      <YAxis 
+                        tickFormatter={(value) => `R$ ${value.toLocaleString('pt-BR')}`}
+                        domain={['auto', 'auto']}
+                      />
+                      <Tooltip 
+                        formatter={(value) => [`R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, 'Lucro/ha']}
+                        labelFormatter={(name) => `Talhão: ${name}`}
+                      />
+                      <Legend />
+                      <Bar 
+                        dataKey="Lucro/ha" 
+                        fill="#059669" 
+                        radius={[4, 4, 0, 0]}
+                        name="Lucro por Hectare"
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+              ) : (
+                <div className="h-72 flex items-center justify-center text-stone-400">
+                  Dados insuficientes para calcular produtividade (Verifique Receita/Custo/Área).
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="border-stone-100">
+            <CardHeader>
+              <CardTitle className="text-lg">Detalhe Financeiro por Talhão</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-stone-50">
+                    <TableHead>Talhão</TableHead>
+                    <TableHead className="text-right">Área (ha)</TableHead>
+                    <TableHead className="text-right">Receita Total</TableHead>
+                    <TableHead className="text-right">Custo Total</TableHead>
+                    <TableHead className="text-right">Lucro/Prejuízo</TableHead>
+                    <TableHead className="text-right">Lucro por Ha</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {talhoesComDados.map((t) => (
+                    <TableRow key={t.id}>
+                      <TableCell className="font-medium">{t.nome}</TableCell>
+                      <TableCell className="text-right">{t.area.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</TableCell>
+                      <TableCell className="text-right font-medium text-emerald-600">
+                        R$ {t.receita.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </TableCell>
+                      <TableCell className="text-right font-medium text-red-600">
+                        R$ {t.custo.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </TableCell>
+                      <TableCell className={`text-right font-bold ${t.lucro >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                        R$ {t.lucro.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </TableCell>
+                      <TableCell className={`text-right font-bold ${t.lucroPorHa >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                        R$ {t.lucroPorHa.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+        {/* FIM CONTEÚDO DA NOVA ABA */}
 
         <TabsContent value="evolucao" className="space-y-6">
           <Card className="border-stone-100">

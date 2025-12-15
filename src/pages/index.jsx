@@ -20,6 +20,10 @@ import Consultorias from "./Consultorias";
 
 import Relatorios from "./Relatorios";
 
+import Pluviometria from "./Pluviometria"; // Já existente
+
+import Metas from "./Metas"; // Novo import
+
 import { BrowserRouter as Router, Route, Routes, useLocation } from 'react-router-dom';
 
 const PAGES = {
@@ -31,6 +35,10 @@ const PAGES = {
     Colheitas: Colheitas,
     
     Atividades: Atividades,
+
+    Pluviometria: Pluviometria, // Já existente
+    
+    Metas: Metas, // Novo registro
     
     Calendario: Calendario,
     
@@ -78,6 +86,10 @@ function PagesContent() {
                 <Route path="/Colheitas" element={<Colheitas />} />
                 
                 <Route path="/Atividades" element={<Atividades />} />
+                
+                <Route path="/Pluviometria" element={<Pluviometria />} />
+
+                <Route path="/Metas" element={<Metas />} /> {/* Nova Rota */}
                 
                 <Route path="/Calendario" element={<Calendario />} />
                 
