@@ -18,13 +18,11 @@ export default function Login() {
     setError(null);
 
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
+      const { error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
-
       if (error) throw error;
-      // O App.jsx vai detectar a mudança de sessão automaticamente
     } catch (err) {
       setError('E-mail ou senha incorretos.');
     } finally {
@@ -34,7 +32,7 @@ export default function Login() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-stone-50 via-emerald-50 to-emerald-100 flex items-center justify-center p-4">
-      <Card className="w-full max-w-md shadow-xl border-emerald-100">
+      <Card className="w-full max-w-md shadow-xl border-emerald-100 animate-in fade-in zoom-in duration-500">
         <CardHeader className="space-y-4 text-center pb-8">
           <div className="mx-auto w-16 h-16 bg-gradient-to-br from-emerald-500 to-emerald-700 rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-500/20">
             <Leaf className="w-8 h-8 text-white" />
@@ -57,7 +55,8 @@ export default function Login() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="h-11"
+                className="h-11 focus-visible:ring-emerald-500"
+                autoComplete="email"
               />
             </div>
             <div className="space-y-2">
@@ -69,12 +68,13 @@ export default function Login() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                className="h-11"
+                className="h-11 focus-visible:ring-emerald-500"
+                autoComplete="current-password"
               />
             </div>
 
             {error && (
-              <div className="p-3 text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg flex items-center gap-2">
+              <div className="p-3 text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg flex items-center gap-2 animate-in slide-in-from-top-2">
                 <Lock className="w-4 h-4" />
                 {error}
               </div>
@@ -82,14 +82,14 @@ export default function Login() {
 
             <Button 
               type="submit" 
-              className="w-full h-11 bg-emerald-600 hover:bg-emerald-700 text-lg font-medium"
+              className="w-full h-11 bg-emerald-600 hover:bg-emerald-700 text-lg font-medium transition-all active:scale-[0.98]"
               disabled={loading}
             >
               {loading ? (
-                <>
-                  <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                  Entrando...
-                </>
+                <div className="flex items-center gap-2">
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <span>Autenticando...</span>
+                </div>
               ) : (
                 'Acessar Sistema'
               )}

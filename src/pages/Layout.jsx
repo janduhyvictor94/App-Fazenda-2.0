@@ -17,8 +17,7 @@ import {
   ChevronRight,
   Leaf,
   LogOut,
-  CloudRain,
-  Target // Novo ícone
+  CloudRain
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -28,7 +27,6 @@ const navigation = [
   { name: 'Colheitas', icon: Wheat, page: 'Colheitas' },
   { name: 'Atividades', icon: ClipboardList, page: 'Atividades' },
   { name: 'Pluviometria', icon: CloudRain, page: 'Pluviometria' },
-  { name: 'Metas', icon: Target, page: 'Metas' }, // Nova aba
   { name: 'Calendário', icon: Calendar, page: 'Calendario' },
   { name: 'Insumos', icon: Package, page: 'Insumos' },
   { name: 'Financeiro', icon: DollarSign, page: 'Financeiro' },
@@ -41,43 +39,40 @@ export default function Layout({ children, currentPageName }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const handleLogout = async () => {
-    try {
-      await supabase.auth.signOut();
-    } catch (error) {
-      console.log("Erro silencioso ao sair:", error);
-    } finally {
-      localStorage.clear(); 
-      window.location.href = '/login';
-    }
+    await supabase.auth.signOut();
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-stone-50 via-white to-emerald-50/30">
+    <div className="min-h-screen bg-stone-50">
+      {/* Mobile Sidebar Overlay */}
       {sidebarOpen && (
         <div 
-          className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40 lg:hidden"
+          className="fixed inset-0 z-40 bg-stone-900/20 backdrop-blur-sm lg:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}
 
+      {/* Sidebar */}
       <aside className={cn(
-        "fixed top-0 left-0 z-50 h-full w-72 bg-white/95 backdrop-blur-xl border-r border-stone-200/60 transform transition-transform duration-300 ease-out lg:translate-x-0",
+        "fixed inset-y-0 left-0 z-50 w-72 bg-white border-r border-stone-200/60 transform transition-transform duration-300 ease-in-out lg:translate-x-0",
         sidebarOpen ? "translate-x-0" : "-translate-x-full"
       )}>
         <div className="flex flex-col h-full">
-          <div className="p-6 border-b border-stone-100">
+          {/* Logo Area */}
+          <div className="p-6 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-emerald-700 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-500/20">
-                <Leaf className="w-5 h-5 text-white" />
+              <div className="w-10 h-10 bg-emerald-600 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-200">
+                <Leaf className="w-6 h-6 text-white" />
               </div>
-              <div>
-                <h1 className="text-lg font-bold text-stone-900 tracking-tight">FAZENDA</h1>
-                <p className="text-xs font-medium text-emerald-600 tracking-widest">CASSIANO'S</p>
-              </div>
+              <span className="text-xl font-bold text-stone-800 tracking-tight">AgroGestão</span>
             </div>
+            <button onClick={() => setSidebarOpen(false)} className="lg:hidden p-2">
+              <X className="w-5 h-5 text-stone-400" />
+            </button>
           </div>
 
-          <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+          {/* Navigation */}
+          <nav className="flex-1 px-4 py-4 space-y-1 overflow-y-auto">
             {navigation.map((item) => {
               const isActive = currentPageName === item.page;
               return (
@@ -86,33 +81,27 @@ export default function Layout({ children, currentPageName }) {
                   to={createPageUrl(item.page)}
                   onClick={() => setSidebarOpen(false)}
                   className={cn(
-                    "flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200",
+                    "flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 group",
                     isActive 
-                      ? "bg-emerald-50 text-emerald-700 shadow-sm" 
-                      : "text-stone-600 hover:bg-stone-50 hover:text-stone-900"
+                      ? "bg-emerald-50 text-emerald-700 shadow-sm shadow-emerald-100" 
+                      : "text-stone-500 hover:bg-stone-50 hover:text-stone-900"
                   )}
                 >
                   <item.icon className={cn(
                     "w-5 h-5 transition-colors",
-                    isActive ? "text-emerald-600" : "text-stone-400"
+                    isActive ? "text-emerald-600" : "text-stone-400 group-hover:text-stone-600"
                   )} />
-                  <span>{item.name}</span>
-                  {isActive && (
-                    <ChevronRight className="w-4 h-4 ml-auto text-emerald-400" />
-                  )}
+                  <span className="flex-1">{item.name}</span>
+                  {isActive && <ChevronRight className="w-4 h-4 opacity-50" />}
                 </Link>
               );
             })}
           </nav>
 
+          {/* User / Logout */}
           <div className="p-4 border-t border-stone-100">
-            <div className="mb-3 px-4 py-3 bg-gradient-to-r from-emerald-50 to-stone-50 rounded-xl">
-              <p className="text-xs text-stone-500">Sistema de Gestão</p>
-              <p className="text-sm font-medium text-stone-700">Fazenda Cassiano's</p>
-            </div>
-            
             <button
-              onClick={handleLogout} 
+              onClick={handleLogout}
               className="flex items-center gap-3 w-full px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 rounded-xl transition-colors"
             >
               <LogOut className="w-5 h-5" />
@@ -122,6 +111,7 @@ export default function Layout({ children, currentPageName }) {
         </div>
       </aside>
 
+      {/* Main Content */}
       <div className="lg:pl-72">
         <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-xl border-b border-stone-200/60">
           <div className="flex items-center justify-between px-4 py-4 lg:px-8">
@@ -143,11 +133,14 @@ export default function Layout({ children, currentPageName }) {
                 <p className="text-sm font-medium text-stone-700">Fazenda Cassiano's</p>
                 <p className="text-xs text-stone-500">{new Date().toLocaleDateString('pt-BR')}</p>
               </div>
+              <div className="w-10 h-10 bg-stone-100 rounded-full flex items-center justify-center border border-stone-200">
+                <Users className="w-5 h-5 text-stone-500" />
+              </div>
             </div>
           </div>
         </header>
 
-        <main className="p-4 lg:p-8">
+        <main className="p-4 lg:p-8 max-w-7xl mx-auto">
           {children}
         </main>
       </div>

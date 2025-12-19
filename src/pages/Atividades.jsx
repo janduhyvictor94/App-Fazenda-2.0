@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from '@/components/ui/dialog';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -167,7 +167,7 @@ export default function Atividades() {
       responsavel: '',
       observacoes: ''
     });
-    setInsumoTemp({ insumo_id: '', quantidade: '' });
+    setInsumoTemp({ insumo_id: '', quantidade: '', metodo_aplicacao: 'foliar' });
     setEditingAtividade(null);
     setOpen(false);
   };
@@ -329,13 +329,16 @@ export default function Atividades() {
               <DialogTitle>
                 {editingAtividade ? 'Editar Atividade' : 'Nova Atividade'}
               </DialogTitle>
+              <DialogDescription className="sr-only">
+                Configure os detalhes da atividade agrícola, incluindo insumos e prazos.
+              </DialogDescription>
             </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Talhão</Label>
                   <Select
-                    value={formData.talhao_id}
+                    value={formData.talhao_id || ""}
                     onValueChange={(value) => setFormData({ ...formData, talhao_id: value })}
                   >
                     <SelectTrigger>
@@ -365,7 +368,7 @@ export default function Atividades() {
                     </Button>
                   </div>
                   <Select
-                    value={formData.tipo}
+                    value={formData.tipo || ""}
                     onValueChange={(value) => setFormData({ ...formData, tipo: value })}
                   >
                     <SelectTrigger>
@@ -386,7 +389,7 @@ export default function Atividades() {
                 <div className="space-y-2">
                   <Label>Nome da Atividade</Label>
                   <Input
-                    value={formData.tipo_personalizado}
+                    value={formData.tipo_personalizado || ""}
                     onChange={(e) => setFormData({ ...formData, tipo_personalizado: e.target.value })}
                     placeholder="Descreva a atividade"
                   />
@@ -398,7 +401,7 @@ export default function Atividades() {
                   <Label>Data Programada</Label>
                   <Input
                     type="date"
-                    value={formData.data_programada}
+                    value={formData.data_programada || ""}
                     onChange={(e) => setFormData({ ...formData, data_programada: e.target.value })}
                     required
                   />
@@ -407,14 +410,14 @@ export default function Atividades() {
                   <Label>Data Realizada</Label>
                   <Input
                     type="date"
-                    value={formData.data_realizada}
+                    value={formData.data_realizada || ""}
                     onChange={(e) => setFormData({ ...formData, data_realizada: e.target.value })}
                   />
                 </div>
                 <div className="space-y-2">
                   <Label>Status</Label>
                   <Select
-                    value={formData.status}
+                    value={formData.status || ""}
                     onValueChange={(value) => setFormData({ ...formData, status: value })}
                   >
                     <SelectTrigger>
@@ -433,7 +436,7 @@ export default function Atividades() {
               <div className="space-y-2">
                 <Label>Responsável</Label>
                 <Input
-                  value={formData.responsavel}
+                  value={formData.responsavel || ""}
                   onChange={(e) => setFormData({ ...formData, responsavel: e.target.value })}
                   placeholder="Nome do responsável"
                 />
@@ -453,7 +456,7 @@ export default function Atividades() {
                     <Input
                       type="number"
                       step="0.01"
-                      value={formData.valor_terceirizado}
+                      value={formData.valor_terceirizado || ""}
                       onChange={(e) => setFormData({ ...formData, valor_terceirizado: e.target.value })}
                       placeholder="R$ 0,00"
                     />
@@ -465,7 +468,7 @@ export default function Atividades() {
                 <Label className="text-base font-medium">Insumos Utilizados</Label>
                 <div className="flex flex-wrap gap-2">
                   <Select
-                    value={insumoTemp.insumo_id}
+                    value={insumoTemp.insumo_id || ""}
                     onValueChange={(value) => setInsumoTemp({ ...insumoTemp, insumo_id: value })}
                   >
                     <SelectTrigger className="w-60">
@@ -484,11 +487,11 @@ export default function Atividades() {
                     step="0.01"
                     placeholder="Quantidade"
                     className="w-28"
-                    value={insumoTemp.quantidade}
+                    value={insumoTemp.quantidade || ""}
                     onChange={(e) => setInsumoTemp({ ...insumoTemp, quantidade: e.target.value })}
                   />
                   <Select
-                    value={insumoTemp.metodo_aplicacao}
+                    value={insumoTemp.metodo_aplicacao || ""}
                     onValueChange={(value) => {
                       setInsumoTemp({ ...insumoTemp, metodo_aplicacao: value });
                       setMostrarNovoMetodo(value === 'outro');
@@ -509,7 +512,7 @@ export default function Atividades() {
                     <Input
                       placeholder="Nome do método"
                       className="w-40"
-                      value={novoMetodo}
+                      value={novoMetodo || ""}
                       onChange={(e) => setNovoMetodo(e.target.value)}
                     />
                   )}
@@ -568,7 +571,7 @@ export default function Atividades() {
               <div className="space-y-2">
                 <Label>Observações</Label>
                 <Textarea
-                  value={formData.observacoes}
+                  value={formData.observacoes || ""}
                   onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })}
                   placeholder="Observações sobre a atividade..."
                   rows={2}
@@ -595,13 +598,16 @@ export default function Atividades() {
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
               <DialogTitle>Gerenciar Tipos de Atividade</DialogTitle>
+              <DialogDescription className="sr-only">
+                Adicione ou remova tipos personalizados de atividades agrícolas.
+              </DialogDescription>
             </DialogHeader>
             <div className="space-y-6">
               <div className="space-y-2 p-4 bg-stone-50 rounded-lg">
                 <Label className="text-sm font-medium">Adicionar Novo Tipo</Label>
                 <div className="flex gap-2">
                   <Input
-                    value={novoTipo}
+                    value={novoTipo || ""}
                     onChange={(e) => setNovoTipo(e.target.value)}
                     placeholder="Ex: Desbrota"
                     className="flex-1"
@@ -658,7 +664,7 @@ export default function Atividades() {
               <Filter className="w-4 h-4 text-stone-400" />
               <span className="text-sm font-medium text-stone-600">Filtros:</span>
             </div>
-            <Select value={filtroTalhao} onValueChange={setFiltroTalhao}>
+            <Select value={filtroTalhao || "todos"} onValueChange={setFiltroTalhao}>
               <SelectTrigger className="w-40">
                 <SelectValue placeholder="Talhão" />
               </SelectTrigger>
@@ -669,7 +675,7 @@ export default function Atividades() {
                 ))}
               </SelectContent>
             </Select>
-            <Select value={filtroStatus} onValueChange={setFiltroStatus}>
+            <Select value={filtroStatus || "todos"} onValueChange={setFiltroStatus}>
               <SelectTrigger className="w-40">
                 <SelectValue placeholder="Status" />
               </SelectTrigger>

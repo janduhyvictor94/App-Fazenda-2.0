@@ -1,22 +1,20 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/lib/supabaseClient'; // Alterado de base44 para supabase
+import { supabase } from '@/lib/supabaseClient';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from '@/components/ui/dialog';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
 import { Plus, Edit, Trash2, DollarSign, TrendingUp, TrendingDown, Filter, Wallet } from 'lucide-react';
 import EmptyState from '@/components/ui/EmptyState';
 import StatCard from '@/components/ui/StatCard';
-import { format, startOfMonth, endOfMonth, isWithinInterval, parseISO } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
+import { format } from 'date-fns';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 
 const categoriaLabels = {
@@ -159,7 +157,7 @@ export default function Financeiro() {
     const data = {
       ...formData,
       valor: formData.valor ? parseFloat(formData.valor) : 0,
-      talhao_id: formData.talhao_id || null
+      talhao_id: (formData.talhao_id === "" || formData.talhao_id === "null") ? null : formData.talhao_id
     };
 
     if (editingCusto) {
@@ -169,13 +167,11 @@ export default function Financeiro() {
     }
   };
 
-  // Filtros
   const custosFiltrados = custos.filter(c => {
     if (filtroTalhao !== 'todos' && c.talhao_id !== filtroTalhao && filtroTalhao !== 'geral') return false;
     if (filtroTalhao === 'geral' && c.talhao_id) return false;
     if (filtroCategoria !== 'todos' && c.categoria !== filtroCategoria) return false;
     
-    // Filtro de data
     if (dataInicio && c.data) {
       const dataCusto = new Date(c.data);
       const dataInicioDate = new Date(dataInicio);
@@ -190,13 +186,11 @@ export default function Financeiro() {
     return true;
   });
 
-  // Stats
   const totalCustos = custosFiltrados.reduce((acc, c) => acc + (c.valor || 0), 0);
   const totalReceitas = colheitas.reduce((acc, c) => acc + (c.valor_total || 0), 0);
   const lucro = totalReceitas - custos.reduce((acc, c) => acc + (c.valor || 0), 0);
   const salariosMensais = funcionarios.filter(f => f.status === 'ativo').reduce((acc, f) => acc + (f.salario || 0), 0);
 
-  // Custo por categoria (gráfico)
   const custoPorCategoria = custosFiltrados.reduce((acc, c) => {
     const cat = categoriaLabels[c.categoria]?.label || 'Outro';
     acc[cat] = (acc[cat] || 0) + (c.valor || 0);
@@ -205,20 +199,18 @@ export default function Financeiro() {
 
   const pieData = Object.entries(custoPorCategoria).map(([name, value]) => ({ name, value }));
 
-  // Custo por talhão
-  const custoPorTalhao = custos.reduce((acc, c) => {
+  const custoPorTalhaoData = custos.reduce((acc, c) => {
     const talhaoNome = c.talhao_id ? (talhoes.find(t => t.id === c.talhao_id)?.nome || 'Desconhecido') : 'Geral';
     acc[talhaoNome] = (acc[talhaoNome] || 0) + (c.valor || 0);
     return acc;
   }, {});
 
-  const barData = Object.entries(custoPorTalhao).map(([name, value]) => ({ name, valor: value }));
+  const barData = Object.entries(custoPorTalhaoData).map(([name, value]) => ({ name, valor: value }));
 
   const getTalhaoNome = (id) => talhoes.find(t => t.id === id)?.nome || 'Geral';
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-stone-900">Financeiro</h1>
@@ -233,16 +225,17 @@ export default function Financeiro() {
           </DialogTrigger>
           <DialogContent className="sm:max-w-lg">
             <DialogHeader>
-              <DialogTitle>
-                {editingCusto ? 'Editar Custo' : 'Novo Custo'}
-              </DialogTitle>
+              <DialogTitle>{editingCusto ? 'Editar Custo' : 'Novo Custo'}</DialogTitle>
+              <DialogDescription className="sr-only">
+                Registre os dados financeiros e a categoria da despesa.
+              </DialogDescription>
             </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
                 <Label>Descrição</Label>
                 <Input
-                  value={formData.descricao}
-                  onChange={(e) => setFormData({ ...formData, descricao: e.target.value })}
+                  value={formData.descricao || ""}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                   placeholder="Descrição do custo"
                   required
                 />
@@ -252,7 +245,7 @@ export default function Financeiro() {
                 <div className="space-y-2">
                   <Label>Categoria</Label>
                   <Select
-                    value={formData.categoria}
+                    value={formData.categoria || ""}
                     onValueChange={(value) => setFormData({ ...formData, categoria: value })}
                   >
                     <SelectTrigger>
@@ -268,14 +261,14 @@ export default function Financeiro() {
                 <div className="space-y-2">
                   <Label>Talhão (opcional)</Label>
                   <Select
-                    value={formData.talhao_id}
+                    value={formData.talhao_id || "null"}
                     onValueChange={(value) => setFormData({ ...formData, talhao_id: value })}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Geral" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value={null}>Custo Geral</SelectItem>
+                      <SelectItem value="null">Custo Geral</SelectItem>
                       {talhoes.map((t) => (
                         <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>
                       ))}
@@ -290,7 +283,7 @@ export default function Financeiro() {
                   <Input
                     type="number"
                     step="0.01"
-                    value={formData.valor}
+                    value={formData.valor || ""}
                     onChange={(e) => setFormData({ ...formData, valor: e.target.value })}
                     placeholder="R$ 0,00"
                     required
@@ -300,7 +293,7 @@ export default function Financeiro() {
                   <Label>Data</Label>
                   <Input
                     type="date"
-                    value={formData.data}
+                    value={formData.data || ""}
                     onChange={(e) => setFormData({ ...formData, data: e.target.value })}
                     required
                   />
@@ -319,7 +312,7 @@ export default function Financeiro() {
                   <div className="space-y-2">
                     <Label>Frequência</Label>
                     <Select
-                      value={formData.frequencia}
+                      value={formData.frequencia || ""}
                       onValueChange={(value) => setFormData({ ...formData, frequencia: value })}
                     >
                       <SelectTrigger>
@@ -338,7 +331,7 @@ export default function Financeiro() {
               <div className="space-y-2">
                 <Label>Observações</Label>
                 <Textarea
-                  value={formData.observacoes}
+                  value={formData.observacoes || ""}
                   onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })}
                   placeholder="Observações..."
                   rows={2}
@@ -362,7 +355,6 @@ export default function Financeiro() {
         </Dialog>
       </div>
 
-      {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           title="Receita Total"
@@ -395,7 +387,6 @@ export default function Financeiro() {
         />
       </div>
 
-      {/* Gráficos */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card className="border-stone-100">
           <CardHeader>
@@ -405,28 +396,14 @@ export default function Financeiro() {
             {pieData.length > 0 ? (
               <ResponsiveContainer width="100%" height={250}>
                 <PieChart>
-                  <Pie
-                    data={pieData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={50}
-                    outerRadius={90}
-                    paddingAngle={2}
-                    dataKey="value"
-                  >
-                    {pieData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
+                  <Pie data={pieData} cx="50%" cy="50%" innerRadius={50} outerRadius={90} paddingAngle={2} dataKey="value">
+                    {pieData.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
                   </Pie>
                   <Tooltip formatter={(value) => [`R$ ${value.toLocaleString('pt-BR')}`, 'Valor']} />
                   <Legend />
                 </PieChart>
               </ResponsiveContainer>
-            ) : (
-              <div className="h-64 flex items-center justify-center text-stone-400">
-                Nenhum custo registrado
-              </div>
-            )}
+            ) : <div className="h-64 flex items-center justify-center text-stone-400">Nenhum custo registrado</div>}
           </CardContent>
         </Card>
 
@@ -444,137 +421,57 @@ export default function Financeiro() {
                   <Bar dataKey="valor" fill="#ef4444" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
-            ) : (
-              <div className="h-64 flex items-center justify-center text-stone-400">
-                Nenhum custo registrado
-              </div>
-            )}
+            ) : <div className="h-64 flex items-center justify-center text-stone-400">Nenhum custo registrado</div>}
           </CardContent>
         </Card>
       </div>
 
-      {/* Filtros */}
       <Card className="border-stone-100">
         <CardContent className="pt-4">
           <div className="flex flex-wrap items-center gap-4">
-            <div className="flex items-center gap-2">
-              <Filter className="w-4 h-4 text-stone-400" />
-              <span className="text-sm font-medium text-stone-600">Filtros:</span>
-            </div>
-            <Select value={filtroTalhao} onValueChange={setFiltroTalhao}>
-              <SelectTrigger className="w-40">
-                <SelectValue placeholder="Talhão" />
-              </SelectTrigger>
+            <div className="flex items-center gap-2"><Filter className="w-4 h-4 text-stone-400" /><span className="text-sm font-medium text-stone-600">Filtros:</span></div>
+            <Select value={filtroTalhao || "todos"} onValueChange={setFiltroTalhao}>
+              <SelectTrigger className="w-40"><SelectValue placeholder="Talhão" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="todos">Todos</SelectItem>
                 <SelectItem value="geral">Custos Gerais</SelectItem>
-                {talhoes.map((t) => (
-                  <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>
-                ))}
+                {talhoes.map((t) => <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>)}
               </SelectContent>
             </Select>
-            <Select value={filtroCategoria} onValueChange={setFiltroCategoria}>
-              <SelectTrigger className="w-40">
-                <SelectValue placeholder="Categoria" />
-              </SelectTrigger>
+            <Select value={filtroCategoria || "todos"} onValueChange={setFiltroCategoria}>
+              <SelectTrigger className="w-40"><SelectValue placeholder="Categoria" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="todos">Todas</SelectItem>
-                {Object.entries(categoriaLabels).map(([key, { label }]) => (
-                  <SelectItem key={key} value={key}>{label}</SelectItem>
-                ))}
+                {Object.entries(categoriaLabels).map(([key, { label }]) => <SelectItem key={key} value={key}>{label}</SelectItem>)}
               </SelectContent>
             </Select>
-            <div className="flex items-center gap-2">
-              <Label className="text-sm text-stone-600">De:</Label>
-              <Input
-                type="date"
-                value={dataInicio}
-                onChange={(e) => setDataInicio(e.target.value)}
-                min="2020-01-01"
-                max="2040-12-31"
-                className="w-36"
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <Label className="text-sm text-stone-600">Até:</Label>
-              <Input
-                type="date"
-                value={dataFim}
-                onChange={(e) => setDataFim(e.target.value)}
-                min="2020-01-01"
-                max="2040-12-31"
-                className="w-36"
-              />
-            </div>
+            <div className="flex items-center gap-2"><Label className="text-sm text-stone-600">De:</Label><Input type="date" value={dataInicio || ""} onChange={(e) => setDataInicio(e.target.value)} min="2020-01-01" max="2040-12-31" className="w-36" /></div>
+            <div className="flex items-center gap-2"><Label className="text-sm text-stone-600">Até:</Label><Input type="date" value={dataFim || ""} onChange={(e) => setDataFim(e.target.value)} min="2020-01-01" max="2040-12-31" className="w-36" /></div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Tabela */}
-      {custosFiltrados.length === 0 ? (
-        <EmptyState
-          icon={DollarSign}
-          title="Nenhum custo registrado"
-          description="Lance seus custos para ter controle financeiro completo."
-          actionLabel="Lançar Custo"
-          onAction={() => setOpen(true)}
-        />
-      ) : (
+      {custosFiltrados.length === 0 ? <EmptyState icon={DollarSign} title="Nenhum custo registrado" description="Lance seus custos para ter controle financeiro completo." actionLabel="Lançar Custo" onAction={() => setOpen(true)} /> : (
         <Card className="border-stone-100 overflow-hidden">
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow className="bg-stone-50">
-                  <TableHead>Data</TableHead>
-                  <TableHead>Descrição</TableHead>
-                  <TableHead>Categoria</TableHead>
-                  <TableHead>Talhão</TableHead>
-                  <TableHead className="text-right">Valor</TableHead>
-                  <TableHead className="w-24"></TableHead>
+                  <TableHead>Data</TableHead><TableHead>Descrição</TableHead><TableHead>Categoria</TableHead><TableHead>Talhão</TableHead><TableHead className="text-right">Valor</TableHead><TableHead className="w-24"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {custosFiltrados.map((custo) => (
                   <TableRow key={custo.id} className="hover:bg-stone-50">
-                    <TableCell>
-                      {custo.data ? format(new Date(custo.data), 'dd/MM/yyyy') : '-'}
-                    </TableCell>
-                    <TableCell className="font-medium">
-                      {custo.descricao}
-                      {custo.recorrente && (
-                        <Badge variant="outline" className="ml-2 text-xs">
-                          {custo.frequencia === 'mensal' && 'Mensal'}
-                          {custo.frequencia === 'semanal' && 'Semanal'}
-                          {custo.frequencia === 'anual' && 'Anual'}
-                        </Badge>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <Badge className={categoriaLabels[custo.categoria]?.color}>
-                        {categoriaLabels[custo.categoria]?.label || custo.categoria}
-                      </Badge>
-                    </TableCell>
+                    <TableCell>{custo.data ? format(new Date(custo.data), 'dd/MM/yyyy') : '-'}</TableCell>
+                    <TableCell className="font-medium">{custo.descricao}{custo.recorrente && <Badge variant="outline" className="ml-2 text-xs">{custo.frequencia}</Badge>}</TableCell>
+                    <TableCell><Badge className={categoriaLabels[custo.categoria]?.color}>{categoriaLabels[custo.categoria]?.label || custo.categoria}</Badge></TableCell>
                     <TableCell>{getTalhaoNome(custo.talhao_id)}</TableCell>
-                    <TableCell className="text-right font-medium text-red-600">
-                      R$ {(custo.valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                    </TableCell>
+                    <TableCell className="text-right font-medium text-red-600">R$ {(custo.valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</TableCell>
                     <TableCell>
                       <div className="flex items-center justify-end gap-1">
-                        <Button 
-                          variant="ghost" 
-                          size="sm"
-                          onClick={() => handleEdit(custo)}
-                        >
-                          <Edit className="w-4 h-4" />
-                        </Button>
-                        <Button 
-                          variant="ghost" 
-                          size="sm"
-                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                          onClick={() => deleteMutation.mutate(custo.id)}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => handleEdit(custo)}><Edit className="w-4 h-4" /></Button>
+                        <Button variant="ghost" size="sm" className="text-red-600 hover:text-red-700 hover:bg-red-50" onClick={() => deleteMutation.mutate(custo.id)}><Trash2 className="w-4 h-4" /></Button>
                       </div>
                     </TableCell>
                   </TableRow>

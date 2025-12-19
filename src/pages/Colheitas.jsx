@@ -6,11 +6,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from '@/components/ui/dialog';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, Edit, Trash2, Wheat, Filter, Package, TrendingUp, TrendingDown } from 'lucide-react';
+import { Plus, Edit, Trash2, Wheat, Filter, Package } from 'lucide-react';
 import EmptyState from '@/components/ui/EmptyState';
 import StatCard from '@/components/ui/StatCard';
 import { format } from 'date-fns';
@@ -257,7 +257,6 @@ export default function Colheitas() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-stone-900">Colheitas</h1>
@@ -275,13 +274,16 @@ export default function Colheitas() {
               <DialogTitle>
                 {editingColheita ? 'Editar Colheita' : 'Nova Colheita'}
               </DialogTitle>
+              <DialogDescription className="sr-only">
+                Registre os dados de produção colhida por talhão e cultura.
+              </DialogDescription>
             </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Talhão</Label>
                   <Select
-                    value={formData.talhao_id}
+                    value={formData.talhao_id || ""}
                     onValueChange={(value) => setFormData({ ...formData, talhao_id: value })}
                   >
                     <SelectTrigger>
@@ -300,7 +302,7 @@ export default function Colheitas() {
                   <Label>Data</Label>
                   <Input
                     type="date"
-                    value={formData.data}
+                    value={formData.data || ""}
                     onChange={(e) => setFormData({ ...formData, data: e.target.value })}
                     required
                   />
@@ -311,7 +313,7 @@ export default function Colheitas() {
                 <div className="space-y-2">
                   <Label>Cultura</Label>
                   <Select
-                    value={formData.cultura}
+                    value={formData.cultura || ""}
                     onValueChange={(value) => setFormData({ ...formData, cultura: value, tipo_colheita: '' })}
                   >
                     <SelectTrigger>
@@ -339,7 +341,7 @@ export default function Colheitas() {
                     </Button>
                   </div>
                   <Select
-                    value={formData.tipo_colheita}
+                    value={formData.tipo_colheita || ""}
                     onValueChange={(value) => setFormData({ ...formData, tipo_colheita: value })}
                     disabled={!formData.cultura}
                   >
@@ -363,7 +365,7 @@ export default function Colheitas() {
                   <Input
                     type="number"
                     step="0.01"
-                    value={formData.quantidade_kg}
+                    value={formData.quantidade_kg || ""}
                     onChange={(e) => setFormData({ ...formData, quantidade_kg: e.target.value })}
                     placeholder="Ex: 1500"
                   />
@@ -372,7 +374,7 @@ export default function Colheitas() {
                   <Label>Quantidade (caixas)</Label>
                   <Input
                     type="number"
-                    value={formData.quantidade_caixas}
+                    value={formData.quantidade_caixas || ""}
                     onChange={(e) => setFormData({ ...formData, quantidade_caixas: e.target.value })}
                     placeholder="Ex: 100"
                   />
@@ -385,7 +387,7 @@ export default function Colheitas() {
                   <Input
                     type="number"
                     step="0.01"
-                    value={formData.preco_unitario}
+                    value={formData.preco_unitario || ""}
                     onChange={(e) => setFormData({ ...formData, preco_unitario: e.target.value })}
                     placeholder="R$"
                   />
@@ -393,7 +395,7 @@ export default function Colheitas() {
                 <div className="space-y-2">
                   <Label>Unidade</Label>
                   <Select
-                    value={formData.unidade_preco}
+                    value={formData.unidade_preco || ""}
                     onValueChange={(value) => setFormData({ ...formData, unidade_preco: value })}
                   >
                     <SelectTrigger>
@@ -421,7 +423,7 @@ export default function Colheitas() {
                     <Input
                       type="number"
                       step="0.01"
-                      value={formData.custo_colheita}
+                      value={formData.custo_colheita || ""}
                       onChange={(e) => setFormData({ ...formData, custo_colheita: e.target.value })}
                       placeholder="R$"
                     />
@@ -429,7 +431,7 @@ export default function Colheitas() {
                   <div className="space-y-2">
                     <Label>Unidade</Label>
                     <Select
-                      value={formData.unidade_custo}
+                      value={formData.unidade_custo || ""}
                       onValueChange={(value) => setFormData({ ...formData, unidade_custo: value })}
                     >
                       <SelectTrigger>
@@ -453,7 +455,7 @@ export default function Colheitas() {
               <div className="space-y-2">
                 <Label>Observações</Label>
                 <Textarea
-                  value={formData.observacoes}
+                  value={formData.observacoes || ""}
                   onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })}
                   placeholder="Observações sobre a colheita..."
                   rows={2}
@@ -476,17 +478,19 @@ export default function Colheitas() {
           </DialogContent>
         </Dialog>
 
-        {/* Dialog para criar novo tipo de colheita */}
         <Dialog open={openTipoDialog} onOpenChange={setOpenTipoDialog}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
               <DialogTitle>Criar Novo Tipo de Colheita</DialogTitle>
+              <DialogDescription className="sr-only">
+                Adicione categorias personalizadas para classificação da colheita.
+              </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
               <div className="space-y-2">
                 <Label>Cultura</Label>
                 <Select
-                  value={novoTipoColheita.cultura}
+                  value={novoTipoColheita.cultura || ""}
                   onValueChange={(value) => setNovoTipoColheita({ ...novoTipoColheita, cultura: value })}
                 >
                   <SelectTrigger>
@@ -501,7 +505,7 @@ export default function Colheitas() {
               <div className="space-y-2">
                 <Label>Nome do Tipo</Label>
                 <Input
-                  value={novoTipoColheita.nome}
+                  value={novoTipoColheita.nome || ""}
                   onChange={(e) => setNovoTipoColheita({ ...novoTipoColheita, nome: e.target.value })}
                   placeholder="Ex: Premium, Segunda, etc."
                 />
@@ -522,7 +526,6 @@ export default function Colheitas() {
         </Dialog>
       </div>
 
-      {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           title="Total Colhido (Kg)"
@@ -552,7 +555,6 @@ export default function Colheitas() {
         />
       </div>
 
-      {/* Filtros */}
       <Card className="border-stone-100">
         <CardContent className="pt-4">
           <div className="flex flex-wrap items-center gap-4">
@@ -560,7 +562,7 @@ export default function Colheitas() {
               <Filter className="w-4 h-4 text-stone-400" />
               <span className="text-sm font-medium text-stone-600">Filtros:</span>
             </div>
-            <Select value={filtroTalhao} onValueChange={setFiltroTalhao}>
+            <Select value={filtroTalhao || "todos"} onValueChange={setFiltroTalhao}>
               <SelectTrigger className="w-40">
                 <SelectValue placeholder="Talhão" />
               </SelectTrigger>
@@ -571,7 +573,7 @@ export default function Colheitas() {
                 ))}
               </SelectContent>
             </Select>
-            <Select value={filtroCultura} onValueChange={setFiltroCultura}>
+            <Select value={filtroCultura || "todos"} onValueChange={setFiltroCultura}>
               <SelectTrigger className="w-40">
                 <SelectValue placeholder="Cultura" />
               </SelectTrigger>
@@ -585,7 +587,7 @@ export default function Colheitas() {
               <Label className="text-sm text-stone-600">De:</Label>
               <Input
                 type="date"
-                value={dataInicio}
+                value={dataInicio || ""}
                 onChange={(e) => setDataInicio(e.target.value)}
                 min="2020-01-01"
                 max="2040-12-31"
@@ -596,7 +598,7 @@ export default function Colheitas() {
               <Label className="text-sm text-stone-600">Até:</Label>
               <Input
                 type="date"
-                value={dataFim}
+                value={dataFim || ""}
                 onChange={(e) => setDataFim(e.target.value)}
                 min="2020-01-01"
                 max="2040-12-31"
@@ -607,7 +609,6 @@ export default function Colheitas() {
         </CardContent>
       </Card>
 
-      {/* Tabela Aprimorada */}
       {colheitasFiltradas.length === 0 ? (
         <EmptyState
           icon={Wheat}
@@ -651,7 +652,6 @@ export default function Colheitas() {
                     </TableCell>
                     <TableCell className="capitalize">{tipoColheitaLabel(colheita.tipo_colheita)}</TableCell>
                     
-                    {/* Coluna Quantidade Inteligente */}
                     <TableCell className="text-right">
                         <div className="flex flex-col items-end">
                             {colheita.quantidade_kg > 0 && (

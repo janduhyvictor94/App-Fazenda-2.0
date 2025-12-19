@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from '@/components/ui/dialog';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Plus, Edit, Trash2, Map, Leaf, Eye } from 'lucide-react';
@@ -132,7 +132,6 @@ export default function Talhoes() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-stone-900">Talhões</h1>
@@ -152,13 +151,16 @@ export default function Talhoes() {
               <DialogTitle>
                 {editingTalhao ? 'Editar Talhão' : 'Novo Talhão'}
               </DialogTitle>
+              <DialogDescription className="sr-only">
+                Preencha as informações básicas do talhão para o cadastro.
+              </DialogDescription>
             </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Nome/Código</Label>
                   <Input
-                    value={formData.nome}
+                    value={formData.nome || ""}
                     onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
                     placeholder="Ex: T-01"
                     required
@@ -169,7 +171,7 @@ export default function Talhoes() {
                   <Input
                     type="number"
                     step="0.01"
-                    value={formData.area_hectares}
+                    value={formData.area_hectares || ""}
                     onChange={(e) => setFormData({ ...formData, area_hectares: e.target.value })}
                     placeholder="Ex: 10.5"
                   />
@@ -180,7 +182,7 @@ export default function Talhoes() {
                 <div className="space-y-2">
                   <Label>Cultura</Label>
                   <Select
-                    value={formData.cultura}
+                    value={formData.cultura || ""}
                     onValueChange={(value) => setFormData({ ...formData, cultura: value })}
                   >
                     <SelectTrigger>
@@ -196,7 +198,7 @@ export default function Talhoes() {
                 <div className="space-y-2">
                   <Label>Variedade</Label>
                   <Input
-                    value={formData.variedade}
+                    value={formData.variedade || ""}
                     onChange={(e) => setFormData({ ...formData, variedade: e.target.value })}
                     placeholder="Ex: Palmer, Paluma"
                   />
@@ -208,14 +210,14 @@ export default function Talhoes() {
                   <Label>Data de Plantio</Label>
                   <Input
                     type="date"
-                    value={formData.data_plantio}
+                    value={formData.data_plantio || ""}
                     onChange={(e) => setFormData({ ...formData, data_plantio: e.target.value })}
                   />
                 </div>
                 <div className="space-y-2">
                   <Label>Status</Label>
                   <Select
-                    value={formData.status}
+                    value={formData.status || ""}
                     onValueChange={(value) => setFormData({ ...formData, status: value })}
                   >
                     <SelectTrigger>
@@ -234,7 +236,7 @@ export default function Talhoes() {
               <div className="space-y-2">
                 <Label>Observações</Label>
                 <Textarea
-                  value={formData.observacoes}
+                  value={formData.observacoes || ""}
                   onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })}
                   placeholder="Observações sobre o talhão..."
                   rows={3}
@@ -258,7 +260,6 @@ export default function Talhoes() {
         </Dialog>
       </div>
 
-      {/* Grid */}
       {talhoes.length === 0 ? (
         <EmptyState
           icon={Map}
@@ -278,7 +279,6 @@ export default function Talhoes() {
                       talhao.cultura === 'manga' ? 'bg-orange-100' : 
                       talhao.cultura === 'goiaba' ? 'bg-pink-100' : 'bg-purple-100'
                     }`}>
-                      {/* LÓGICA DE ÍCONES DE FRUTAS AQUI */}
                       {talhao.cultura === 'manga' ? (
                         <span className="text-xl" role="img" aria-label="Manga">🥭</span>
                       ) : talhao.cultura === 'goiaba' ? (
