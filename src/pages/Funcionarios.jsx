@@ -6,18 +6,18 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from '@/components/ui/dialog';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Edit, Trash2, Users, Phone, Calendar, Briefcase } from 'lucide-react';
+import { Plus, Edit, Trash2, Users, Phone, Calendar, Briefcase, User } from 'lucide-react';
 import EmptyState from '@/components/ui/EmptyState';
 import StatCard from '@/components/ui/StatCard';
 import { format } from 'date-fns';
 
 const statusLabels = {
-  ativo: { label: 'Ativo', color: 'bg-emerald-100 text-emerald-700' },
-  inativo: { label: 'Inativo', color: 'bg-stone-100 text-stone-700' },
-  ferias: { label: 'Férias', color: 'bg-blue-100 text-blue-700' }
+  ativo: { label: 'Ativo', color: 'bg-emerald-50 text-emerald-700 border-emerald-100' },
+  inativo: { label: 'Inativo', color: 'bg-stone-50 text-stone-700 border-stone-100' },
+  ferias: { label: 'Férias', color: 'bg-blue-50 text-blue-700 border-blue-100' }
 };
 
 export default function Funcionarios() {
@@ -56,7 +56,7 @@ export default function Funcionarios() {
 
   const createMutation = useMutation({
     mutationFn: async (data) => {
-      const { data: result, error } = await supabase.from('funcionarios').insert(data).select();
+      const { data: result, error } = await supabase.from('funcionarios').insert([data]).select();
       if (error) throw error;
       return result;
     },
@@ -89,16 +89,7 @@ export default function Funcionarios() {
   });
 
   const resetForm = () => {
-    setFormData({
-      nome: '',
-      cargo: '',
-      salario: '',
-      data_admissao: '',
-      status: 'ativo',
-      telefone: '',
-      talhao_principal: '',
-      observacoes: ''
-    });
+    setFormData({ nome: '', cargo: '', salario: '', data_admissao: '', status: 'ativo', telefone: '', talhao_principal: '', observacoes: '' });
     setEditingFuncionario(null);
     setOpen(false);
   };
@@ -125,15 +116,10 @@ export default function Funcionarios() {
       salario: formData.salario ? parseFloat(formData.salario) : null,
       talhao_principal: formData.talhao_principal || null
     };
-
-    if (editingFuncionario) {
-      updateMutation.mutate({ id: editingFuncionario.id, data });
-    } else {
-      createMutation.mutate(data);
-    }
+    if (editingFuncionario) updateMutation.mutate({ id: editingFuncionario.id, data });
+    else createMutation.mutate(data);
   };
 
-  // Stats
   const totalFuncionarios = funcionarios.length;
   const funcionariosAtivos = funcionarios.filter(f => f.status === 'ativo').length;
   const totalFolha = funcionarios.filter(f => f.status === 'ativo').reduce((acc, f) => acc + (f.salario || 0), 0);
@@ -141,77 +127,47 @@ export default function Funcionarios() {
   const getTalhaoNome = (id) => talhoes.find(t => t.id === id)?.nome || '-';
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
+    <div className="space-y-8">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-stone-900">Funcionários</h1>
-          <p className="text-stone-500">Gestão da equipe da fazenda</p>
+          <h1 className="text-3xl font-bold text-stone-900 tracking-tight">Funcionários</h1>
+          <p className="text-stone-500 font-medium">Gestão da equipe da fazenda</p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
-            <Button className="bg-blue-600 hover:bg-blue-700">
-              <Plus className="w-4 h-4 mr-2" />
-              Novo Funcionário
+            <Button className="bg-blue-600 hover:bg-blue-700 rounded-2xl h-12 px-6 shadow-lg shadow-blue-100">
+              <Plus className="w-5 h-5 mr-2" /> Novo Funcionário
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-lg">
+          <DialogContent className="sm:max-w-lg rounded-[2rem]">
             <DialogHeader>
-              <DialogTitle>
-                {editingFuncionario ? 'Editar Funcionário' : 'Novo Funcionário'}
-              </DialogTitle>
+              <DialogTitle className="text-2xl font-bold">{editingFuncionario ? 'Editar' : 'Novo'} Funcionário</DialogTitle>
+              <DialogDescription className="sr-only">Formulário para cadastro de funcionários.</DialogDescription>
             </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-4 pt-4">
               <div className="space-y-2">
-                <Label>Nome Completo</Label>
-                <Input
-                  value={formData.nome}
-                  onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
-                  placeholder="Nome do funcionário"
-                  required
-                />
+                <Label className="font-bold text-stone-700">Nome Completo</Label>
+                <Input value={formData.nome} onChange={(e) => setFormData({ ...formData, nome: e.target.value })} className="rounded-xl h-11" required />
               </div>
-
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>Cargo</Label>
-                  <Input
-                    value={formData.cargo}
-                    onChange={(e) => setFormData({ ...formData, cargo: e.target.value })}
-                    placeholder="Ex: Tratorista"
-                    required
-                  />
+                  <Label className="font-bold text-stone-700">Cargo</Label>
+                  <Input value={formData.cargo} onChange={(e) => setFormData({ ...formData, cargo: e.target.value })} className="rounded-xl h-11" required />
                 </div>
                 <div className="space-y-2">
-                  <Label>Salário</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    value={formData.salario}
-                    onChange={(e) => setFormData({ ...formData, salario: e.target.value })}
-                    placeholder="R$"
-                  />
+                  <Label className="font-bold text-stone-700">Salário</Label>
+                  <Input type="number" step="0.01" value={formData.salario} onChange={(e) => setFormData({ ...formData, salario: e.target.value })} className="rounded-xl h-11" />
                 </div>
               </div>
-
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>Data de Admissão</Label>
-                  <Input
-                    type="date"
-                    value={formData.data_admissao}
-                    onChange={(e) => setFormData({ ...formData, data_admissao: e.target.value })}
-                  />
+                  <Label className="font-bold text-stone-700">Data Admissão</Label>
+                  <Input type="date" value={formData.data_admissao} onChange={(e) => setFormData({ ...formData, data_admissao: e.target.value })} className="rounded-xl h-11" />
                 </div>
                 <div className="space-y-2">
-                  <Label>Status</Label>
-                  <Select
-                    value={formData.status}
-                    onValueChange={(value) => setFormData({ ...formData, status: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
+                  <Label className="font-bold text-stone-700">Status</Label>
+                  <Select value={formData.status || ""} onValueChange={(value) => setFormData({ ...formData, status: value })}>
+                    <SelectTrigger className="rounded-xl h-11"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="ativo">Ativo</SelectItem>
                       <SelectItem value="inativo">Inativo</SelectItem>
@@ -220,165 +176,80 @@ export default function Funcionarios() {
                   </Select>
                 </div>
               </div>
-
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>Telefone</Label>
-                  <Input
-                    value={formData.telefone}
-                    onChange={(e) => setFormData({ ...formData, telefone: e.target.value })}
-                    placeholder="(00) 00000-0000"
-                  />
+                  <Label className="font-bold text-stone-700">Telefone</Label>
+                  <Input value={formData.telefone} onChange={(e) => setFormData({ ...formData, telefone: e.target.value })} className="rounded-xl h-11" placeholder="(00) 00000-0000" />
                 </div>
                 <div className="space-y-2">
-                  <Label>Talhão Principal</Label>
-                  <Select
-                    value={formData.talhao_principal}
-                    onValueChange={(value) => setFormData({ ...formData, talhao_principal: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione" />
-                    </SelectTrigger>
+                  <Label className="font-bold text-stone-700">Talhão Principal</Label>
+                  <Select value={formData.talhao_principal || "none"} onValueChange={(value) => setFormData({ ...formData, talhao_principal: value === "none" ? null : value })}>
+                    <SelectTrigger className="rounded-xl h-11"><SelectValue placeholder="Selecione" /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value={null}>Nenhum</SelectItem>
-                      {talhoes.map((t) => (
-                        <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>
-                      ))}
+                      <SelectItem value="none">Nenhum</SelectItem>
+                      {talhoes.map((t) => <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
               </div>
-
               <div className="space-y-2">
-                <Label>Observações</Label>
-                <Textarea
-                  value={formData.observacoes}
-                  onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })}
-                  placeholder="Observações..."
-                  rows={2}
-                />
+                <Label className="font-bold text-stone-700">Observações</Label>
+                <Textarea value={formData.observacoes} onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })} className="rounded-xl" rows={2} />
               </div>
-
               <div className="flex justify-end gap-3 pt-4">
-                <Button type="button" variant="outline" onClick={resetForm}>
-                  Cancelar
-                </Button>
-                <Button 
-                  type="submit" 
-                  className="bg-blue-600 hover:bg-blue-700"
-                  disabled={createMutation.isPending || updateMutation.isPending}
-                >
-                  {editingFuncionario ? 'Salvar' : 'Cadastrar'}
-                </Button>
+                <Button type="button" variant="ghost" onClick={resetForm} className="rounded-xl">Cancelar</Button>
+                <Button type="submit" className="bg-blue-600 rounded-xl px-8" disabled={createMutation.isPending || updateMutation.isPending}>{editingFuncionario ? 'Salvar' : 'Cadastrar'}</Button>
               </div>
             </form>
           </DialogContent>
         </Dialog>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <StatCard
-          title="Total de Funcionários"
-          value={totalFuncionarios}
-          icon={Users}
-          iconBg="bg-blue-50"
-          iconColor="text-blue-600"
-        />
-        <StatCard
-          title="Funcionários Ativos"
-          value={funcionariosAtivos}
-          iconBg="bg-emerald-50"
-          iconColor="text-emerald-600"
-        />
-        <StatCard
-          title="Folha Mensal"
-          value={`R$ ${totalFolha.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
-          subtitle="Funcionários ativos"
-          iconBg="bg-amber-50"
-          iconColor="text-amber-600"
-        />
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+        <StatCard title="Equipe Total" value={totalFuncionarios} icon={Users} />
+        <StatCard title="Ativos Hoje" value={funcionariosAtivos} icon={User} color="text-emerald-600" />
+        <StatCard title="Folha Mensal" value={`R$ ${totalFolha.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} icon={Briefcase} color="text-amber-600" />
       </div>
 
-      {/* Lista */}
       {funcionarios.length === 0 ? (
-        <EmptyState
-          icon={Users}
-          title="Nenhum funcionário cadastrado"
-          description="Cadastre seus funcionários para gerenciar a equipe da fazenda."
-          actionLabel="Cadastrar Funcionário"
-          onAction={() => setOpen(true)}
-        />
+        <EmptyState icon={Users} title="Nenhum funcionário" onAction={() => setOpen(true)} actionLabel="Cadastrar" />
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {funcionarios.map((funcionario) => (
-            <Card key={funcionario.id} className="border-stone-100 hover:shadow-lg transition-shadow">
+            <Card key={funcionario.id} className="border-none shadow-sm rounded-[2rem] hover:shadow-xl transition-all duration-300 group bg-white overflow-hidden">
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-                      <span className="text-lg font-bold text-blue-600">
-                        {funcionario.nome?.charAt(0).toUpperCase()}
-                      </span>
+                  <div className="flex items-center gap-4">
+                    <div className="w-14 h-14 bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-100 transition-transform group-hover:rotate-3">
+                      <span className="text-xl font-bold text-white">{funcionario.nome?.charAt(0).toUpperCase()}</span>
                     </div>
                     <div>
-                      <CardTitle className="text-lg">{funcionario.nome}</CardTitle>
-                      <p className="text-sm text-stone-500">{funcionario.cargo}</p>
+                      <CardTitle className="text-xl font-bold text-stone-800">{funcionario.nome}</CardTitle>
+                      <p className="text-sm font-semibold text-stone-400 uppercase tracking-wider">{funcionario.cargo}</p>
                     </div>
                   </div>
-                  <Badge className={statusLabels[funcionario.status]?.color}>
+                  <Badge variant="outline" className={`rounded-full px-3 py-1 font-bold border ${statusLabels[funcionario.status]?.color}`}>
                     {statusLabels[funcionario.status]?.label}
                   </Badge>
                 </div>
               </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  {funcionario.salario && (
-                    <div className="flex items-center gap-2">
-                      <Briefcase className="w-4 h-4 text-stone-400" />
-                      <span>R$ {funcionario.salario.toLocaleString('pt-BR')}</span>
-                    </div>
-                  )}
-                  {funcionario.telefone && (
-                    <div className="flex items-center gap-2">
-                      <Phone className="w-4 h-4 text-stone-400" />
-                      <span>{funcionario.telefone}</span>
-                    </div>
-                  )}
-                  {funcionario.data_admissao && (
-                    <div className="flex items-center gap-2">
-                      <Calendar className="w-4 h-4 text-stone-400" />
-                      <span>{format(new Date(funcionario.data_admissao + 'T12:00:00'), 'dd/MM/yyyy')}</span>
-                    </div>
-                  )}
-                  {funcionario.talhao_principal && (
-                    <div className="flex items-center gap-2 text-stone-600">
-                      <span className="text-stone-400">Talhão:</span>
-                      <span>{getTalhaoNome(funcionario.talhao_principal)}</span>
-                    </div>
-                  )}
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 gap-2 bg-stone-50 p-4 rounded-2xl border border-stone-100">
+                  <div className="flex items-center gap-2 text-sm font-medium text-stone-600">
+                    <Phone className="w-4 h-4 text-stone-400" /> {funcionario.telefone || '(00) 00000-0000'}
+                  </div>
+                  <div className="flex items-center gap-2 text-sm font-medium text-stone-600">
+                    <Calendar className="w-4 h-4 text-stone-400" /> {funcionario.data_admissao ? format(new Date(funcionario.data_admissao + 'T12:00:00'), 'dd/MM/yyyy') : 'Não informada'}
+                  </div>
+                  <div className="flex items-center gap-2 text-sm font-bold text-emerald-600">
+                    <Briefcase className="w-4 h-4" /> R$ {funcionario.salario?.toLocaleString('pt-BR') || '0,00'}
+                  </div>
                 </div>
-
-                {funcionario.observacoes && (
-                  <p className="text-sm text-stone-500 line-clamp-2">{funcionario.observacoes}</p>
-                )}
-
-                <div className="flex items-center gap-2 pt-2 border-t border-stone-100">
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    className="flex-1"
-                    onClick={() => handleEdit(funcionario)}
-                  >
-                    <Edit className="w-4 h-4 mr-1" />
-                    Editar
+                <div className="flex gap-2">
+                  <Button variant="secondary" size="sm" className="flex-1 rounded-xl font-bold hover:bg-blue-50 hover:text-blue-600 transition-colors" onClick={() => handleEdit(funcionario)}>
+                    <Edit className="w-4 h-4 mr-2" /> Editar
                   </Button>
-                  <Button 
-                    variant="ghost" 
-                    size="sm"
-                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                    onClick={() => deleteMutation.mutate(funcionario.id)}
-                  >
+                  <Button variant="ghost" size="sm" className="rounded-xl text-red-400 hover:bg-red-50 hover:text-red-600" onClick={() => deleteMutation.mutate(funcionario.id)}>
                     <Trash2 className="w-4 h-4" />
                   </Button>
                 </div>
