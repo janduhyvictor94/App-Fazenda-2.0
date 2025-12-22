@@ -11,7 +11,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Switch } from '@/components/ui/switch';
-import { Plus, Edit, Trash2, ClipboardList, Filter, Package, Copy, MessageCircle } from 'lucide-react';
+import { Plus, Edit, Trash2, ClipboardList, Filter, Package, Copy, MessageCircle, CheckCircle2 } from 'lucide-react';
 import EmptyState from '@/components/ui/EmptyState';
 import { format } from 'date-fns';
 
@@ -233,12 +233,11 @@ export default function Atividades() {
     };
 
     const novosInsumos = [...formData.insumos_utilizados, novoInsumo];
-    const novoCustoTotal = novosInsumos.reduce((acc, i) => acc + (i.valor_total || 0), 0);
-
+    
     setFormData({
       ...formData,
       insumos_utilizados: novosInsumos,
-      custo_total: novoCustoTotal + (formData.terceirizada ? parseFloat(formData.valor_terceirizado) || 0 : 0)
+      custo_total: novosInsumos.reduce((acc, i) => acc + (i.valor_total || 0), 0) + (formData.terceirizada ? parseFloat(formData.valor_terceirizado) || 0 : 0)
     });
     setInsumoTemp({ insumo_id: '', quantidade: '', metodo_aplicacao: 'foliar' });
     setNovoMetodo('');
@@ -247,11 +246,10 @@ export default function Atividades() {
 
   const removeInsumo = (index) => {
     const novosInsumos = formData.insumos_utilizados.filter((_, i) => i !== index);
-    const novoCustoTotal = novosInsumos.reduce((acc, i) => acc + (i.valor_total || 0), 0);
     setFormData({
       ...formData,
       insumos_utilizados: novosInsumos,
-      custo_total: novoCustoTotal + (formData.terceirizada ? parseFloat(formData.valor_terceirizado) || 0 : 0)
+      custo_total: novosInsumos.reduce((acc, i) => acc + (i.valor_total || 0), 0) + (formData.terceirizada ? parseFloat(formData.valor_terceirizado) || 0 : 0)
     });
   };
 
@@ -266,7 +264,9 @@ export default function Atividades() {
     const data = {
       ...formData,
       valor_terceirizado: formData.valor_terceirizado ? parseFloat(formData.valor_terceirizado) : null,
-      custo_total: calcularCustoTotal()
+      custo_total: calcularCustoTotal(),
+      // Se status for concluída, preenche data_realizada automaticamente se estiver vazia
+      data_realizada: formData.status === 'concluida' ? (formData.data_realizada || format(new Date(), 'yyyy-MM-dd')) : null
     };
 
     if (editingAtividade) {
@@ -396,7 +396,7 @@ export default function Atividades() {
                 </div>
               )}
 
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Data Programada</Label>
                   <Input
@@ -404,14 +404,6 @@ export default function Atividades() {
                     value={formData.data_programada || ""}
                     onChange={(e) => setFormData({ ...formData, data_programada: e.target.value })}
                     required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Data Realizada</Label>
-                  <Input
-                    type="date"
-                    value={formData.data_realizada || ""}
-                    onChange={(e) => setFormData({ ...formData, data_realizada: e.target.value })}
                   />
                 </div>
                 <div className="space-y-2">
@@ -708,10 +700,9 @@ export default function Atividades() {
                   <TableHead>Talhão</TableHead>
                   <TableHead>Tipo</TableHead>
                   <TableHead>Data Prog.</TableHead>
-                  <TableHead>Data Real.</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Custo</TableHead>
-                  <TableHead className="w-24"></TableHead>
+                  <TableHead className="w-24 text-right pr-6">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -728,18 +719,31 @@ export default function Atividades() {
                       {atividade.data_programada ? format(new Date(atividade.data_programada + 'T12:00:00'), 'dd/MM/yyyy') : '-'}
                     </TableCell>
                     <TableCell>
-                      {atividade.data_realizada ? format(new Date(atividade.data_realizada + 'T12:00:00'), 'dd/MM/yyyy') : '-'}
-                    </TableCell>
-                    <TableCell>
                       <Badge className={statusLabels[atividade.status]?.color}>
                         {statusLabels[atividade.status]?.label}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-right font-medium">
+                    <TableCell className={`text-right font-medium ${atividade.status === 'concluida' ? 'text-emerald-600' : 'text-stone-400'}`}>
                       R$ {(atividade.custo_total || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-center justify-end gap-1">
+                      <div className="flex items-center justify-end gap-1 pr-4">
+                        {atividade.status !== 'concluida' && (
+                           <Button 
+                             variant="ghost" 
+                             size="sm"
+                             className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+                             onClick={() => {
+                               updateMutation.mutate({ 
+                                 id: atividade.id, 
+                                 data: { ...atividade, status: 'concluida', data_realizada: format(new Date(), 'yyyy-MM-dd') } 
+                               });
+                             }}
+                             title="Concluir"
+                           >
+                             <CheckCircle2 className="w-4 h-4" />
+                           </Button>
+                        )}
                         <Button 
                           variant="ghost" 
                           size="sm"
@@ -770,7 +774,7 @@ export default function Atividades() {
                           variant="ghost" 
                           size="sm"
                           className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                          onClick={() => deleteMutation.mutate(atividade.id)}
+                          onClick={() => { if(confirm("Deseja excluir?")) deleteMutation.mutate(atividade.id) }}
                           title="Excluir"
                         >
                           <Trash2 className="w-4 h-4" />

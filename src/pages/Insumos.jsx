@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, Edit, Trash2, Package, AlertTriangle } from 'lucide-react';
+import { Plus, Edit, Trash2, Package, AlertTriangle, Search, History } from 'lucide-react';
 import EmptyState from '@/components/ui/EmptyState';
 import StatCard from '@/components/ui/StatCard';
 
@@ -19,18 +19,16 @@ const categoriaLabels = {
   defensivo: { label: 'Defensivo', color: 'bg-red-100 text-red-700' },
   adubo: { label: 'Adubo', color: 'bg-amber-100 text-amber-700' },
   semente: { label: 'Semente', color: 'bg-purple-100 text-purple-700' },
-  equipamento: { label: 'Equipamento', color: 'bg-blue-100 text-blue-700' },
-  combustivel: { label: 'Combustível', color: 'bg-orange-100 text-orange-700' },
   outro: { label: 'Outro', color: 'bg-stone-100 text-stone-700' }
 };
 
-export default function Insumos() {
+export default function Insumos({ showMessage }) {
   const [open, setOpen] = useState(false);
   const [editingInsumo, setEditingInsumo] = useState(null);
-  const [filtroCategoria, setFiltroCategoria] = useState('todos');
+  const [busca, setBusca] = useState('');
   const [formData, setFormData] = useState({
     nome: '',
-    categoria: '',
+    categoria: 'outro',
     unidade: 'kg',
     preco_unitario: '',
     estoque_atual: '',
@@ -44,32 +42,25 @@ export default function Insumos() {
   const { data: insumos = [], isLoading } = useQuery({
     queryKey: ['insumos'],
     queryFn: async () => {
-      const { data, error } = await supabase.from('insumos').select('*');
+      const { data, error } = await supabase.from('insumos').select('*').order('nome');
       if (error) throw error;
       return data;
     }
   });
 
-  const createMutation = useMutation({
+  const saveMutation = useMutation({
     mutationFn: async (data) => {
-      const { data: result, error } = await supabase.from('insumos').insert(data).select();
-      if (error) throw error;
-      return result;
+      if (editingInsumo) {
+        const { error } = await supabase.from('insumos').update(data).eq('id', editingInsumo.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from('insumos').insert([data]);
+        if (error) throw error;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['insumos'] });
-      resetForm();
-    }
-  });
-
-  const updateMutation = useMutation({
-    mutationFn: async ({ id, data }) => {
-      const { data: result, error } = await supabase.from('insumos').update(data).eq('id', id).select();
-      if (error) throw error;
-      return result;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['insumos'] });
+      if (showMessage) showMessage(editingInsumo ? "Insumo atualizado" : "Novo insumo cadastrado com sucesso!");
       resetForm();
     }
   });
@@ -81,19 +72,14 @@ export default function Insumos() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['insumos'] });
+      if (showMessage) showMessage("Insumo removido do inventário", "error");
     }
   });
 
   const resetForm = () => {
     setFormData({
-      nome: '',
-      categoria: '',
-      unidade: 'kg',
-      preco_unitario: '',
-      estoque_atual: '',
-      estoque_minimo: '',
-      fornecedor: '',
-      observacoes: ''
+      nome: '', categoria: 'outro', unidade: 'kg', preco_unitario: '',
+      estoque_atual: '', estoque_minimo: '', fornecedor: '', observacoes: ''
     });
     setEditingInsumo(null);
     setOpen(false);
@@ -103,7 +89,7 @@ export default function Insumos() {
     setEditingInsumo(insumo);
     setFormData({
       nome: insumo.nome || '',
-      categoria: insumo.categoria || '',
+      categoria: insumo.categoria || 'outro',
       unidade: insumo.unidade || 'kg',
       preco_unitario: insumo.preco_unitario || '',
       estoque_atual: insumo.estoque_atual || '',
@@ -118,69 +104,172 @@ export default function Insumos() {
     e.preventDefault();
     const data = {
       ...formData,
-      preco_unitario: formData.preco_unitario ? parseFloat(formData.preco_unitario) : null,
-      estoque_atual: formData.estoque_atual ? parseFloat(formData.estoque_atual) : null,
+      preco_unitario: parseFloat(formData.preco_unitario) || 0,
+      estoque_atual: parseFloat(formData.estoque_atual) || 0,
       estoque_minimo: formData.estoque_minimo ? parseFloat(formData.estoque_minimo) : null
     };
-
-    if (editingInsumo) {
-      updateMutation.mutate({ id: editingInsumo.id, data });
-    } else {
-      createMutation.mutate(data);
-    }
+    saveMutation.mutate(data);
   };
 
-  const insumosFiltrados = insumos.filter(i => filtroCategoria === 'todos' || i.categoria === filtroCategoria);
+  const insumosFiltrados = insumos.filter(i => 
+    i.nome.toLowerCase().includes(busca.toLowerCase()) ||
+    i.categoria.toLowerCase().includes(busca.toLowerCase())
+  );
 
-  const totalItens = insumos.length;
-  const valorEstoque = insumos.reduce((acc, i) => acc + ((i.estoque_atual || 0) * (i.preco_unitario || 0)), 0);
-  const estoqueBaixoCount = insumos.filter(i => i.estoque_minimo && i.estoque_atual && i.estoque_atual <= i.estoque_minimo).length;
+  const totalPatrimonio = insumos.reduce((acc, i) => acc + ((i.estoque_atual || 0) * (i.preco_unitario || 0)), 0);
+  const itensAbaixoMinimo = insumos.filter(i => i.estoque_minimo && i.estoque_atual <= i.estoque_minimo).length;
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div><h1 className="text-2xl font-bold text-stone-900">Insumos</h1><p className="text-stone-500">Cadastro e controle de insumos</p></div>
+        <div>
+          <h1 className="text-2xl font-bold text-stone-900">Insumos e Estoque</h1>
+          <p className="text-stone-500">Controle de materiais e inventário agrícola</p>
+        </div>
         <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild><Button className="bg-purple-600 hover:bg-purple-700"><Plus className="w-4 h-4 mr-2" />Novo Insumo</Button></DialogTrigger>
-          <DialogContent className="sm:max-w-lg">
+          <DialogTrigger asChild>
+            <Button className="bg-emerald-600 hover:bg-emerald-700 rounded-xl">
+              <Plus className="w-4 h-4 mr-2" /> Novo Insumo
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-lg rounded-[2rem]">
             <DialogHeader>
-              <DialogTitle>{editingInsumo ? 'Editar Insumo' : 'Novo Insumo'}</DialogTitle>
-              <DialogDescription className="sr-only">Preencha os campos abaixo para cadastrar um novo material no estoque.</DialogDescription>
+              <DialogTitle>{editingInsumo ? 'Editar Insumo' : 'Cadastrar Novo Insumo'}</DialogTitle>
+              <DialogDescription>
+                Mantenha seu estoque atualizado para garantir o planejamento das atividades.
+              </DialogDescription>
             </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2"><Label>Nome do Insumo</Label><Input value={formData.nome || ""} onChange={(e) => setFormData({ ...formData, nome: e.target.value })} placeholder="Ex: Ureia, Roundup, etc." required /></div>
+            <form onSubmit={handleSubmit} className="space-y-4 pt-4">
+              <div className="space-y-2">
+                <Label>Nome do Produto</Label>
+                <Input value={formData.nome} onChange={(e) => setFormData({...formData, nome: e.target.value})} placeholder="Ex: Glifosato 480" required className="rounded-xl" />
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2"><Label>Categoria</Label><Select value={formData.categoria || ""} onValueChange={(value) => setFormData({ ...formData, categoria: value })}><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger><SelectContent>{Object.entries(categoriaLabels).map(([key, { label }]) => <SelectItem key={key} value={key}>{label}</SelectItem>)}</SelectContent></Select></div>
-                <div className="space-y-2"><Label>Unidade</Label><Select value={formData.unidade || ""} onValueChange={(value) => setFormData({ ...formData, unidade: value })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="kg">Kg</SelectItem><SelectItem value="litro">Litro</SelectItem><SelectItem value="unidade">Unidade</SelectItem><SelectItem value="saco">Saco</SelectItem><SelectItem value="tonelada">Tonelada</SelectItem></SelectContent></Select></div>
+                <div className="space-y-2">
+                  <Label>Categoria</Label>
+                  <Select value={formData.categoria} onValueChange={(v) => setFormData({...formData, categoria: v})}>
+                    <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {Object.entries(categoriaLabels).map(([key, { label }]) => (
+                        <SelectItem key={key} value={key}>{label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Unidade de Medida</Label>
+                  <Select value={formData.unidade} onValueChange={(v) => setFormData({...formData, unidade: v})}>
+                    <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="kg">Quilograma (kg)</SelectItem>
+                      <SelectItem value="L">Litro (L)</SelectItem>
+                      <SelectItem value="un">Unidade (un)</SelectItem>
+                      <SelectItem value="sc">Saca (sc)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
+
               <div className="grid grid-cols-3 gap-4">
-                <div className="space-y-2"><Label>Preço Unitário</Label><Input type="number" step="0.01" value={formData.preco_unitario || ""} onChange={(e) => setFormData({ ...formData, preco_unitario: e.target.value })} placeholder="R$" /></div>
-                <div className="space-y-2"><Label>Estoque Atual</Label><Input type="number" step="0.01" value={formData.estoque_atual || ""} onChange={(e) => setFormData({ ...formData, estoque_atual: e.target.value })} placeholder="0" /></div>
-                <div className="space-y-2"><Label>Estoque Mínimo</Label><Input type="number" step="0.01" value={formData.estoque_minimo || ""} onChange={(e) => setFormData({ ...formData, estoque_minimo: e.target.value })} placeholder="0" /></div>
+                <div className="space-y-2">
+                  <Label>Estoque Atual</Label>
+                  <Input type="number" step="0.01" value={formData.estoque_atual} onChange={(e) => setFormData({...formData, estoque_atual: e.target.value})} required className="rounded-xl" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Estoque Mínimo</Label>
+                  <Input type="number" step="0.01" value={formData.estoque_minimo} onChange={(e) => setFormData({...formData, estoque_minimo: e.target.value})} className="rounded-xl" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Preço Unit.</Label>
+                  <Input type="number" step="0.01" value={formData.preco_unitario} onChange={(e) => setFormData({...formData, preco_unitario: e.target.value})} placeholder="R$" className="rounded-xl" />
+                </div>
               </div>
-              <div className="space-y-2"><Label>Fornecedor</Label><Input value={formData.fornecedor || ""} onChange={(e) => setFormData({ ...formData, fornecedor: e.target.value })} placeholder="Nome do fornecedor" /></div>
-              <div className="space-y-2"><Label>Observações</Label><Textarea value={formData.observacoes || ""} onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })} placeholder="Observações sobre o insumo..." rows={2} /></div>
-              <div className="flex justify-end gap-3 pt-4"><Button type="button" variant="outline" onClick={resetForm}>Cancelar</Button><Button type="submit" className="bg-purple-600 hover:bg-purple-700" disabled={createMutation.isPending || updateMutation.isPending}>{editingInsumo ? 'Salvar' : 'Cadastrar'}</Button></div>
+
+              <div className="space-y-2">
+                <Label>Fornecedor</Label>
+                <Input value={formData.fornecedor} onChange={(e) => setFormData({...formData, fornecedor: e.target.value})} placeholder="Nome da empresa/vendedor" className="rounded-xl" />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4">
+                <Button type="button" variant="outline" onClick={resetForm} className="rounded-xl">Cancelar</Button>
+                <Button type="submit" className="bg-emerald-600 hover:bg-emerald-700 rounded-xl px-8" disabled={saveMutation.isPending}>
+                  {editingInsumo ? 'Salvar' : 'Cadastrar'}
+                </Button>
+              </div>
             </form>
           </DialogContent>
         </Dialog>
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4"><StatCard title="Total de Insumos" value={totalItens} icon={Package} iconBg="bg-purple-50" iconColor="text-purple-600" /><StatCard title="Valor em Estoque" value={`R$ ${valorEstoque.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} iconBg="bg-emerald-50" iconColor="text-emerald-600" /><StatCard title="Estoque Baixo" value={estoqueBaixoCount} subtitle={estoqueBaixoCount > 0 ? "Precisam reposição" : "Tudo em ordem"} icon={AlertTriangle} iconBg={estoqueBaixoCount > 0 ? "bg-red-50" : "bg-emerald-50"} iconColor={estoqueBaixoCount > 0 ? "text-red-600" : "text-emerald-600"} /></div>
-      <Card className="border-stone-100"><CardContent className="pt-4"><div className="flex flex-wrap items-center gap-4"><span className="text-sm font-medium text-stone-600">Categoria:</span><Select value={filtroCategoria || "todos"} onValueChange={setFiltroCategoria}><SelectTrigger className="w-48"><SelectValue placeholder="Todas" /></SelectTrigger><SelectContent><SelectItem value="todos">Todas Categorias</SelectItem>{Object.entries(categoriaLabels).map(([key, { label }]) => <SelectItem key={key} value={key}>{label}</SelectItem>)}</SelectContent></Select></div></CardContent></Card>
-      {insumosFiltrados.length === 0 ? <EmptyState icon={Package} title="Nenhum insumo cadastrado" description="Cadastre seus insumos para controlar o estoque e custos das atividades." actionLabel="Cadastrar Insumo" onAction={() => setOpen(true)} /> : (
-        <Card className="border-stone-100 overflow-hidden">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader><TableRow className="bg-stone-50"><TableHead>Nome</TableHead><TableHead>Categoria</TableHead><TableHead>Unidade</TableHead><TableHead className="text-right">Preço Unit.</TableHead><TableHead className="text-right">Estoque</TableHead><TableHead>Fornecedor</TableHead><TableHead className="w-24"></TableHead></TableRow></TableHeader>
-              <TableBody>{insumosFiltrados.map((insumo) => {
-                  const baixo = insumo.estoque_minimo && insumo.estoque_atual && insumo.estoque_atual <= insumo.estoque_minimo;
-                  return (<TableRow key={insumo.id} className="hover:bg-stone-50"><TableCell className="font-medium"><div className="flex items-center gap-2">{insumo.nome}{baixo && <AlertTriangle className="w-4 h-4 text-red-500" />}</div></TableCell><TableCell><Badge className={categoriaLabels[insumo.categoria]?.color}>{categoriaLabels[insumo.categoria]?.label || insumo.categoria}</Badge></TableCell><TableCell>{insumo.unidade}</TableCell><TableCell className="text-right">R$ {insumo.preco_unitario?.toFixed(2) || '-'}</TableCell><TableCell className="text-right"><span className={baixo ? 'text-red-600 font-medium' : ''}>{insumo.estoque_atual || 0}</span>{insumo.estoque_minimo && <span className="text-stone-400 text-sm"> (mín: {insumo.estoque_minimo})</span>}</TableCell><TableCell>{insumo.fornecedor || '-'}</TableCell><TableCell><div className="flex items-center justify-end gap-1"><Button variant="ghost" size="sm" onClick={() => handleEdit(insumo)}><Edit className="w-4 h-4" /></Button><Button variant="ghost" size="sm" className="text-red-600 hover:text-red-700 hover:bg-red-50" onClick={() => deleteMutation.mutate(insumo.id)}><Trash2 className="w-4 h-4" /></Button></div></TableCell></TableRow>);
-                })}
-              </TableBody>
-            </Table>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <StatCard title="Total de Itens" value={insumos.length} icon={Package} color="text-blue-600" />
+        <StatCard title="Abaixo do Mínimo" value={itensAbaixoMinimo} icon={AlertTriangle} color="text-red-600" />
+        <StatCard title="Valor em Estoque" value={`R$ ${totalPatrimonio.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} icon={History} color="text-emerald-600" />
+      </div>
+
+      <Card className="border-stone-100 rounded-2xl shadow-sm">
+        <div className="p-4 border-b border-stone-100">
+          <div className="relative max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
+            <Input 
+              placeholder="Buscar insumo ou categoria..." 
+              className="pl-10 rounded-xl"
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+            />
           </div>
-        </Card>
-      )}
+        </div>
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader className="bg-stone-50">
+              <TableRow>
+                <TableHead className="pl-6">Insumo</TableHead>
+                <TableHead>Categoria</TableHead>
+                <TableHead className="text-right">Preço Unit.</TableHead>
+                <TableHead className="text-right">Estoque</TableHead>
+                <TableHead className="text-right pr-6">Ações</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {insumosFiltrados.map((insumo) => {
+                const isBaixo = insumo.estoque_minimo && insumo.estoque_atual <= insumo.estoque_minimo;
+                return (
+                  <TableRow key={insumo.id} className="hover:bg-stone-50 transition-colors">
+                    <TableCell className="pl-6">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-stone-800">{insumo.nome}</span>
+                        {isBaixo && <Badge variant="destructive" className="text-[9px] h-4">CRÍTICO</Badge>}
+                      </div>
+                      <div className="text-[10px] text-stone-400 uppercase tracking-tight">{insumo.fornecedor || 'Sem fornecedor'}</div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge className={categoriaLabels[insumo.categoria]?.color}>
+                        {categoriaLabels[insumo.categoria]?.label}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right font-medium">R$ {insumo.preco_unitario?.toFixed(2)}</TableCell>
+                    <TableCell className="text-right">
+                      <div className={isBaixo ? "text-red-600 font-bold" : "text-stone-700 font-medium"}>
+                        {insumo.estoque_atual} {insumo.unidade}
+                      </div>
+                      {insumo.estoque_minimo && (
+                        <div className="text-[10px] text-stone-400">mín: {insumo.estoque_minimo}</div>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right pr-6">
+                      <div className="flex justify-end gap-1">
+                        <Button variant="ghost" size="sm" onClick={() => handleEdit(insumo)}><Edit className="w-4 h-4" /></Button>
+                        <Button variant="ghost" size="sm" className="text-red-400" onClick={() => { if(confirm("Remover do estoque?")) deleteMutation.mutate(insumo.id) }}><Trash2 className="w-4 h-4" /></Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </div>
+      </Card>
     </div>
   );
 }

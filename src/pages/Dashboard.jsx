@@ -1,14 +1,15 @@
 import React from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabaseClient';
-import StatCard from '@/components/ui/StatCard';
+import StatCard from '@/components/ui/StatCard'; 
 import WeatherWidget from '@/components/ui/WeatherWidget'; 
 import { 
   Map, Wheat, DollarSign, Calendar, TrendingUp, 
-  Package, AlertTriangle, CheckCircle, Clock, Wallet 
+  Package, AlertTriangle, Clock, Wallet, CheckCircle2 
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { format, parseISO } from 'date-fns';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
@@ -17,12 +18,13 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recha
 const COLORS = ['#10b981', '#f59e0b', '#3b82f6', '#ef4444', '#8b5cf6', '#ec4899'];
 
 export default function Dashboard() {
+  const queryClient = useQueryClient();
   const queryOptions = {
     refetchOnWindowFocus: true,
     staleTime: 0
   };
 
-  // QUERIES ORIGINAIS PRESERVADAS
+  // QUERIES
   const { data: talhoes = [] } = useQuery({
     queryKey: ['talhoes'],
     queryFn: async () => {
@@ -68,15 +70,37 @@ export default function Dashboard() {
     ...queryOptions
   });
 
-  // CÁLCULOS DE FINANCEIRO PRESERVADOS E AMPLIADOS
+  // MUTATION PARA CONCLUIR ATIVIDADE
+  const completeActivityMutation = useMutation({
+    mutationFn: async (id) => {
+      const { data, error } = await supabase
+        .from('atividades')
+        .update({ 
+          status: 'concluida',
+          data_realizada: format(new Date(), 'yyyy-MM-dd')
+        })
+        .eq('id', id);
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['atividades'] });
+    }
+  });
+
+  // CÁLCULOS FINANCEIROS
   const totalReceita = colheitas.reduce((acc, c) => acc + (c.valor_total || 0), 0);
-  const totalCustos = custos.reduce((acc, c) => acc + (c.valor || 0), 0) + 
-                     atividades.reduce((acc, a) => acc + (a.custo_total || 0), 0);
   
-  // NOVO CÁLCULO: LUCRO ESTIMADO
+  // REGRA: Apenas atividades 'concluida' entram no custo total
+  const custoAtividadesConcluidas = atividades
+    .filter(a => a.status === 'concluida')
+    .reduce((acc, a) => acc + (a.custo_total || 0), 0);
+
+  const totalCustos = custos.reduce((acc, c) => acc + (c.valor || 0), 0) + custoAtividadesConcluidas;
+  
   const lucroEstimado = totalReceita - totalCustos;
   
-  const atividadesRecentes = atividades
+  const atividadesPendentes = atividades
     .filter(a => a.status !== 'concluida')
     .slice(0, 5);
 
@@ -101,20 +125,17 @@ export default function Dashboard() {
         <WeatherWidget />
       </div>
 
-      {/* Estatísticas com Lucro Estimado incluído */}
+      {/* Estatísticas */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
         <StatCard title="Área Total" value={`${talhoes.reduce((acc, t) => acc + (t.area_hectares || 0), 0).toFixed(1)} ha`} icon={Map} />
         <StatCard title="Receita" value={`R$ ${totalReceita.toLocaleString('pt-BR')}`} icon={TrendingUp} />
         <StatCard title="Custos" value={`R$ ${totalCustos.toLocaleString('pt-BR')}`} icon={DollarSign} />
-        
-        {/* NOVO CARD: LUCRO ESTIMADO */}
         <StatCard 
             title="Lucro Estimado" 
             value={`R$ ${lucroEstimado.toLocaleString('pt-BR')}`} 
             icon={Wallet}
             className={lucroEstimado >= 0 ? "border-emerald-200" : "border-red-200"}
         />
-        
         <StatCard title="Alertas" value={insumosBaixoEstoque.length} icon={AlertTriangle} />
       </div>
 
@@ -130,15 +151,26 @@ export default function Dashboard() {
             </div>
           </CardHeader>
           <CardContent className="p-0">
-            {atividadesRecentes.length > 0 ? (
+            {atividadesPendentes.length > 0 ? (
               <div className="divide-y divide-stone-100">
-                {atividadesRecentes.map((ativ) => (
-                  <div key={ativ.id} className="p-4 hover:bg-stone-50 transition-colors flex items-center justify-between">
+                {atividadesPendentes.map((ativ) => (
+                  <div key={ativ.id} className="p-4 hover:bg-stone-50 transition-colors flex items-center justify-between group">
                     <div>
-                      <p className="font-bold text-stone-800">{ativ.tipo}</p>
+                      <p className="font-bold text-stone-800">{ativ.tipo === 'outro' ? ativ.tipo_personalizado : ativ.tipo}</p>
                       <p className="text-sm text-stone-500">Talhão: {talhoes.find(t => t.id === ativ.talhao_id)?.nome || '-'}</p>
                     </div>
-                    <Badge variant="outline" className="bg-white">{format(parseISO(ativ.data_programada), 'dd/MM')}</Badge>
+                    <div className="flex items-center gap-3">
+                      <Badge variant="outline" className="bg-white">{format(parseISO(ativ.data_programada), 'dd/MM')}</Badge>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="opacity-0 group-hover:opacity-100 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 rounded-full transition-all"
+                        onClick={() => completeActivityMutation.mutate(ativ.id)}
+                        disabled={completeActivityMutation.isPending}
+                      >
+                        <CheckCircle2 className="w-5 h-5" />
+                      </Button>
+                    </div>
                   </div>
                 ))}
               </div>
