@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/lib/supabaseClient'; // Alterado de base44 para supabase
+import { supabase } from '@/lib/supabaseClient'; 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from '@/components/ui/dialog';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Plus, Edit, Trash2, FileText, Calendar, User, ChevronDown, ChevronUp, Printer, AlertCircle } from 'lucide-react';
@@ -159,10 +159,21 @@ export default function Consultorias() {
 
   const handleSubmit = (e) => {
     e.preventDefault();
+
+    // Tratamento de dados para evitar erro 400 no Supabase
+    // Strings vazias em campos de data causam erro, convertemos para null
+    const payload = {
+      ...formData,
+      proxima_visita: formData.proxima_visita || null,
+      // Garantir que arrays sejam arrays
+      talhoes_visitados: formData.talhoes_visitados || [],
+      indicacoes: formData.indicacoes || []
+    };
+
     if (editingConsultoria) {
-      updateMutation.mutate({ id: editingConsultoria.id, data: formData });
+      updateMutation.mutate({ id: editingConsultoria.id, data: payload });
     } else {
-      createMutation.mutate(formData);
+      createMutation.mutate(payload);
     }
   };
 
@@ -251,6 +262,9 @@ export default function Consultorias() {
               <DialogTitle>
                 {editingConsultoria ? 'Editar Consultoria' : 'Nova Consultoria'}
               </DialogTitle>
+              <DialogDescription>
+                Preencha os dados da visita técnica e adicione as recomendações para os talhões.
+              </DialogDescription>
             </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">

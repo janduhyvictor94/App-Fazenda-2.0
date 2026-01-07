@@ -31,7 +31,7 @@ export default function Layout({ children, currentPageName }) {
   };
 
   return (
-    <div className="min-h-screen bg-[#FDFDFD] bg-gradient-to-tr from-stone-50 via-white to-emerald-50/30 font-sans antialiased text-stone-900">
+    <div className="min-h-screen bg-[#FDFDFD] bg-gradient-to-tr from-stone-50 via-white to-emerald-50/30 font-sans antialiased text-stone-900 selection:bg-emerald-100 selection:text-emerald-900">
       {sidebarOpen && (
         <div className="fixed inset-0 z-40 bg-stone-900/20 backdrop-blur-sm lg:hidden" onClick={() => setSidebarOpen(false)} />
       )}
@@ -43,7 +43,7 @@ export default function Layout({ children, currentPageName }) {
         <div className="flex flex-col h-full">
           <div className="p-8 flex items-center justify-between">
             <div className="flex items-center gap-3.5 group cursor-default">
-              <div className="w-12 h-12 bg-gradient-to-br from-emerald-500 to-teal-700 rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-200/50 group-hover:rotate-6 transition-transform">
+              <div className="w-12 h-12 bg-gradient-to-br from-emerald-500 to-teal-700 rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-200/50 group-hover:rotate-6 transition-transform duration-300">
                 <Leaf className="w-6 h-6 text-white" />
               </div>
               <div className="flex flex-col">
@@ -62,14 +62,14 @@ export default function Layout({ children, currentPageName }) {
                   to={createPageUrl(item.page)}
                   onClick={() => setSidebarOpen(false)}
                   className={cn(
-                    "flex items-center gap-3.5 px-5 py-3.5 rounded-2xl text-sm font-bold transition-all duration-300 group relative",
+                    "flex items-center gap-3.5 px-5 py-3.5 rounded-2xl text-sm font-bold transition-all duration-300 group relative overflow-hidden",
                     isActive 
                       ? "bg-emerald-600 text-white shadow-xl shadow-emerald-200/60 ring-1 ring-white/20" 
                       : "text-stone-500 hover:bg-emerald-50/50 hover:text-emerald-700"
                   )}
                 >
-                  <item.icon className={cn("w-5 h-5", isActive ? "text-white" : "text-stone-400 group-hover:text-emerald-600")} />
-                  <span className="flex-1">{item.name}</span>
+                  <item.icon className={cn("w-5 h-5 transition-transform duration-300", isActive ? "text-white" : "text-stone-400 group-hover:scale-110 group-hover:text-emerald-600")} />
+                  <span className="flex-1 relative z-10">{item.name}</span>
                   {isActive && <Sparkles className="w-3 h-3 text-emerald-200 animate-pulse" />}
                 </Link>
               );
@@ -93,7 +93,7 @@ export default function Layout({ children, currentPageName }) {
             </button>
             <div className="hidden lg:block">
               <h2 className="text-xs font-black uppercase tracking-[0.3em] text-stone-400">
-                Gestão Operacional • {navigation.find(n => n.page === currentPageName)?.name || 'Dashboard'}
+                {navigation.find(n => n.page === currentPageName)?.name || 'Dashboard'}
               </h2>
             </div>
             <div className="flex items-center gap-5">
