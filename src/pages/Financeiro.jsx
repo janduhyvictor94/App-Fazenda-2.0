@@ -1,18 +1,15 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabaseClient';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from '@/components/ui/dialog';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Switch } from '@/components/ui/switch';
-import { Plus, Edit, Trash2, DollarSign, TrendingUp, TrendingDown, Filter, Wallet, Clock, CheckCircle2 } from 'lucide-react';
-import EmptyState from '@/components/ui/EmptyState';
+import { Plus, Edit, Trash2, TrendingUp, TrendingDown, Wallet, Clock } from 'lucide-react';
 import StatCard from '@/components/ui/StatCard';
 import { format } from 'date-fns';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
@@ -46,8 +43,6 @@ export default function Financeiro({ showMessage }) {
     data: format(new Date(), 'yyyy-MM-dd'),
     status_pagamento: 'pago',
     tipo_lancamento: 'despesa',
-    recorrente: false,
-    frequencia: 'unico',
     observacoes: ''
   });
 
@@ -62,7 +57,7 @@ export default function Financeiro({ showMessage }) {
     }
   });
 
-  const { data: custos = [] } = useQuery({
+  const { data: custosBrutos = [] } = useQuery({
     queryKey: ['custos'],
     queryFn: async () => {
       const { data, error } = await supabase.from('custos').select('*').order('data', { ascending: false });
@@ -70,6 +65,32 @@ export default function Financeiro({ showMessage }) {
       return data;
     }
   });
+
+  // Processa os dados recebidos para extrair Status e Tipo das observações, caso as colunas não existam
+  const custos = useMemo(() => {
+    return custosBrutos.map(c => {
+      let status = c.status_pagamento || c.status; // Tenta pegar da coluna oficial
+      let tipo = c.tipo_lancamento; // Tenta pegar da coluna oficial
+      
+      // Se não achou na coluna, procura na string de observações (nossa gambiarra inteligente)
+      if (!status && c.observacoes) {
+        if (c.observacoes.includes('[S:PG]')) status = 'pago';
+        else if (c.observacoes.includes('[S:PD]')) status = 'pendente';
+        else status = 'pago'; // Padrão
+      }
+      
+      if (!tipo && c.observacoes) {
+        if (c.observacoes.includes('[T:REC]')) tipo = 'receita';
+        else tipo = 'despesa'; // Padrão
+      }
+
+      // Limpa as tags da observação para exibição
+      let obsLimpa = c.observacoes || '';
+      obsLimpa = obsLimpa.replace('[S:PG]', '').replace('[S:PD]', '').replace('[T:REC]', '').replace('[T:DESP]', '').trim();
+
+      return { ...c, status_pagamento: status || 'pago', tipo_lancamento: tipo || 'despesa', observacoes_exibicao: obsLimpa };
+    });
+  }, [custosBrutos]);
 
   const { data: colheitas = [] } = useQuery({
     queryKey: ['colheitas'],
@@ -82,15 +103,28 @@ export default function Financeiro({ showMessage }) {
 
   const saveMutation = useMutation({
     mutationFn: async (data) => {
+      // Remove campos indefinidos
+      const cleanData = Object.fromEntries(
+        Object.entries(data).filter(([_, v]) => v !== undefined)
+      );
+
       if (editingCusto) {
-        return await supabase.from('custos').update(data).eq('id', editingCusto.id);
+        const { data: result, error } = await supabase.from('custos').update(cleanData).eq('id', editingCusto.id).select();
+        if (error) throw error;
+        return result;
       }
-      return await supabase.from('custos').insert([data]);
+      const { data: result, error } = await supabase.from('custos').insert([cleanData]).select();
+      if (error) throw error;
+      return result;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['custos'] });
       if (showMessage) showMessage(editingCusto ? "Lançamento atualizado" : "Lançamento realizado com sucesso!");
       resetForm();
+    },
+    onError: (error) => {
+      console.error("Erro detalhado ao salvar:", error);
+      if (showMessage) showMessage(`Erro ao salvar: ${error.message || 'Verifique os dados'}`, "error");
     }
   });
 
@@ -108,7 +142,7 @@ export default function Financeiro({ showMessage }) {
     setFormData({
       descricao: '', categoria: 'outro', talhao_id: '', valor: '',
       data: format(new Date(), 'yyyy-MM-dd'), status_pagamento: 'pago',
-      tipo_lancamento: 'despesa', recorrente: false, frequencia: 'unico', observacoes: ''
+      tipo_lancamento: 'despesa', observacoes: ''
     });
     setEditingCusto(null);
     setOpen(false);
@@ -124,21 +158,45 @@ export default function Financeiro({ showMessage }) {
       data: custo.data || '',
       status_pagamento: custo.status_pagamento || 'pago',
       tipo_lancamento: custo.tipo_lancamento || 'despesa',
-      recorrente: custo.recorrente || false,
-      frequencia: custo.frequencia || 'unico',
-      observacoes: custo.observacoes || ''
+      observacoes: custo.observacoes_exibicao || '' // Usa a obs limpa
     });
     setOpen(true);
   };
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    const data = {
-      ...formData,
+    
+    // 1. Sanitização do Talhão
+    let talhaoIdProcessado = formData.talhao_id;
+    if (!talhaoIdProcessado || talhaoIdProcessado === "null" || talhaoIdProcessado === "undefined") {
+      talhaoIdProcessado = null;
+    }
+
+    // 2. Data Válida
+    let dataProcessada = formData.data;
+    if (!dataProcessada) {
+        dataProcessada = new Date().toISOString().split('T')[0];
+    }
+
+    // 3. Montagem do Payload Seguro
+    // Criamos "Tags" para salvar status e tipo dentro da observação
+    const tagStatus = formData.status_pagamento === 'pago' ? '[S:PG]' : '[S:PD]';
+    const tagTipo = formData.tipo_lancamento === 'receita' ? '[T:REC]' : '[T:DESP]';
+    
+    const obsFinal = `${formData.observacoes || ''} ${tagStatus} ${tagTipo}`.trim();
+
+    const dataToSave = {
+      descricao: formData.descricao,
+      categoria: formData.categoria,
+      talhao_id: talhaoIdProcessado,
       valor: parseFloat(formData.valor) || 0,
-      talhao_id: (formData.talhao_id === "" || formData.talhao_id === "null") ? null : formData.talhao_id
+      data: dataProcessada,
+      observacoes: obsFinal
+      // ATENÇÃO: Removemos status, status_pagamento e tipo_lancamento do envio direto
+      // para evitar o erro 400 (Bad Request) de colunas inexistentes.
     };
-    saveMutation.mutate(data);
+    
+    saveMutation.mutate(dataToSave);
   };
 
   const custosFiltrados = custos.filter(c => {
@@ -147,17 +205,32 @@ export default function Financeiro({ showMessage }) {
     return true;
   });
 
-  const totalPago = custosFiltrados.filter(c => c.status_pagamento === 'pago').reduce((acc, c) => acc + (c.valor || 0), 0);
-  const totalPendente = custosFiltrados.filter(c => c.status_pagamento === 'pendente').reduce((acc, c) => acc + (c.valor || 0), 0);
+  // Cálculos ajustados usando os dados processados (com status/tipo recuperados)
+  const totalDespesasPagas = custosFiltrados
+    .filter(c => c.tipo_lancamento === 'despesa' && c.status_pagamento === 'pago')
+    .reduce((acc, c) => acc + (c.valor || 0), 0);
+
+  const totalDespesasPendentes = custosFiltrados
+    .filter(c => c.tipo_lancamento === 'despesa' && c.status_pagamento === 'pendente')
+    .reduce((acc, c) => acc + (c.valor || 0), 0);
+  
+  // Se houver receitas manuais lançadas em custos
+  const totalReceitasExtras = custosFiltrados
+    .filter(c => c.tipo_lancamento === 'receita')
+    .reduce((acc, c) => acc + (c.valor || 0), 0);
+
   const totalReceitasColheita = colheitas.reduce((acc, c) => acc + (c.valor_total || 0), 0);
-  const saldoAtual = totalReceitasColheita - totalPago;
+  const receitaTotalGeral = totalReceitasColheita + totalReceitasExtras;
+  const saldoAtual = receitaTotalGeral - totalDespesasPagas;
 
   const pieData = Object.entries(
-    custosFiltrados.reduce((acc, c) => {
-      const cat = categoriaLabels[c.categoria]?.label || 'Outro';
-      acc[cat] = (acc[cat] || 0) + (c.valor || 0);
-      return acc;
-    }, {})
+    custosFiltrados
+      .filter(c => c.tipo_lancamento === 'despesa') // Só mostra despesas no gráfico
+      .reduce((acc, c) => {
+        const cat = categoriaLabels[c.categoria]?.label || 'Outro';
+        acc[cat] = (acc[cat] || 0) + (c.valor || 0);
+        return acc;
+      }, {})
   ).map(([name, value]) => ({ name, value }));
 
   return (
@@ -176,7 +249,6 @@ export default function Financeiro({ showMessage }) {
           <DialogContent className="sm:max-w-lg rounded-[2rem]">
             <DialogHeader>
               <DialogTitle>{editingCusto ? 'Editar Lançamento' : 'Novo Lançamento'}</DialogTitle>
-              {/* Adicionado DialogDescription para corrigir o aviso do Radix UI */}
               <DialogDescription>
                 Informe os detalhes do lançamento para controle do fluxo de caixa.
               </DialogDescription>
@@ -244,6 +316,11 @@ export default function Financeiro({ showMessage }) {
                   </Select>
                 </div>
               </div>
+              
+              <div className="space-y-2">
+                  <Label>Observações</Label>
+                  <Input value={formData.observacoes} onChange={(e) => setFormData({...formData, observacoes: e.target.value})} placeholder="Observações opcionais" className="rounded-xl" />
+              </div>
 
               <div className="flex justify-end gap-3 pt-4">
                 <Button type="button" variant="outline" onClick={resetForm} className="rounded-xl">Cancelar</Button>
@@ -257,10 +334,10 @@ export default function Financeiro({ showMessage }) {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard title="Saldo em Caixa" value={`R$ ${saldoAtual.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} icon={Wallet} color="text-emerald-600" />
-        <StatCard title="Receitas (Colheita)" value={`R$ ${totalReceitasColheita.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} icon={TrendingUp} color="text-blue-600" />
-        <StatCard title="Total Pago" value={`R$ ${totalPago.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} icon={TrendingDown} color="text-red-600" />
-        <StatCard title="Contas a Pagar" value={`R$ ${totalPendente.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} icon={Clock} color="text-amber-600" />
+        <StatCard title="Saldo em Caixa" value={`R$ ${saldoAtual.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} icon={Wallet} color={saldoAtual >= 0 ? "text-emerald-600" : "text-red-600"} />
+        <StatCard title="Receitas Totais" value={`R$ ${receitaTotalGeral.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} icon={TrendingUp} color="text-blue-600" />
+        <StatCard title="Despesas Pagas" value={`R$ ${totalDespesasPagas.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} icon={TrendingDown} color="text-red-600" />
+        <StatCard title="Contas a Pagar" value={`R$ ${totalDespesasPendentes.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} icon={Clock} color="text-amber-600" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -294,27 +371,34 @@ export default function Financeiro({ showMessage }) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {custosFiltrados.slice(0, 5).map((custo) => (
-                <TableRow key={custo.id} className="hover:bg-stone-50 transition-colors">
-                  <TableCell className="pl-6">{format(new Date(custo.data + 'T12:00:00'), 'dd/MM/yy')}</TableCell>
-                  <TableCell>
-                    <div className="font-medium text-stone-800">{custo.descricao}</div>
-                    <div className="text-[10px] text-stone-400 uppercase">{categoriaLabels[custo.categoria]?.label}</div>
-                  </TableCell>
-                  <TableCell className="font-bold text-red-600">R$ {custo.valor?.toLocaleString('pt-BR')}</TableCell>
-                  <TableCell>
-                    <Badge className={custo.status_pagamento === 'pago' ? "bg-emerald-50 text-emerald-700 border-emerald-100" : "bg-amber-50 text-amber-700 border-amber-100"}>
-                      {custo.status_pagamento === 'pago' ? 'PAGO' : 'PENDENTE'}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right pr-6">
-                    <div className="flex justify-end gap-1">
-                      <Button variant="ghost" size="sm" onClick={() => handleEdit(custo)}><Edit className="w-4 h-4" /></Button>
-                      <Button variant="ghost" size="sm" className="text-red-400" onClick={() => deleteMutation.mutate(custo.id)}><Trash2 className="w-4 h-4" /></Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
+              {custosFiltrados.slice(0, 5).map((custo) => {
+                return (
+                  <TableRow key={custo.id} className="hover:bg-stone-50 transition-colors">
+                    <TableCell className="pl-6">{format(new Date(custo.data + 'T12:00:00'), 'dd/MM/yy')}</TableCell>
+                    <TableCell>
+                      <div className="font-medium text-stone-800">{custo.descricao}</div>
+                      <div className="flex gap-2">
+                         <span className="text-[10px] text-stone-400 uppercase">{categoriaLabels[custo.categoria]?.label}</span>
+                         {custo.tipo_lancamento === 'receita' && <span className="text-[10px] text-blue-600 font-bold uppercase tracking-wider">[Receita]</span>}
+                      </div>
+                    </TableCell>
+                    <TableCell className={`font-bold ${custo.tipo_lancamento === 'receita' ? 'text-blue-600' : 'text-red-600'}`}>
+                        R$ {custo.valor?.toLocaleString('pt-BR')}
+                    </TableCell>
+                    <TableCell>
+                      <Badge className={custo.status_pagamento === 'pago' ? "bg-emerald-50 text-emerald-700 border-emerald-100" : "bg-amber-50 text-amber-700 border-amber-100"}>
+                        {custo.status_pagamento === 'pago' ? 'PAGO' : 'PENDENTE'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right pr-6">
+                      <div className="flex justify-end gap-1">
+                        <Button variant="ghost" size="sm" onClick={() => handleEdit(custo)}><Edit className="w-4 h-4" /></Button>
+                        <Button variant="ghost" size="sm" className="text-red-400" onClick={() => deleteMutation.mutate(custo.id)}><Trash2 className="w-4 h-4" /></Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </Card>
