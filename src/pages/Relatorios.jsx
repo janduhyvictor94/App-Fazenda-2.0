@@ -212,18 +212,61 @@ export default function Relatorios({ showMessage }) {
 
   const barDataCusto = Object.entries(custoPorTalhao).map(([name, value]) => ({ name, valor: value }));
 
+  // --- LOGICA DE RATEIO PARA A TABELA DE PRODUTIVIDADE ---
+  
+  // 1. Calcula Área Total da Fazenda
+  const areaTotalFazenda = talhoes.reduce((acc, t) => acc + (Number(t.area_hectares) || 0), 0);
+
+  // 2. Calcula Custo Geral Total (apenas custos do financeiro sem talhão)
+  // Usa custosFiltrados para respeitar o filtro de data selecionado pelo usuário
+  const custoGeralTotal = custosFiltrados
+    .filter(c => !c.talhao_id)
+    .reduce((acc, c) => acc + (Number(c.valor) || 0), 0);
+
+  // 3. Fator de Rateio (Valor por Hectare)
+  const rateioPorHa = areaTotalFazenda > 0 ? custoGeralTotal / areaTotalFazenda : 0;
+
   const talhoesComDados = talhoes.map(talhao => {
     const receitaTalhao = colheitas.filter(c => c.talhao_id === talhao.id).reduce((acc, c) => acc + (c.valor_total || 0), 0);
     const custoDirTalhao = custos.filter(c => c.talhao_id === talhao.id).reduce((acc, c) => acc + (c.valor || 0), 0);
     const custoAtivTalhao = atividades.filter(a => a.talhao_id === talhao.id && a.status === 'concluida').reduce((acc, a) => acc + (a.custo_total || 0), 0);
-    const custoTotalTalhao = custoDirTalhao + custoAtivTalhao;
+    
+    // Custo de Insumos (Direto + Atividades)
+    const custoInsumos = custoDirTalhao + custoAtivTalhao;
+    
+    // Rateio Custos Gerais
+    const area = Number(talhao.area_hectares) || 0;
+    const custoRateio = area * rateioPorHa;
+
+    // Custo Final
+    const custoTotalTalhao = custoInsumos + custoRateio;
     const lucroTalhao = receitaTalhao - custoTotalTalhao;
-    const area = talhao.area_hectares || 0;
     const lucroPorHa = area > 0 ? (lucroTalhao / area) : 0;
-    return { id: talhao.id, nome: talhao.nome, area, receita: receitaTalhao, custo: custoTotalTalhao, lucro: lucroTalhao, lucroPorHa };
+
+    return { 
+        id: talhao.id, 
+        nome: talhao.nome, 
+        area, 
+        receita: receitaTalhao, 
+        custoInsumos, // Nome alterado para refletir "Custo de Insumos"
+        custoRateio,  // Nova coluna "Rateio Custos Gerais"
+        custo: custoTotalTalhao, 
+        lucro: lucroTalhao, 
+        lucroPorHa 
+    };
   }).filter(t => t.receita > 0 || t.custo > 0);
 
   const barDataLucroHa = talhoesComDados.map(t => ({ name: t.nome, 'Lucro/ha': t.lucroPorHa })).sort((a, b) => b['Lucro/ha'] - a['Lucro/ha']);
+
+  // Calcular Totais Gerais para o rodapé da tabela
+  const totaisGeraisProdutividade = talhoesComDados.reduce((acc, t) => ({
+    area: acc.area + t.area,
+    receita: acc.receita + t.receita,
+    custoInsumos: acc.custoInsumos + t.custoInsumos,
+    custoRateio: acc.custoRateio + t.custoRateio,
+    lucro: acc.lucro + t.lucro,
+    // Lucro por ha medio não se soma, calcula-se no final se necessário, mas para o rodapé deixaremos vazio ou recalculado
+  }), { area: 0, receita: 0, custoInsumos: 0, custoRateio: 0, lucro: 0 });
 
   return (
     <div className="space-y-6">
@@ -391,12 +434,47 @@ export default function Relatorios({ showMessage }) {
             </CardContent>
           </Card>
           <Card className="border-stone-100 rounded-2xl shadow-sm overflow-hidden">
-             <Table>
+              <Table>
                 <TableHeader className="bg-stone-50">
-                  <TableRow><TableHead className="pl-6">Talhão</TableHead><TableHead className="text-right">Área</TableHead><TableHead className="text-right">Receita</TableHead><TableHead className="text-right">Custo Total</TableHead><TableHead className="text-right">Lucro/Prejuízo</TableHead><TableHead className="text-right pr-6">Lucro/Ha</TableHead></TableRow>
+                  <TableRow>
+                    <TableHead className="pl-6">Talhão</TableHead>
+                    <TableHead className="text-right">Área</TableHead>
+                    <TableHead className="text-right">Receita</TableHead>
+                    <TableHead className="text-right">Custo de Insumos</TableHead>
+                    <TableHead className="text-right text-purple-600">Rateio Custos Gerais</TableHead>
+                    <TableHead className="text-right">Lucro/Prejuízo</TableHead>
+                    <TableHead className="text-right pr-6">Lucro/Ha</TableHead>
+                  </TableRow>
                 </TableHeader>
-                <TableBody>{talhoesComDados.map((t) => (<TableRow key={t.id}><TableCell className="pl-6 font-medium">{t.nome}</TableCell><TableCell className="text-right">{t.area} ha</TableCell><TableCell className="text-right text-emerald-600">R$ {t.receita.toLocaleString('pt-BR')}</TableCell><TableCell className="text-right text-red-600">R$ {t.custo.toLocaleString('pt-BR')}</TableCell><TableCell className={`text-right font-bold ${t.lucro >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>R$ {t.lucro.toLocaleString('pt-BR')}</TableCell><TableCell className="text-right pr-6 font-bold text-emerald-700">R$ {t.lucroPorHa.toLocaleString('pt-BR')}</TableCell></TableRow>))}</TableBody>
-             </Table>
+                <TableBody>
+                  {talhoesComDados.map((t) => (
+                  <TableRow key={t.id}>
+                    <TableCell className="pl-6 font-medium">{t.nome}</TableCell>
+                    <TableCell className="text-right">{t.area} ha</TableCell>
+                    <TableCell className="text-right text-emerald-600">R$ {t.receita.toLocaleString('pt-BR')}</TableCell>
+                    <TableCell className="text-right text-red-600">R$ {t.custoInsumos.toLocaleString('pt-BR')}</TableCell>
+                    <TableCell className="text-right text-purple-600">R$ {t.custoRateio.toLocaleString('pt-BR')}</TableCell>
+                    <TableCell className={`text-right font-bold ${t.lucro >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>R$ {t.lucro.toLocaleString('pt-BR')}</TableCell>
+                    <TableCell className={`text-right pr-6 font-bold ${t.lucroPorHa >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
+                        R$ {t.lucroPorHa.toLocaleString('pt-BR')}
+                    </TableCell>
+                  </TableRow>
+                ))}
+                
+                {/* Linha de Totais Gerais */}
+                {talhoesComDados.length > 0 && (
+                    <TableRow className="bg-stone-100 font-bold border-t-2 border-stone-200">
+                        <TableCell className="pl-6">TOTAL</TableCell>
+                        <TableCell className="text-right">{totaisGeraisProdutividade.area.toFixed(2)} ha</TableCell>
+                        <TableCell className="text-right text-emerald-700">R$ {totaisGeraisProdutividade.receita.toLocaleString('pt-BR')}</TableCell>
+                        <TableCell className="text-right text-red-700">R$ {totaisGeraisProdutividade.custoInsumos.toLocaleString('pt-BR')}</TableCell>
+                        <TableCell className="text-right text-purple-700">R$ {totaisGeraisProdutividade.custoRateio.toLocaleString('pt-BR')}</TableCell>
+                        <TableCell className={`text-right ${totaisGeraisProdutividade.lucro >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>R$ {totaisGeraisProdutividade.lucro.toLocaleString('pt-BR')}</TableCell>
+                        <TableCell className="text-right pr-6">-</TableCell>
+                    </TableRow>
+                )}
+                </TableBody>
+              </Table>
           </Card>
         </TabsContent>
 
