@@ -11,7 +11,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Switch } from '@/components/ui/switch';
-import { Plus, Edit, Trash2, ClipboardList, Filter, Package, Copy, MessageCircle, CheckCircle2 } from 'lucide-react';
+import { Plus, Edit, Trash2, ClipboardList, Filter, Package, Copy, MessageCircle, CheckCircle2, Calendar as CalendarIcon } from 'lucide-react';
 import EmptyState from '@/components/ui/EmptyState';
 import { format } from 'date-fns';
 
@@ -27,10 +27,10 @@ const tiposAtividadePadrao = [
 ];
 
 const statusLabels = {
-  programada: { label: 'Programada', color: 'bg-blue-100 text-blue-700' },
-  em_andamento: { label: 'Em Andamento', color: 'bg-amber-100 text-amber-700' },
-  concluida: { label: 'Concluída', color: 'bg-emerald-100 text-emerald-700' },
-  cancelada: { label: 'Cancelada', color: 'bg-red-100 text-red-700' }
+  programada: { label: 'Programada', color: 'bg-blue-100 text-blue-700 border-blue-200' },
+  em_andamento: { label: 'Em Andamento', color: 'bg-amber-100 text-amber-700 border-amber-200' },
+  concluida: { label: 'Concluída', color: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
+  cancelada: { label: 'Cancelada', color: 'bg-red-100 text-red-700 border-red-200' }
 };
 
 export default function Atividades() {
@@ -42,6 +42,7 @@ export default function Atividades() {
   const [novoTipo, setNovoTipo] = useState('');
   const [novoMetodo, setNovoMetodo] = useState('');
   const [mostrarNovoMetodo, setMostrarNovoMetodo] = useState(false);
+  
   const [formData, setFormData] = useState({
     talhao_id: '',
     tipo: '',
@@ -56,10 +57,12 @@ export default function Atividades() {
     responsavel: '',
     observacoes: ''
   });
+  
   const [insumoTemp, setInsumoTemp] = useState({ insumo_id: '', quantidade: '', metodo_aplicacao: 'foliar' });
 
   const queryClient = useQueryClient();
 
+  // --- QUERIES ---
   const { data: talhoes = [] } = useQuery({
     queryKey: ['talhoes'],
     queryFn: async () => {
@@ -96,11 +99,11 @@ export default function Atividades() {
     }
   });
 
+  // --- MUTATIONS ---
   const createMutation = useMutation({
     mutationFn: async (data) => {
       const { data: result, error } = await supabase.from('atividades').insert(data).select();
-      if (error) throw error;
-      return result;
+      if (error) throw error; return result;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['atividades'] });
@@ -111,8 +114,7 @@ export default function Atividades() {
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }) => {
       const { data: result, error } = await supabase.from('atividades').update(data).eq('id', id).select();
-      if (error) throw error;
-      return result;
+      if (error) throw error; return result;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['atividades'] });
@@ -133,8 +135,7 @@ export default function Atividades() {
   const createTipoMutation = useMutation({
     mutationFn: async (data) => {
       const { data: result, error } = await supabase.from('tipos_atividade').insert(data).select();
-      if (error) throw error;
-      return result;
+      if (error) throw error; return result;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tipos-atividade'] });
@@ -152,20 +153,13 @@ export default function Atividades() {
     }
   });
 
+  // --- LÓGICA DE NEGÓCIO ---
   const resetForm = () => {
     setFormData({
-      talhao_id: '',
-      tipo: '',
-      tipo_personalizado: '',
-      data_programada: format(new Date(), 'yyyy-MM-dd'),
-      data_realizada: '',
-      status: 'programada',
-      terceirizada: false,
-      valor_terceirizado: '',
-      insumos_utilizados: [],
-      custo_total: 0,
-      responsavel: '',
-      observacoes: ''
+      talhao_id: '', tipo: '', tipo_personalizado: '',
+      data_programada: format(new Date(), 'yyyy-MM-dd'), data_realizada: '',
+      status: 'programada', terceirizada: false, valor_terceirizado: '',
+      insumos_utilizados: [], custo_total: 0, responsavel: '', observacoes: ''
     });
     setInsumoTemp({ insumo_id: '', quantidade: '', metodo_aplicacao: 'foliar' });
     setEditingAtividade(null);
@@ -212,28 +206,22 @@ export default function Atividades() {
 
   const addInsumo = () => {
     if (!insumoTemp.insumo_id || !insumoTemp.quantidade) return;
-    
     const insumoSelecionado = insumos.find(i => i.id === insumoTemp.insumo_id);
     if (!insumoSelecionado) return;
 
     const quantidade = parseFloat(insumoTemp.quantidade);
     const valorUnitario = insumoSelecionado.preco_unitario || 0;
     const valorTotal = quantidade * valorUnitario;
-
     const metodoFinal = insumoTemp.metodo_aplicacao === 'outro' ? novoMetodo : insumoTemp.metodo_aplicacao;
 
     const novoInsumo = {
-      insumo_id: insumoSelecionado.id,
-      nome: insumoSelecionado.nome,
-      quantidade,
-      unidade: insumoSelecionado.unidade,
-      valor_unitario: valorUnitario,
-      valor_total: valorTotal,
+      insumo_id: insumoSelecionado.id, nome: insumoSelecionado.nome,
+      quantidade, unidade: insumoSelecionado.unidade,
+      valor_unitario: valorUnitario, valor_total: valorTotal,
       metodo_aplicacao: metodoFinal
     };
 
     const novosInsumos = [...formData.insumos_utilizados, novoInsumo];
-    
     setFormData({
       ...formData,
       insumos_utilizados: novosInsumos,
@@ -265,15 +253,11 @@ export default function Atividades() {
       ...formData,
       valor_terceirizado: formData.valor_terceirizado ? parseFloat(formData.valor_terceirizado) : null,
       custo_total: calcularCustoTotal(),
-      // Se status for concluída, preenche data_realizada automaticamente se estiver vazia
       data_realizada: formData.status === 'concluida' ? (formData.data_realizada || format(new Date(), 'yyyy-MM-dd')) : null
     };
 
-    if (editingAtividade) {
-      updateMutation.mutate({ id: editingAtividade.id, data });
-    } else {
-      createMutation.mutate(data);
-    }
+    if (editingAtividade) updateMutation.mutate({ id: editingAtividade.id, data });
+    else createMutation.mutate(data);
   };
 
   const atividadesFiltradas = atividades.filter(a => {
@@ -294,93 +278,52 @@ export default function Atividades() {
     const talhaoNome = getTalhaoNome(atividade.talhao_id);
     const tipoNome = atividade.tipo === 'outro' ? atividade.tipo_personalizado : getTipoLabel(atividade.tipo);
     const data = format(new Date(atividade.data_programada + 'T12:00:00'), 'dd/MM/yyyy');
-    
-    const text = `🚜 *Nova Atividade Programada*\n\n` +
-      `📍 *Local:* ${talhaoNome}\n` +
-      `🔧 *Atividade:* ${tipoNome}\n` +
-      `📅 *Data:* ${data}\n` +
-      `${atividade.observacoes ? `📝 *Obs:* ${atividade.observacoes}` : ''}`;
-  
+    const text = `🚜 *Nova Atividade Programada*\n\n📍 *Local:* ${talhaoNome}\n🔧 *Atividade:* ${tipoNome}\n📅 *Data:* ${data}\n${atividade.observacoes ? `📝 *Obs:* ${atividade.observacoes}` : ''}`;
     const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
     window.open(url, '_blank');
   };
 
-  const todosTipos = [
-    ...tiposAtividadePadrao,
-    ...tiposCustomizados.map(t => ({ value: t.nome, label: t.nome }))
-  ];
+  const todosTipos = [ ...tiposAtividadePadrao, ...tiposCustomizados.map(t => ({ value: t.nome, label: t.nome })) ];
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      {/* Header Padronizado */}
+      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 bg-white p-4 rounded-[1.5rem] border border-stone-100 shadow-sm">
         <div>
-          <h1 className="text-2xl font-bold text-stone-900">Atividades</h1>
-          <p className="text-stone-500">Gerenciamento de atividades por talhão</p>
+          <h1 className="text-2xl font-bold text-stone-900 tracking-tight">Atividades</h1>
+          <p className="text-stone-500 font-medium">Gerenciamento de tarefas e manejo</p>
         </div>
+        
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
-            <Button className="bg-blue-600 hover:bg-blue-700">
-              <Plus className="w-4 h-4 mr-2" />
-              Nova Atividade
+            <Button className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl h-10 px-5 shadow-lg shadow-emerald-100 transition-all active:scale-95 ml-2">
+              <Plus className="w-4 h-4 mr-2" /> Nova Atividade
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto rounded-[2rem]">
             <DialogHeader>
-              <DialogTitle>
-                {editingAtividade ? 'Editar Atividade' : 'Nova Atividade'}
-              </DialogTitle>
-              <DialogDescription className="sr-only">
-                Configure os detalhes da atividade agrícola, incluindo insumos e prazos.
-              </DialogDescription>
+              <DialogTitle>{editingAtividade ? 'Editar Atividade' : 'Nova Atividade'}</DialogTitle>
+              <DialogDescription className="sr-only">Detalhes da atividade</DialogDescription>
             </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-4 pt-2">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Talhão</Label>
-                  <Select
-                    value={formData.talhao_id || ""}
-                    onValueChange={(value) => setFormData({ ...formData, talhao_id: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {talhoes.map((talhao) => (
-                        <SelectItem key={talhao.id} value={talhao.id}>
-                          {talhao.nome}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
+                  <Select value={formData.talhao_id || ""} onValueChange={(value) => setFormData({ ...formData, talhao_id: value })}>
+                    <SelectTrigger className="rounded-xl"><SelectValue placeholder="Selecione" /></SelectTrigger>
+                    <SelectContent>{talhoes.map((talhao) => (<SelectItem key={talhao.id} value={talhao.id}>{talhao.nome}</SelectItem>))}</SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <Label>Tipo de Atividade</Label>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setOpenTipoDialog(true)}
-                      className="h-7 text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                    >
-                      <Plus className="w-3 h-3 mr-1" />
-                      Gerenciar Tipos
+                    <Button type="button" variant="ghost" size="sm" onClick={() => setOpenTipoDialog(true)} className="h-6 text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50 px-2 rounded-lg">
+                      <Plus className="w-3 h-3 mr-1" /> Gerenciar Tipos
                     </Button>
                   </div>
-                  <Select
-                    value={formData.tipo || ""}
-                    onValueChange={(value) => setFormData({ ...formData, tipo: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {todosTipos.map((tipo) => (
-                        <SelectItem key={tipo.value} value={tipo.value}>
-                          {tipo.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
+                  <Select value={formData.tipo || ""} onValueChange={(value) => setFormData({ ...formData, tipo: value })}>
+                    <SelectTrigger className="rounded-xl"><SelectValue placeholder="Selecione" /></SelectTrigger>
+                    <SelectContent>{todosTipos.map((tipo) => (<SelectItem key={tipo.value} value={tipo.value}>{tipo.label}</SelectItem>))}</SelectContent>
                   </Select>
                 </div>
               </div>
@@ -388,33 +331,19 @@ export default function Atividades() {
               {formData.tipo === 'outro' && (
                 <div className="space-y-2">
                   <Label>Nome da Atividade</Label>
-                  <Input
-                    value={formData.tipo_personalizado || ""}
-                    onChange={(e) => setFormData({ ...formData, tipo_personalizado: e.target.value })}
-                    placeholder="Descreva a atividade"
-                  />
+                  <Input value={formData.tipo_personalizado || ""} onChange={(e) => setFormData({ ...formData, tipo_personalizado: e.target.value })} placeholder="Descreva a atividade" className="rounded-xl" />
                 </div>
               )}
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Data Programada</Label>
-                  <Input
-                    type="date"
-                    value={formData.data_programada || ""}
-                    onChange={(e) => setFormData({ ...formData, data_programada: e.target.value })}
-                    required
-                  />
+                  <Input type="date" value={formData.data_programada || ""} onChange={(e) => setFormData({ ...formData, data_programada: e.target.value })} required className="rounded-xl" />
                 </div>
                 <div className="space-y-2">
                   <Label>Status</Label>
-                  <Select
-                    value={formData.status || ""}
-                    onValueChange={(value) => setFormData({ ...formData, status: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
+                  <Select value={formData.status || ""} onValueChange={(value) => setFormData({ ...formData, status: value })}>
+                    <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="programada">Programada</SelectItem>
                       <SelectItem value="em_andamento">Em Andamento</SelectItem>
@@ -427,71 +356,34 @@ export default function Atividades() {
 
               <div className="space-y-2">
                 <Label>Responsável</Label>
-                <Input
-                  value={formData.responsavel || ""}
-                  onChange={(e) => setFormData({ ...formData, responsavel: e.target.value })}
-                  placeholder="Nome do responsável"
-                />
+                <Input value={formData.responsavel || ""} onChange={(e) => setFormData({ ...formData, responsavel: e.target.value })} placeholder="Nome do responsável" className="rounded-xl" />
               </div>
 
-              <div className="p-4 bg-stone-50 rounded-xl space-y-4">
+              {/* Seção Terceirização - Padronizada */}
+              <div className="p-4 bg-stone-50 rounded-xl space-y-4 border border-stone-100">
                 <div className="flex items-center justify-between">
-                  <Label className="text-base font-medium">Atividade Terceirizada</Label>
-                  <Switch
-                    checked={formData.terceirizada}
-                    onCheckedChange={(checked) => setFormData({ ...formData, terceirizada: checked })}
-                  />
+                  <Label className="text-base font-medium text-stone-700">Atividade Terceirizada</Label>
+                  <Switch checked={formData.terceirizada} onCheckedChange={(checked) => setFormData({ ...formData, terceirizada: checked })} />
                 </div>
                 {formData.terceirizada && (
-                  <div className="space-y-2">
+                  <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
                     <Label>Valor do Serviço</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={formData.valor_terceirizado || ""}
-                      onChange={(e) => setFormData({ ...formData, valor_terceirizado: e.target.value })}
-                      placeholder="R$ 0,00"
-                    />
+                    <Input type="number" step="0.01" value={formData.valor_terceirizado || ""} onChange={(e) => setFormData({ ...formData, valor_terceirizado: e.target.value })} placeholder="R$ 0,00" className="rounded-xl" />
                   </div>
                 )}
               </div>
 
-              <div className="p-4 bg-stone-50 rounded-xl space-y-4">
-                <Label className="text-base font-medium">Insumos Utilizados</Label>
+              {/* Seção Insumos - Padronizada */}
+              <div className="p-4 bg-stone-50 rounded-xl space-y-4 border border-stone-100">
+                <Label className="text-base font-medium text-stone-700">Insumos Utilizados</Label>
                 <div className="flex flex-wrap gap-2">
-                  <Select
-                    value={insumoTemp.insumo_id || ""}
-                    onValueChange={(value) => setInsumoTemp({ ...insumoTemp, insumo_id: value })}
-                  >
-                    <SelectTrigger className="w-60">
-                      <SelectValue placeholder="Selecione um insumo" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {insumos.map((insumo) => (
-                        <SelectItem key={insumo.id} value={insumo.id}>
-                          {insumo.nome} (R$ {insumo.preco_unitario?.toFixed(2)}/{insumo.unidade})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
+                  <Select value={insumoTemp.insumo_id || ""} onValueChange={(value) => setInsumoTemp({ ...insumoTemp, insumo_id: value })}>
+                    <SelectTrigger className="w-full sm:w-60 rounded-xl bg-white"><SelectValue placeholder="Selecione um insumo" /></SelectTrigger>
+                    <SelectContent>{insumos.map((insumo) => (<SelectItem key={insumo.id} value={insumo.id}>{insumo.nome} (R$ {insumo.preco_unitario?.toFixed(2)}/{insumo.unidade})</SelectItem>))}</SelectContent>
                   </Select>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    placeholder="Quantidade"
-                    className="w-28"
-                    value={insumoTemp.quantidade || ""}
-                    onChange={(e) => setInsumoTemp({ ...insumoTemp, quantidade: e.target.value })}
-                  />
-                  <Select
-                    value={insumoTemp.metodo_aplicacao || ""}
-                    onValueChange={(value) => {
-                      setInsumoTemp({ ...insumoTemp, metodo_aplicacao: value });
-                      setMostrarNovoMetodo(value === 'outro');
-                    }}
-                  >
-                    <SelectTrigger className="w-40">
-                      <SelectValue placeholder="Método" />
-                    </SelectTrigger>
+                  <Input type="number" step="0.01" placeholder="Qtd" className="w-24 rounded-xl bg-white" value={insumoTemp.quantidade || ""} onChange={(e) => setInsumoTemp({ ...insumoTemp, quantidade: e.target.value })} />
+                  <Select value={insumoTemp.metodo_aplicacao || ""} onValueChange={(value) => { setInsumoTemp({ ...insumoTemp, metodo_aplicacao: value }); setMostrarNovoMetodo(value === 'outro'); }}>
+                    <SelectTrigger className="w-32 rounded-xl bg-white"><SelectValue placeholder="Método" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="foliar">Foliar</SelectItem>
                       <SelectItem value="adubacao">Adubação</SelectItem>
@@ -500,285 +392,139 @@ export default function Atividades() {
                       <SelectItem value="outro">Outro...</SelectItem>
                     </SelectContent>
                   </Select>
-                  {mostrarNovoMetodo && (
-                    <Input
-                      placeholder="Nome do método"
-                      className="w-40"
-                      value={novoMetodo || ""}
-                      onChange={(e) => setNovoMetodo(e.target.value)}
-                    />
-                  )}
-                  <Button type="button" onClick={addInsumo} variant="outline" size="icon">
-                    <Plus className="w-4 h-4" />
-                  </Button>
+                  {mostrarNovoMetodo && <Input placeholder="Nome do método" className="w-32 rounded-xl bg-white" value={novoMetodo || ""} onChange={(e) => setNovoMetodo(e.target.value)} />}
+                  <Button type="button" onClick={addInsumo} variant="outline" size="icon" className="rounded-xl bg-white hover:bg-emerald-50 text-emerald-600 border-emerald-200"><Plus className="w-4 h-4" /></Button>
                 </div>
 
                 {formData.insumos_utilizados.length > 0 && (
-                  <div className="space-y-2">
+                  <div className="space-y-2 mt-2">
                     {formData.insumos_utilizados.map((insumo, index) => (
-                      <div key={index} className="flex items-start justify-between gap-3 p-3 bg-white rounded-lg border hover:border-stone-300 transition-colors">
-                        <div className="flex items-start gap-3 flex-1">
-                          <div className="mt-0.5">
-                            <Package className="w-4 h-4 text-emerald-600" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="font-medium text-stone-900 mb-1">{insumo.nome}</div>
-                            <div className="flex flex-wrap items-center gap-2 text-sm">
-                              <Badge variant="secondary" className="text-xs">
-                                {insumo.quantidade} {insumo.unidade}
-                              </Badge>
-                              {insumo.metodo_aplicacao && (
-                                <Badge variant="outline" className="text-xs capitalize bg-blue-50 text-blue-700 border-blue-200">
-                                  {insumo.metodo_aplicacao}
-                                </Badge>
-                              )}
-                              <span className="text-emerald-600 font-semibold">
-                                R$ {insumo.valor_total?.toFixed(2)}
-                              </span>
+                      <div key={index} className="flex items-center justify-between p-3 bg-white rounded-xl border border-stone-200 shadow-sm">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 bg-emerald-50 text-emerald-600 rounded-lg"><Package className="w-4 h-4" /></div>
+                          <div>
+                            <div className="font-bold text-stone-800 text-sm">{insumo.nome}</div>
+                            <div className="text-xs text-stone-500 flex gap-2">
+                                <span>{insumo.quantidade} {insumo.unidade}</span>
+                                {insumo.metodo_aplicacao && <span className="capitalize">• {insumo.metodo_aplicacao}</span>}
                             </div>
                           </div>
                         </div>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => removeInsumo(index)}
-                          className="text-red-600 hover:text-red-700 hover:bg-red-50 shrink-0"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
+                        <div className="flex items-center gap-3">
+                            <span className="text-sm font-bold text-stone-700">R$ {insumo.valor_total?.toFixed(2)}</span>
+                            <Button type="button" variant="ghost" size="sm" onClick={() => removeInsumo(index)} className="text-red-400 hover:text-red-600 hover:bg-red-50 h-8 w-8 p-0 rounded-lg"><Trash2 className="w-4 h-4" /></Button>
+                        </div>
                       </div>
                     ))}
                   </div>
                 )}
               </div>
 
-              <div className="flex items-center justify-between p-4 bg-emerald-50 rounded-xl">
-                <span className="font-medium text-emerald-800">Custo Total da Atividade</span>
-                <span className="text-xl font-bold text-emerald-600">
-                  R$ {calcularCustoTotal().toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                </span>
+              <div className="flex items-center justify-between p-4 bg-emerald-50 rounded-xl border border-emerald-100">
+                <span className="font-medium text-emerald-800">Custo Total Previsto</span>
+                <span className="text-xl font-bold text-emerald-700">R$ {calcularCustoTotal().toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
               </div>
 
               <div className="space-y-2">
                 <Label>Observações</Label>
-                <Textarea
-                  value={formData.observacoes || ""}
-                  onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })}
-                  placeholder="Observações sobre a atividade..."
-                  rows={2}
-                />
+                <Textarea value={formData.observacoes || ""} onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })} placeholder="Detalhes..." rows={2} className="rounded-xl" />
               </div>
 
-              <div className="flex justify-end gap-3 pt-4">
-                <Button type="button" variant="outline" onClick={resetForm}>
-                  Cancelar
-                </Button>
-                <Button 
-                  type="submit" 
-                  className="bg-blue-600 hover:bg-blue-700"
-                  disabled={createMutation.isPending || updateMutation.isPending}
-                >
-                  {editingAtividade ? 'Salvar' : 'Criar'}
+              <div className="flex justify-end gap-3 pt-2">
+                <Button type="button" variant="outline" onClick={resetForm} className="rounded-xl border-stone-200">Cancelar</Button>
+                <Button type="submit" className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl px-6" disabled={createMutation.isPending || updateMutation.isPending}>
+                  {editingAtividade ? 'Salvar Alterações' : 'Criar Atividade'}
                 </Button>
               </div>
             </form>
           </DialogContent>
         </Dialog>
 
+        {/* Dialog de Tipos Customizados (Mantido) */}
         <Dialog open={openTipoDialog} onOpenChange={setOpenTipoDialog}>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle>Gerenciar Tipos de Atividade</DialogTitle>
-              <DialogDescription className="sr-only">
-                Adicione ou remova tipos personalizados de atividades agrícolas.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-6">
-              <div className="space-y-2 p-4 bg-stone-50 rounded-lg">
-                <Label className="text-sm font-medium">Adicionar Novo Tipo</Label>
-                <div className="flex gap-2">
-                  <Input
-                    value={novoTipo || ""}
-                    onChange={(e) => setNovoTipo(e.target.value)}
-                    placeholder="Ex: Desbrota"
-                    className="flex-1"
-                  />
-                  <Button 
-                    onClick={() => createTipoMutation.mutate({ nome: novoTipo })}
-                    disabled={!novoTipo || createTipoMutation.isPending}
-                    className="bg-emerald-600 hover:bg-emerald-700"
-                  >
-                    <Plus className="w-4 h-4 mr-1" />
-                    Adicionar
-                  </Button>
-                </div>
+          <DialogContent className="sm:max-w-md rounded-[2rem]">
+            <DialogHeader><DialogTitle>Gerenciar Tipos</DialogTitle></DialogHeader>
+            <div className="space-y-4">
+              <div className="flex gap-2">
+                <Input value={novoTipo || ""} onChange={(e) => setNovoTipo(e.target.value)} placeholder="Novo tipo..." className="rounded-xl" />
+                <Button onClick={() => createTipoMutation.mutate({ nome: novoTipo })} disabled={!novoTipo} className="rounded-xl bg-emerald-600 hover:bg-emerald-700"><Plus className="w-4 h-4" /></Button>
               </div>
-
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">Tipos Personalizados Cadastrados</Label>
-                {tiposCustomizados.length === 0 ? (
-                  <p className="text-sm text-stone-500 italic">Nenhum tipo personalizado cadastrado.</p>
-                ) : (
-                  <div className="border rounded-md divide-y max-h-60 overflow-y-auto">
-                    {tiposCustomizados.map((tipo) => (
-                      <div key={tipo.id} className="flex items-center justify-between p-3 bg-white hover:bg-stone-50">
-                        <span className="text-sm text-stone-700 font-medium">{tipo.nome}</span>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => deleteTipoMutation.mutate(tipo.id)}
-                          className="h-8 w-8 p-0 text-stone-400 hover:text-red-600 hover:bg-red-50 rounded-full"
-                          title="Excluir este tipo"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    ))}
+              <div className="border rounded-xl divide-y overflow-hidden">
+                {tiposCustomizados.map((tipo) => (
+                  <div key={tipo.id} className="flex justify-between p-3 bg-stone-50 hover:bg-white transition-colors">
+                    <span className="text-sm font-medium">{tipo.nome}</span>
+                    <Button variant="ghost" size="sm" onClick={() => deleteTipoMutation.mutate(tipo.id)} className="h-6 w-6 p-0 text-red-400 hover:text-red-600"><Trash2 className="w-3 h-3" /></Button>
                   </div>
-                )}
-              </div>
-              
-              <div className="flex justify-end pt-2">
-                <Button variant="outline" onClick={() => setOpenTipoDialog(false)}>
-                  Fechar
-                </Button>
+                ))}
               </div>
             </div>
           </DialogContent>
         </Dialog>
       </div>
 
-      <Card className="border-stone-100">
-        <CardContent className="pt-4">
+      {/* Painel de Filtros Padronizado */}
+      <Card className="border-stone-100 rounded-[2rem] shadow-sm">
+        <CardContent className="pt-6 pb-6">
           <div className="flex flex-wrap items-center gap-4">
-            <div className="flex items-center gap-2">
-              <Filter className="w-4 h-4 text-stone-400" />
-              <span className="text-sm font-medium text-stone-600">Filtros:</span>
+            <div className="flex items-center gap-2 text-stone-500">
+              <Filter className="w-4 h-4" />
+              <span className="text-sm font-bold uppercase tracking-wide">Filtros:</span>
             </div>
             <Select value={filtroTalhao || "todos"} onValueChange={setFiltroTalhao}>
-              <SelectTrigger className="w-40">
-                <SelectValue placeholder="Talhão" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todos">Todos Talhões</SelectItem>
-                {talhoes.map((t) => (
-                  <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>
-                ))}
-              </SelectContent>
+              <SelectTrigger className="w-48 rounded-xl bg-stone-50 border-stone-200"><SelectValue placeholder="Talhão" /></SelectTrigger>
+              <SelectContent>{talhoes.map((t) => (<SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>))}<SelectItem value="todos">Todos</SelectItem></SelectContent>
             </Select>
             <Select value={filtroStatus || "todos"} onValueChange={setFiltroStatus}>
-              <SelectTrigger className="w-40">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todos">Todos Status</SelectItem>
-                <SelectItem value="programada">Programada</SelectItem>
-                <SelectItem value="em_andamento">Em Andamento</SelectItem>
-                <SelectItem value="concluida">Concluída</SelectItem>
-                <SelectItem value="cancelada">Cancelada</SelectItem>
-              </SelectContent>
+              <SelectTrigger className="w-40 rounded-xl bg-stone-50 border-stone-200"><SelectValue placeholder="Status" /></SelectTrigger>
+              <SelectContent><SelectItem value="todos">Todos</SelectItem><SelectItem value="programada">Programada</SelectItem><SelectItem value="concluida">Concluída</SelectItem></SelectContent>
             </Select>
           </div>
         </CardContent>
       </Card>
 
+      {/* Tabela Padronizada */}
       {atividadesFiltradas.length === 0 ? (
-        <EmptyState
-          icon={ClipboardList}
-          title="Nenhuma atividade cadastrada"
-          description="Cadastre suas atividades para acompanhar o manejo dos talhões."
-          actionLabel="Cadastrar Atividade"
-          onAction={() => setOpen(true)}
-        />
+        <EmptyState icon={ClipboardList} title="Nenhuma atividade encontrada" description="Ajuste os filtros ou cadastre uma nova." actionLabel="Nova Atividade" onAction={() => setOpen(true)} />
       ) : (
-        <Card className="border-stone-100 overflow-hidden">
+        <Card className="border-stone-100 rounded-[2rem] shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <Table>
-              <TableHeader>
-                <TableRow className="bg-stone-50">
+              <TableHeader className="bg-stone-50">
+                <TableRow>
+                  <TableHead className="pl-6 w-[120px]">Data</TableHead>
+                  <TableHead>Atividade</TableHead>
                   <TableHead>Talhão</TableHead>
-                  <TableHead>Tipo</TableHead>
-                  <TableHead>Data Prog.</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Custo</TableHead>
-                  <TableHead className="w-24 text-right pr-6">Ações</TableHead>
+                  <TableHead className="text-right">Custo Total</TableHead>
+                  <TableHead className="text-center w-[120px]">Status</TableHead>
+                  <TableHead className="w-[180px] text-right pr-6">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {atividadesFiltradas.map((atividade) => (
-                  <TableRow key={atividade.id} className="hover:bg-stone-50">
-                    <TableCell className="font-medium">{getTalhaoNome(atividade.talhao_id)}</TableCell>
-                    <TableCell>
-                      {atividade.tipo === 'outro' ? atividade.tipo_personalizado : getTipoLabel(atividade.tipo)}
-                      {atividade.terceirizada && (
-                        <Badge variant="outline" className="ml-2 text-xs">Terceirizada</Badge>
-                      )}
+                  <TableRow key={atividade.id} className="hover:bg-stone-50 transition-colors">
+                    <TableCell className="pl-6 font-medium text-stone-600">
+                        {atividade.data_programada ? format(new Date(atividade.data_programada + 'T12:00:00'), 'dd/MM/yy') : '-'}
                     </TableCell>
                     <TableCell>
-                      {atividade.data_programada ? format(new Date(atividade.data_programada + 'T12:00:00'), 'dd/MM/yyyy') : '-'}
+                        <div className="font-bold text-stone-800">{atividade.tipo === 'outro' ? atividade.tipo_personalizado : getTipoLabel(atividade.tipo)}</div>
+                        <div className="text-xs text-stone-400">{atividade.responsavel && `Resp: ${atividade.responsavel}`}</div>
                     </TableCell>
-                    <TableCell>
-                      <Badge className={statusLabels[atividade.status]?.color}>
-                        {statusLabels[atividade.status]?.label}
-                      </Badge>
+                    <TableCell><Badge variant="outline" className="bg-white border-stone-200 text-stone-600">{getTalhaoNome(atividade.talhao_id)}</Badge></TableCell>
+                    <TableCell className="text-right font-medium text-stone-700">R$ {(atividade.custo_total || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</TableCell>
+                    <TableCell className="text-center">
+                      <Badge className={`${statusLabels[atividade.status]?.color} border`}>{statusLabels[atividade.status]?.label}</Badge>
                     </TableCell>
-                    <TableCell className={`text-right font-medium ${atividade.status === 'concluida' ? 'text-emerald-600' : 'text-stone-400'}`}>
-                      R$ {(atividade.custo_total || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center justify-end gap-1 pr-4">
+                    <TableCell className="text-right pr-6">
+                      <div className="flex justify-end gap-1">
                         {atividade.status !== 'concluida' && (
-                           <Button 
-                             variant="ghost" 
-                             size="sm"
-                             className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
-                             onClick={() => {
-                               updateMutation.mutate({ 
-                                 id: atividade.id, 
-                                 data: { ...atividade, status: 'concluida', data_realizada: format(new Date(), 'yyyy-MM-dd') } 
-                               });
-                             }}
-                             title="Concluir"
-                           >
-                             <CheckCircle2 className="w-4 h-4" />
-                           </Button>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-emerald-500 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg" onClick={() => updateMutation.mutate({ id: atividade.id, data: { ...atividade, status: 'concluida', data_realizada: format(new Date(), 'yyyy-MM-dd') } })} title="Concluir">
+                                <CheckCircle2 className="w-4 h-4" />
+                            </Button>
                         )}
-                        <Button 
-                          variant="ghost" 
-                          size="sm"
-                          onClick={() => handleShareWhatsApp(atividade)}
-                          title="Enviar no WhatsApp"
-                          className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
-                        >
-                          <MessageCircle className="w-4 h-4" />
-                        </Button>
-                        <Button 
-                          variant="ghost" 
-                          size="sm"
-                          onClick={() => handleEdit(atividade)}
-                          title="Editar"
-                        >
-                          <Edit className="w-4 h-4" />
-                        </Button>
-                        <Button 
-                          variant="ghost" 
-                          size="sm"
-                          onClick={() => handleDuplicate(atividade)}
-                          title="Duplicar"
-                          className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                        >
-                          <Copy className="w-4 h-4" />
-                        </Button>
-                        <Button 
-                          variant="ghost" 
-                          size="sm"
-                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                          onClick={() => { if(confirm("Deseja excluir?")) deleteMutation.mutate(atividade.id) }}
-                          title="Excluir"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-emerald-500 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg" onClick={() => handleShareWhatsApp(atividade)} title="WhatsApp"><MessageCircle className="w-4 h-4" /></Button>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-stone-400 hover:text-stone-700 hover:bg-stone-100 rounded-lg" onClick={() => handleEdit(atividade)} title="Editar"><Edit className="w-4 h-4" /></Button>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg" onClick={() => handleDuplicate(atividade)} title="Duplicar"><Copy className="w-4 h-4" /></Button>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-red-300 hover:text-red-500 hover:bg-red-50 rounded-lg" onClick={() => { if(confirm("Excluir?")) deleteMutation.mutate(atividade.id) }} title="Excluir"><Trash2 className="w-4 h-4" /></Button>
                       </div>
                     </TableCell>
                   </TableRow>

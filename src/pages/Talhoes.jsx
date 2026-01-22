@@ -9,23 +9,24 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Edit, Trash2, Map, Leaf, Eye } from 'lucide-react';
+import { Plus, Edit, Trash2, Map, Leaf, Eye, Sprout, Ruler } from 'lucide-react';
 import EmptyState from '@/components/ui/EmptyState';
 import { format } from 'date-fns';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
+import StatCard from '@/components/ui/StatCard'; // Adicionado para manter padrão visual do topo
 
 const statusLabels = {
-  ativo: { label: 'Ativo', color: 'bg-emerald-100 text-emerald-700' },
-  em_preparacao: { label: 'Em Preparação', color: 'bg-amber-100 text-amber-700' },
-  colheita: { label: 'Em Colheita', color: 'bg-blue-100 text-blue-700' },
-  repouso: { label: 'Repouso', color: 'bg-stone-100 text-stone-700' }
+  ativo: { label: 'Ativo', color: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
+  em_preparacao: { label: 'Em Preparação', color: 'bg-amber-100 text-amber-700 border-amber-200' },
+  colheita: { label: 'Em Colheita', color: 'bg-blue-100 text-blue-700 border-blue-200' },
+  repouso: { label: 'Repouso', color: 'bg-stone-100 text-stone-700 border-stone-200' }
 };
 
 const culturaLabels = {
-  manga: { label: 'Manga', color: 'bg-orange-100 text-orange-700' },
-  goiaba: { label: 'Goiaba', color: 'bg-pink-100 text-pink-700' },
-  misto: { label: 'Misto', color: 'bg-purple-100 text-purple-700' }
+  manga: { label: 'Manga', color: 'bg-orange-100 text-orange-700 border-orange-200' },
+  goiaba: { label: 'Goiaba', color: 'bg-pink-100 text-pink-700 border-pink-200' },
+  misto: { label: 'Misto', color: 'bg-purple-100 text-purple-700 border-purple-200' }
 };
 
 export default function Talhoes() {
@@ -132,28 +133,24 @@ export default function Talhoes() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      {/* Header Padronizado */}
+      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 bg-white p-4 rounded-[1.5rem] border border-stone-100 shadow-sm">
         <div>
-          <h1 className="text-2xl font-bold text-stone-900">Talhões</h1>
-          <p className="text-stone-500">
-            {talhoes.length} talhões • {totalArea.toFixed(2)} hectares total
-          </p>
+          <h1 className="text-2xl font-bold text-stone-900 tracking-tight">Talhões</h1>
+          <p className="text-stone-500 font-medium">Gestão de áreas produtivas</p>
         </div>
+        
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
-            <Button className="bg-emerald-600 hover:bg-emerald-700">
-              <Plus className="w-4 h-4 mr-2" />
-              Novo Talhão
+            <Button className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl h-10 px-5 shadow-lg shadow-emerald-100 transition-all active:scale-95">
+              <Plus className="w-4 h-4 mr-2" /> Novo Talhão
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-lg">
+          <DialogContent className="sm:max-w-lg rounded-[2rem]">
             <DialogHeader>
-              <DialogTitle>
-                {editingTalhao ? 'Editar Talhão' : 'Novo Talhão'}
-              </DialogTitle>
+              <DialogTitle>{editingTalhao ? 'Editar Talhão' : 'Novo Talhão'}</DialogTitle>
             </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-4 pt-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Nome/Código</Label>
@@ -162,6 +159,7 @@ export default function Talhoes() {
                     onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
                     placeholder="Ex: T-01"
                     required
+                    className="rounded-xl"
                   />
                 </div>
                 <div className="space-y-2">
@@ -172,6 +170,7 @@ export default function Talhoes() {
                     value={formData.area_hectares}
                     onChange={(e) => setFormData({ ...formData, area_hectares: e.target.value })}
                     placeholder="Ex: 10.5"
+                    className="rounded-xl"
                   />
                 </div>
               </div>
@@ -183,7 +182,7 @@ export default function Talhoes() {
                     value={formData.cultura}
                     onValueChange={(value) => setFormData({ ...formData, cultura: value })}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className="rounded-xl">
                       <SelectValue placeholder="Selecione" />
                     </SelectTrigger>
                     <SelectContent>
@@ -199,6 +198,7 @@ export default function Talhoes() {
                     value={formData.variedade}
                     onChange={(e) => setFormData({ ...formData, variedade: e.target.value })}
                     placeholder="Ex: Palmer, Paluma"
+                    className="rounded-xl"
                   />
                 </div>
               </div>
@@ -210,6 +210,7 @@ export default function Talhoes() {
                     type="date"
                     value={formData.data_plantio}
                     onChange={(e) => setFormData({ ...formData, data_plantio: e.target.value })}
+                    className="rounded-xl"
                   />
                 </div>
                 <div className="space-y-2">
@@ -218,7 +219,7 @@ export default function Talhoes() {
                     value={formData.status}
                     onValueChange={(value) => setFormData({ ...formData, status: value })}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className="rounded-xl">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -238,18 +239,15 @@ export default function Talhoes() {
                   onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })}
                   placeholder="Observações sobre o talhão..."
                   rows={3}
+                  className="rounded-xl"
                 />
               </div>
 
               <div className="flex justify-end gap-3 pt-4">
-                <Button type="button" variant="outline" onClick={resetForm}>
+                <Button type="button" variant="outline" onClick={resetForm} className="rounded-xl">
                   Cancelar
                 </Button>
-                <Button 
-                  type="submit" 
-                  className="bg-emerald-600 hover:bg-emerald-700"
-                  disabled={createMutation.isPending || updateMutation.isPending}
-                >
+                <Button type="submit" className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl px-8">
                   {editingTalhao ? 'Salvar' : 'Criar'}
                 </Button>
               </div>
@@ -258,7 +256,13 @@ export default function Talhoes() {
         </Dialog>
       </div>
 
-      {/* Grid */}
+      {/* KPI Cards Padronizados */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+         <StatCard title="Talhões Ativos" value={talhoes.length} icon={Map} color="text-stone-600" />
+         <StatCard title="Área Total" value={`${totalArea.toFixed(2)} ha`} icon={Ruler} color="text-emerald-600" />
+      </div>
+
+      {/* Grid de Cards (Original) Padronizado */}
       {talhoes.length === 0 ? (
         <EmptyState
           icon={Map}
@@ -268,59 +272,58 @@ export default function Talhoes() {
           onAction={() => setOpen(true)}
         />
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {talhoes.map((talhao) => (
-            <Card key={talhao.id} className="border-stone-100 hover:shadow-lg transition-shadow">
-              <CardHeader className="pb-3">
+            <Card key={talhao.id} className="border-stone-100 rounded-[2rem] shadow-sm hover:shadow-lg transition-all group overflow-hidden">
+              <CardHeader className="pb-3 bg-stone-50/50 border-b border-stone-50 pt-6">
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-3">
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                      talhao.cultura === 'manga' ? 'bg-orange-100' : 
-                      talhao.cultura === 'goiaba' ? 'bg-pink-100' : 'bg-purple-100'
+                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-sm ${
+                      talhao.cultura === 'manga' ? 'bg-orange-50 border border-orange-100' : 
+                      talhao.cultura === 'goiaba' ? 'bg-pink-50 border border-pink-100' : 'bg-purple-50 border border-purple-100'
                     }`}>
-                      {/* LÓGICA DE ÍCONES DE FRUTAS AQUI */}
                       {talhao.cultura === 'manga' ? (
-                        <span className="text-xl" role="img" aria-label="Manga">🥭</span>
+                        <span className="text-2xl" role="img" aria-label="Manga">🥭</span>
                       ) : talhao.cultura === 'goiaba' ? (
-                        <span className="text-xl" role="img" aria-label="Goiaba">🍈</span>
+                        <span className="text-2xl" role="img" aria-label="Goiaba">🍈</span>
                       ) : (
-                        <Leaf className={`w-5 h-5 ${
+                        <Leaf className={`w-6 h-6 ${
                           talhao.cultura === 'misto' ? 'text-purple-600' : 'text-stone-600'
                         }`} />
                       )}
                     </div>
                     <div>
-                      <CardTitle className="text-lg">{talhao.nome}</CardTitle>
-                      <p className="text-sm text-stone-500">{talhao.variedade || 'Variedade não informada'}</p>
+                      <CardTitle className="text-lg font-bold text-stone-800">{talhao.nome}</CardTitle>
+                      <p className="text-xs font-bold text-stone-400 uppercase tracking-wider">{talhao.variedade || 'Variedade N/A'}</p>
                     </div>
                   </div>
-                  <Badge className={statusLabels[talhao.status]?.color || 'bg-stone-100'}>
+                  <Badge className={`${statusLabels[talhao.status]?.color || 'bg-stone-100'} border`}>
                     {statusLabels[talhao.status]?.label || talhao.status}
                   </Badge>
                 </div>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center gap-4 text-sm">
-                  <div>
-                    <p className="text-stone-500">Cultura</p>
-                    <Badge className={culturaLabels[talhao.cultura]?.color || 'bg-stone-100'}>
+              <CardContent className="space-y-4 pt-6">
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div className="p-3 bg-stone-50 rounded-xl border border-stone-100">
+                    <p className="text-stone-400 text-xs font-bold uppercase mb-1">Cultura</p>
+                    <Badge variant="outline" className={`${culturaLabels[talhao.cultura]?.color || 'bg-stone-100'} bg-opacity-20 border-opacity-50`}>
                       {culturaLabels[talhao.cultura]?.label || talhao.cultura}
                     </Badge>
                   </div>
-                  <div>
-                    <p className="text-stone-500">Área</p>
-                    <p className="font-medium">{talhao.area_hectares || '-'} ha</p>
+                  <div className="p-3 bg-stone-50 rounded-xl border border-stone-100">
+                    <p className="text-stone-400 text-xs font-bold uppercase mb-1">Área</p>
+                    <p className="font-bold text-stone-700 text-lg">{talhao.area_hectares || '-'} ha</p>
                   </div>
-                  {talhao.data_plantio && (
-                    <div>
-                      <p className="text-stone-500">Plantio</p>
-                      <p className="font-medium">{format(new Date(talhao.data_plantio + 'T12:00:00'), 'MM/yyyy')}</p>
-                    </div>
-                  )}
                 </div>
+                
+                {talhao.data_plantio && (
+                    <div className="flex items-center gap-2 text-xs text-stone-500 font-medium px-1">
+                        <Sprout className="w-3 h-3" /> Plantio: {format(new Date(talhao.data_plantio + 'T12:00:00'), 'MM/yyyy')}
+                    </div>
+                )}
 
                 {talhao.observacoes && (
-                  <p className="text-sm text-stone-500 line-clamp-2">{talhao.observacoes}</p>
+                  <p className="text-sm text-stone-500 line-clamp-2 bg-stone-50/50 p-2 rounded-lg italic">"{talhao.observacoes}"</p>
                 )}
 
                 <div className="flex items-center gap-2 pt-2 border-t border-stone-100">
@@ -328,22 +331,23 @@ export default function Talhoes() {
                     to={createPageUrl(`Relatorios?talhao=${talhao.id}`)}
                     className="flex-1"
                   >
-                    <Button variant="outline" size="sm" className="w-full">
-                      <Eye className="w-4 h-4 mr-1" />
+                    <Button variant="outline" size="sm" className="w-full rounded-xl border-stone-200 text-stone-600 hover:bg-stone-50">
+                      <Eye className="w-4 h-4 mr-2" />
                       Detalhes
                     </Button>
                   </Link>
                   <Button 
                     variant="ghost" 
-                    size="sm"
+                    size="sm" 
                     onClick={() => handleEdit(talhao)}
+                    className="rounded-xl text-stone-400 hover:text-stone-700 hover:bg-stone-100"
                   >
                     <Edit className="w-4 h-4" />
                   </Button>
                   <Button 
                     variant="ghost" 
-                    size="sm"
-                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                    size="sm" 
+                    className="text-red-300 hover:text-red-600 hover:bg-red-50 rounded-xl"
                     onClick={() => deleteMutation.mutate(talhao.id)}
                   >
                     <Trash2 className="w-4 h-4" />

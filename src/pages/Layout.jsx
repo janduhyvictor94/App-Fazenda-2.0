@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { 
   LayoutDashboard, Map, Wheat, Calendar, Package, 
   DollarSign, Users, FileText, ClipboardList,
-  Menu, X, Leaf, LogOut, CloudRain, Sparkles
+  Menu, Leaf, LogOut, CloudRain, Sparkles, ChevronRight
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -31,29 +31,34 @@ export default function Layout({ children, currentPageName }) {
   };
 
   return (
-    <div className="min-h-screen bg-[#FDFDFD] bg-gradient-to-tr from-stone-50 via-white to-emerald-50/30 font-sans antialiased text-stone-900 selection:bg-emerald-100 selection:text-emerald-900">
+    <div className="min-h-screen bg-[#FAFAFA] bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-emerald-50/40 via-stone-50 to-white font-sans antialiased text-stone-900 selection:bg-emerald-100 selection:text-emerald-900">
+      
+      {/* Overlay Mobile */}
       {sidebarOpen && (
-        <div className="fixed inset-0 z-40 bg-stone-900/20 backdrop-blur-sm lg:hidden" onClick={() => setSidebarOpen(false)} />
+        <div className="fixed inset-0 z-40 bg-stone-900/10 backdrop-blur-sm lg:hidden transition-opacity" onClick={() => setSidebarOpen(false)} />
       )}
 
+      {/* Sidebar */}
       <aside className={cn(
-        "fixed inset-y-0 left-0 z-50 w-72 bg-white/80 backdrop-blur-2xl border-r border-stone-200/40 transform transition-all duration-500 ease-in-out lg:translate-x-0 shadow-2xl shadow-stone-200/20",
+        "fixed inset-y-0 left-0 z-50 w-72 bg-white/90 backdrop-blur-xl border-r border-stone-100 transform transition-transform duration-300 ease-in-out lg:translate-x-0 shadow-2xl shadow-stone-200/20",
         sidebarOpen ? "translate-x-0" : "-translate-x-full"
       )}>
         <div className="flex flex-col h-full">
-          <div className="p-8 flex items-center justify-between">
-            <div className="flex items-center gap-3.5 group cursor-default">
-              <div className="w-12 h-12 bg-gradient-to-br from-emerald-500 to-teal-700 rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-200/50 group-hover:rotate-6 transition-transform duration-300">
-                <Leaf className="w-6 h-6 text-white" />
+          {/* Logo Area */}
+          <div className="p-8 pb-6 flex items-center justify-between">
+            <div className="flex items-center gap-4 group cursor-default">
+              <div className="w-10 h-10 bg-gradient-to-br from-emerald-600 to-teal-700 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-200/50 transition-transform group-hover:scale-105 duration-300">
+                <Leaf className="w-5 h-5 text-white" />
               </div>
               <div className="flex flex-col">
-                <span className="text-xl font-black tracking-tight text-stone-800 leading-none">Fazenda</span>
-                <span className="text-[10px] uppercase tracking-[0.2em] text-emerald-600 font-black mt-1.5 opacity-80">Cassiano's</span>
+                <span className="text-lg font-black tracking-tight text-stone-800 leading-none">Fazenda</span>
+                <span className="text-[10px] uppercase tracking-[0.25em] text-emerald-600 font-bold mt-1">Cassiano's</span>
               </div>
             </div>
           </div>
 
-          <nav className="flex-1 px-4 space-y-1.5 overflow-y-auto scrollbar-hide">
+          {/* Navigation */}
+          <nav className="flex-1 px-4 space-y-1 overflow-y-auto scrollbar-hide py-2">
             {navigation.map((item) => {
               const isActive = currentPageName === item.page;
               return (
@@ -62,56 +67,66 @@ export default function Layout({ children, currentPageName }) {
                   to={createPageUrl(item.page)}
                   onClick={() => setSidebarOpen(false)}
                   className={cn(
-                    "flex items-center gap-3.5 px-5 py-3.5 rounded-2xl text-sm font-bold transition-all duration-300 group relative overflow-hidden",
+                    "flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all duration-200 group relative",
                     isActive 
-                      ? "bg-emerald-600 text-white shadow-xl shadow-emerald-200/60 ring-1 ring-white/20" 
-                      : "text-stone-500 hover:bg-emerald-50/50 hover:text-emerald-700"
+                      ? "bg-stone-900 text-white shadow-lg shadow-stone-900/20" 
+                      : "text-stone-500 hover:bg-stone-50 hover:text-stone-900"
                   )}
                 >
-                  <item.icon className={cn("w-5 h-5 transition-transform duration-300", isActive ? "text-white" : "text-stone-400 group-hover:scale-110 group-hover:text-emerald-600")} />
-                  <span className="flex-1 relative z-10">{item.name}</span>
-                  {isActive && <Sparkles className="w-3 h-3 text-emerald-200 animate-pulse" />}
+                  <item.icon className={cn("w-5 h-5 transition-colors", isActive ? "text-emerald-400" : "text-stone-400 group-hover:text-stone-600")} />
+                  <span className="flex-1">{item.name}</span>
+                  {isActive && <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400/50" />}
                 </Link>
               );
             })}
           </nav>
 
-          <div className="p-6">
-            <button onClick={handleLogout} className="group flex items-center gap-3 w-full px-5 py-4 text-sm font-black text-red-500/80 hover:bg-red-50 hover:text-red-600 rounded-2xl transition-all duration-300 border border-transparent hover:border-red-100">
-              <LogOut className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
+          {/* Footer Sidebar */}
+          <div className="p-4 border-t border-stone-100 bg-stone-50/50">
+            <button onClick={handleLogout} className="flex items-center gap-3 w-full px-4 py-3 text-sm font-bold text-stone-500 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all duration-200 group">
+              <LogOut className="w-5 h-5 transition-transform group-hover:-translate-x-1" />
               <span>Sair do Sistema</span>
             </button>
           </div>
         </div>
       </aside>
 
-      <div className="lg:pl-72 transition-all duration-300">
-        <header className="sticky top-0 z-30 bg-white/40 backdrop-blur-md border-b border-stone-200/30">
-          <div className="flex items-center justify-between px-6 py-5 lg:px-10">
-            <button onClick={() => setSidebarOpen(true)} className="p-3 rounded-2xl bg-white border border-stone-200 shadow-sm lg:hidden hover:scale-105 active:scale-95 transition-all">
-              <Menu className="w-5 h-5 text-stone-600" />
-            </button>
-            <div className="hidden lg:block">
-              <h2 className="text-xs font-black uppercase tracking-[0.3em] text-stone-400">
-                {navigation.find(n => n.page === currentPageName)?.name || 'Dashboard'}
-              </h2>
+      {/* Main Content Wrapper */}
+      <div className="lg:pl-72 transition-all duration-300 flex flex-col min-h-screen">
+        
+        {/* Header Clean */}
+        <header className="sticky top-0 z-30 bg-white/60 backdrop-blur-xl border-b border-stone-100">
+          <div className="flex items-center justify-between px-6 py-4 lg:px-8">
+            <div className="flex items-center gap-4">
+                <button onClick={() => setSidebarOpen(true)} className="p-2 rounded-xl hover:bg-stone-100 lg:hidden text-stone-500 transition-colors">
+                    <Menu className="w-6 h-6" />
+                </button>
+                <div className="hidden lg:flex items-center gap-2 text-sm font-medium text-stone-400">
+                    <span className="hover:text-stone-600 cursor-pointer transition-colors">App</span>
+                    <ChevronRight className="w-4 h-4 text-stone-300" />
+                    <span className="text-stone-800 font-bold bg-stone-100 px-2 py-0.5 rounded-md">
+                        {navigation.find(n => n.page === currentPageName)?.name || 'Dashboard'}
+                    </span>
+                </div>
             </div>
-            <div className="flex items-center gap-5">
-              <div className="hidden sm:block text-right">
-                <p className="text-sm font-black text-stone-800">Fazenda Cassiano's</p>
-                <div className="flex items-center justify-end gap-1.5">
-                    <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
-                    <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Sistema Online</p>
+
+            <div className="flex items-center gap-4">
+              <div className="hidden sm:flex flex-col items-end">
+                <p className="text-sm font-bold text-stone-800">Administrador</p>
+                <div className="flex items-center gap-1.5">
+                    <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse shadow-sm shadow-emerald-500/50" />
+                    <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">Online</p>
                 </div>
               </div>
-              <div className="w-12 h-12 bg-gradient-to-tr from-stone-100 to-stone-200 rounded-2xl flex items-center justify-center border border-stone-200/50 shadow-inner hover:border-emerald-200 transition-colors cursor-pointer">
-                <Users className="w-5 h-5 text-stone-500" />
+              <div className="w-10 h-10 bg-white rounded-full border border-stone-100 shadow-sm flex items-center justify-center text-stone-400 hover:text-emerald-600 hover:border-emerald-100 transition-all cursor-pointer">
+                <Users className="w-5 h-5" />
               </div>
             </div>
           </div>
         </header>
 
-        <main className="p-6 lg:p-10 max-w-7xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-700">
+        {/* Page Content */}
+        <main className="p-4 lg:p-8 max-w-[1600px] mx-auto w-full animate-in fade-in slide-in-from-bottom-2 duration-500">
           {children}
         </main>
       </div>

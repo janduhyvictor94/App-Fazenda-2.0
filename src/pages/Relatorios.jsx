@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Printer, Wheat, DollarSign, TrendingUp, BarChart3, Package } from 'lucide-react';
+import { Printer, Wheat, DollarSign, TrendingUp, BarChart3, Package, Filter, Calendar as CalendarIcon } from 'lucide-react';
 import StatCard from '@/components/ui/StatCard';
 import { format, parseISO, isWithinInterval } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -114,8 +114,6 @@ export default function Relatorios({ showMessage }) {
 
   const colheitasFiltradas = filtrarPorTalhao(filtrarPorPeriodo(colheitas, 'data'));
   const custosFiltrados = filtrarPorTalhao(filtrarPorPeriodo(custos, 'data'));
-  
-  // Melhoria: Apenas atividades 'concluida' entram no custo
   const atividadesFiltradas = filtrarPorTalhao(filtrarPorPeriodo(atividades.filter(a => a.status === 'concluida'), 'data_programada'));
 
   const totalColheitaKg = colheitasFiltradas.reduce((acc, c) => acc + (c.quantidade_kg || 0), 0);
@@ -212,139 +210,135 @@ export default function Relatorios({ showMessage }) {
 
   const barDataCusto = Object.entries(custoPorTalhao).map(([name, value]) => ({ name, valor: value }));
 
-  // --- LOGICA DE RATEIO PARA A TABELA DE PRODUTIVIDADE ---
-  
-  // 1. Calcula Área Total da Fazenda
+  // --- LOGICA DE RATEIO ---
   const areaTotalFazenda = talhoes.reduce((acc, t) => acc + (Number(t.area_hectares) || 0), 0);
-
-  // 2. Calcula Custo Geral Total (apenas custos do financeiro sem talhão)
-  // Usa custosFiltrados para respeitar o filtro de data selecionado pelo usuário
-  const custoGeralTotal = custosFiltrados
-    .filter(c => !c.talhao_id)
-    .reduce((acc, c) => acc + (Number(c.valor) || 0), 0);
-
-  // 3. Fator de Rateio (Valor por Hectare)
-  const rateioPorHa = areaTotalFazenda > 0 ? custoGeralTotal / areaTotalFazenda : 0;
+  const custosGeraisPeriodo = custosFiltrados.filter(c => !c.talhao_id).reduce((acc, c) => acc + (Number(c.valor) || 0), 0);
+  const rateioPorHa = areaTotalFazenda > 0 ? custosGeraisPeriodo / areaTotalFazenda : 0;
 
   const talhoesComDados = talhoes.map(talhao => {
     const receitaTalhao = colheitas.filter(c => c.talhao_id === talhao.id).reduce((acc, c) => acc + (c.valor_total || 0), 0);
     const custoDirTalhao = custos.filter(c => c.talhao_id === talhao.id).reduce((acc, c) => acc + (c.valor || 0), 0);
     const custoAtivTalhao = atividades.filter(a => a.talhao_id === talhao.id && a.status === 'concluida').reduce((acc, a) => acc + (a.custo_total || 0), 0);
-    
-    // Custo de Insumos (Direto + Atividades)
     const custoInsumos = custoDirTalhao + custoAtivTalhao;
-    
-    // Rateio Custos Gerais
     const area = Number(talhao.area_hectares) || 0;
     const custoRateio = area * rateioPorHa;
-
-    // Custo Final
     const custoTotalTalhao = custoInsumos + custoRateio;
     const lucroTalhao = receitaTalhao - custoTotalTalhao;
     const lucroPorHa = area > 0 ? (lucroTalhao / area) : 0;
 
     return { 
-        id: talhao.id, 
-        nome: talhao.nome, 
-        area, 
-        receita: receitaTalhao, 
-        custoInsumos, // Nome alterado para refletir "Custo de Insumos"
-        custoRateio,  // Nova coluna "Rateio Custos Gerais"
-        custo: custoTotalTalhao, 
-        lucro: lucroTalhao, 
-        lucroPorHa 
+        id: talhao.id, nome: talhao.nome, area, 
+        receita: receitaTalhao, custoInsumos, custoRateio, 
+        custo: custoTotalTalhao, lucro: lucroTalhao, lucroPorHa 
     };
-  }).filter(t => t.receita > 0 || t.custo > 0);
+  }).filter(t => t.receita > 0 || t.custoInsumos > 0 || t.custoRateio > 0);
 
   const barDataLucroHa = talhoesComDados.map(t => ({ name: t.nome, 'Lucro/ha': t.lucroPorHa })).sort((a, b) => b['Lucro/ha'] - a['Lucro/ha']);
 
-  // Calcular Totais Gerais para o rodapé da tabela
   const totaisGeraisProdutividade = talhoesComDados.reduce((acc, t) => ({
     area: acc.area + t.area,
     receita: acc.receita + t.receita,
     custoInsumos: acc.custoInsumos + t.custoInsumos,
     custoRateio: acc.custoRateio + t.custoRateio,
     lucro: acc.lucro + t.lucro,
-    // Lucro por ha medio não se soma, calcula-se no final se necessário, mas para o rodapé deixaremos vazio ou recalculado
   }), { area: 0, receita: 0, custoInsumos: 0, custoRateio: 0, lucro: 0 });
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+      {/* Header com Filtros em Estilo Clean */}
+      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 bg-white p-4 rounded-[1.5rem] border border-stone-100 shadow-sm">
         <div>
-          <h1 className="text-2xl font-bold text-stone-900">Relatórios</h1>
-          <p className="text-stone-500">Análise completa de produção e financeiro</p>
+          <h1 className="text-2xl font-bold text-stone-900 tracking-tight">Relatórios Gerenciais</h1>
+          <p className="text-stone-500 font-medium">Visão estratégica e análise de resultados</p>
         </div>
-        <div className="flex flex-wrap gap-3">
-          <Select value={filtroTalhao} onValueChange={setFiltroTalhao}>
-            <SelectTrigger className="w-48 rounded-xl"><SelectValue placeholder="Talhão" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="todos">Todos os Talhões</SelectItem>
-              {talhoes.map((t) => <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>)}
-            </SelectContent>
-          </Select>
-          <Input type="date" value={dataInicio} onChange={(e) => setDataInicio(e.target.value)} className="w-40 rounded-xl" />
-          <Input type="date" value={dataFim} onChange={(e) => setDataFim(e.target.value)} className="w-40 rounded-xl" />
-          <Button onClick={() => window.print()} variant="outline" className="bg-white rounded-xl shadow-sm border-stone-200">
+        <div className="flex flex-wrap gap-2 items-center">
+          <div className="flex items-center gap-2 bg-stone-50 p-1 rounded-xl border border-stone-200">
+             <Filter className="w-4 h-4 text-stone-400 ml-2" />
+             <Select value={filtroTalhao} onValueChange={setFiltroTalhao}>
+                <SelectTrigger className="w-40 border-none bg-transparent shadow-none h-8 font-medium text-stone-700"><SelectValue placeholder="Talhão" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos os Talhões</SelectItem>
+                  {talhoes.map((t) => <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>)}
+                </SelectContent>
+              </Select>
+          </div>
+          
+          <div className="flex items-center gap-2 bg-stone-50 p-1 rounded-xl border border-stone-200">
+             <CalendarIcon className="w-4 h-4 text-stone-400 ml-2" />
+             <Input type="date" value={dataInicio} onChange={(e) => setDataInicio(e.target.value)} className="w-32 border-none bg-transparent shadow-none h-8 p-0 text-sm font-medium text-stone-700" />
+             <span className="text-stone-400">-</span>
+             <Input type="date" value={dataFim} onChange={(e) => setDataFim(e.target.value)} className="w-32 border-none bg-transparent shadow-none h-8 p-0 text-sm font-medium text-stone-700" />
+          </div>
+
+          <Button onClick={() => window.print()} variant="outline" className="rounded-xl border-stone-200 text-stone-600 hover:bg-stone-50 h-10">
             <Printer className="w-4 h-4 mr-2" /> Imprimir
           </Button>
         </div>
       </div>
 
+      {/* KPI Cards - Estilo Dashboard */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <StatCard title="Total Colhido" value={`${totalVisual.toFixed(1)} ${unidadeVisual}`} icon={Wheat} color="text-amber-600" />
-        <StatCard title="Total Caixas" value={`${totalColheitaCaixas.toLocaleString('pt-BR')} cx`} icon={Package} color="text-blue-600" />
         <StatCard title="Receita Total" value={`R$ ${totalReceita.toLocaleString('pt-BR')}`} icon={TrendingUp} color="text-emerald-600" />
         <StatCard title="Custos Totais" value={`R$ ${custoTotal.toLocaleString('pt-BR')}`} icon={DollarSign} color="text-red-600" />
         <StatCard title="Lucro/Prejuízo" value={`R$ ${lucro.toLocaleString('pt-BR')}`} icon={BarChart3} color={lucro >= 0 ? "text-emerald-600" : "text-red-600"} />
+        <StatCard title="Margem" value={`${totalReceita > 0 ? ((lucro/totalReceita)*100).toFixed(1) : 0}%`} icon={Package} color="text-blue-600" />
       </div>
 
       <Tabs defaultValue="colheitas" className="space-y-6">
-        <TabsList className="bg-stone-100 rounded-xl p-1">
-          <TabsTrigger value="colheitas" className="rounded-xl">Colheitas</TabsTrigger>
-          <TabsTrigger value="aproveitamento" className="rounded-xl">Aproveitamento</TabsTrigger>
-          <TabsTrigger value="custos" className="rounded-xl">Custos</TabsTrigger>
-          <TabsTrigger value="produtividade" className="rounded-xl">Produtividade</TabsTrigger>
-          <TabsTrigger value="evolucao" className="rounded-xl">Evolução</TabsTrigger>
+        <TabsList className="bg-white border border-stone-100 p-1.5 rounded-[1rem] shadow-sm w-full lg:w-auto flex flex-wrap h-auto">
+          <TabsTrigger value="colheitas" className="rounded-xl px-4 py-2 data-[state=active]:bg-stone-100 data-[state=active]:text-stone-900">Colheitas</TabsTrigger>
+          <TabsTrigger value="aproveitamento" className="rounded-xl px-4 py-2 data-[state=active]:bg-stone-100 data-[state=active]:text-stone-900">Aproveitamento</TabsTrigger>
+          <TabsTrigger value="custos" className="rounded-xl px-4 py-2 data-[state=active]:bg-stone-100 data-[state=active]:text-stone-900">Custos</TabsTrigger>
+          <TabsTrigger value="produtividade" className="rounded-xl px-4 py-2 data-[state=active]:bg-stone-100 data-[state=active]:text-stone-900">Produtividade</TabsTrigger>
+          <TabsTrigger value="evolucao" className="rounded-xl px-4 py-2 data-[state=active]:bg-stone-100 data-[state=active]:text-stone-900">Evolução</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="colheitas" className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card className="border-stone-100 rounded-2xl shadow-sm">
-              <CardHeader><CardTitle className="text-lg">Distribuição por Tipo</CardTitle></CardHeader>
-              <CardContent>
-                <div className="h-72">
-                  {pieDataColheita.length > 0 ? (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie data={pieDataColheita} innerRadius={60} outerRadius={100} paddingAngle={2} dataKey="value" label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}>
-                          {pieDataColheita.map((_, index) => <Cell key={index} fill={COLORS[index % COLORS.length]} />)}
-                        </Pie>
-                        <Tooltip />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  ) : (
-                    <div className="h-full flex items-center justify-center text-stone-400">Sem dados no período</div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-            <Card className="border-stone-100 rounded-2xl shadow-sm overflow-hidden">
-              <CardHeader><CardTitle className="text-lg">Tabela de Produção</CardTitle></CardHeader>
-              <Table>
-                <TableHeader className="bg-stone-50">
-                  <TableRow><TableHead className="pl-6">Tipo</TableHead><TableHead className="text-right pr-6">Quantidade ({unidadeVisual})</TableHead></TableRow>
-                </TableHeader>
-                <TableBody>{pieDataColheita.map((item) => (<TableRow key={item.name}><TableCell className="pl-6 font-medium">{item.name}</TableCell><TableCell className="text-right pr-6 font-bold">{item.value.toLocaleString('pt-BR')}</TableCell></TableRow>))}</TableBody>
-              </Table>
-            </Card>
+        <TabsContent value="colheitas" className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Gráfico 1/3 */}
+                <Card className="lg:col-span-1 border-stone-100 rounded-[2rem] shadow-sm">
+                  <CardHeader><CardTitle className="text-lg">Por Tipo</CardTitle></CardHeader>
+                  <CardContent className="flex items-center justify-center p-0 pb-6">
+                    <div className="h-64 w-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie data={pieDataColheita} innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
+                            {pieDataColheita.map((_, index) => <Cell key={index} fill={COLORS[index % COLORS.length]} />)}
+                          </Pie>
+                          <Tooltip />
+                          <Legend verticalAlign="bottom" height={36}/>
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </CardContent>
+                </Card>
+                {/* Tabela 2/3 */}
+                <Card className="lg:col-span-2 border-stone-100 rounded-[2rem] shadow-sm overflow-hidden">
+                  <CardHeader><CardTitle className="text-lg">Detalhamento de Produção</CardTitle></CardHeader>
+                  <Table>
+                    <TableHeader className="bg-stone-50/50">
+                      <TableRow><TableHead className="pl-6">Tipo de Colheita</TableHead><TableHead className="text-right pr-6">Quantidade ({unidadeVisual})</TableHead></TableRow>
+                    </TableHeader>
+                    <TableBody>{pieDataColheita.map((item) => (<TableRow key={item.name}><TableCell className="pl-6 font-medium">{item.name}</TableCell><TableCell className="text-right pr-6 font-bold text-stone-700">{item.value.toLocaleString('pt-BR')}</TableCell></TableRow>))}</TableBody>
+                  </Table>
+                </Card>
+            </div>
         </TabsContent>
 
         <TabsContent value="aproveitamento">
-          <Card className="border-stone-100 rounded-2xl shadow-sm overflow-hidden">
-            <CardContent className="pt-6">
-              <div className="h-72 mb-8">
+          <Card className="border-stone-100 rounded-[2rem] shadow-sm overflow-hidden">
+            <CardHeader><CardTitle>Análise de Aproveitamento</CardTitle></CardHeader>
+            <CardContent>
+              <div className="h-72 mb-6">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={aproveitamentoData}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="name" /><YAxis stroke="#10b981" /><Tooltip /><Bar dataKey="receita" name="Receita (R$)" fill="#10b981" radius={[4, 4, 0, 0]} /></BarChart>
+                  <BarChart data={aproveitamentoData} margin={{top: 20, right: 30, left: 20, bottom: 5}}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+                      <XAxis dataKey="name" axisLine={false} tickLine={false} />
+                      <YAxis axisLine={false} tickLine={false} />
+                      <Tooltip cursor={{fill: '#f3f4f6'}} />
+                      <Bar dataKey="receita" name="Receita (R$)" fill="#10b981" radius={[6, 6, 0, 0]} barSize={60} />
+                  </BarChart>
                 </ResponsiveContainer>
               </div>
               <Table>
@@ -358,133 +352,149 @@ export default function Relatorios({ showMessage }) {
         </TabsContent>
 
         <TabsContent value="custos" className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card className="border-stone-100 rounded-2xl shadow-sm">
-              <CardHeader><CardTitle className="text-lg">Composição de Gastos</CardTitle></CardHeader>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <Card className="lg:col-span-1 border-stone-100 rounded-[2rem] shadow-sm">
+              <CardHeader><CardTitle className="text-lg">Composição</CardTitle></CardHeader>
               <CardContent>
-                <div className="h-72">
+                <div className="h-64">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
-                      <Pie data={pieDataCustos} innerRadius={60} outerRadius={90} paddingAngle={2} dataKey="value">
+                      <Pie data={pieDataCustos} innerRadius={60} outerRadius={80} paddingAngle={2} dataKey="value">
                         {pieDataCustos.map((_, index) => <Cell key={index} fill={COLORS[index % COLORS.length]} />)}
                       </Pie>
                       <Tooltip formatter={(v) => `R$ ${v.toLocaleString('pt-BR')}`} />
-                      <Legend />
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
-              </CardContent>
-            </Card>
-            <Card className="border-stone-100 rounded-2xl shadow-sm">
-              <CardHeader><CardTitle className="text-lg">Custos por Talhão</CardTitle></CardHeader>
-              <CardContent>
-                <div className="h-72">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={barDataCusto} layout="vertical"><CartesianGrid strokeDasharray="3 3" horizontal={false}/><XAxis type="number" hide /><YAxis dataKey="name" type="category" width={100} tick={{fontSize: 12}}/><Tooltip/><Bar dataKey="valor" fill="#ef4444" radius={[0, 4, 4, 0]}/></BarChart>
-                  </ResponsiveContainer>
+                <div className="mt-4 space-y-2 max-h-60 overflow-y-auto pr-2">
+                    {pieDataCustos.map((item, index) => (
+                        <div key={index} className="flex justify-between items-center text-sm">
+                            <div className="flex items-center gap-2">
+                                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }}></div>
+                                <span className="text-stone-600 truncate max-w-[120px]" title={item.name}>{item.name}</span>
+                            </div>
+                            <span className="font-bold text-stone-700">{(item.value/custoTotal * 100).toFixed(1)}%</span>
+                        </div>
+                    ))}
                 </div>
               </CardContent>
             </Card>
-          </div>
-
-          <Card className="border-stone-100 rounded-2xl shadow-sm overflow-hidden">
-            <CardHeader><CardTitle className="text-lg">Detalhamento dos Custos</CardTitle></CardHeader>
-            <Table>
-              <TableHeader className="bg-stone-50">
-                <TableRow>
-                  <TableHead className="pl-6">Categoria / Atividade</TableHead>
-                  <TableHead className="text-right">Valor Total</TableHead>
-                  <TableHead className="text-right pr-6">Participação</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {pieDataCustos.map((item, index) => (
-                  <TableRow key={index} className="hover:bg-stone-50 transition-colors">
-                    <TableCell className="pl-6">
-                      <div className="flex items-center gap-3">
-                        <div 
-                          className="w-3 h-3 rounded-full" 
-                          style={{ backgroundColor: COLORS[index % COLORS.length] }} 
-                        />
-                        <span className="font-medium text-stone-700">{item.name}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right font-semibold">
-                      R$ {item.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                    </TableCell>
-                    <TableCell className="text-right pr-6 text-stone-500">
-                      {custoTotal > 0 ? ((item.value / custoTotal) * 100).toFixed(1) : 0}%
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="produtividade" className="space-y-6">
-          <Card className="border-stone-100 rounded-2xl shadow-sm">
-            <CardHeader><CardTitle className="text-lg">Lucro por Hectare (KPI)</CardTitle></CardHeader>
-            <CardContent>
-              <div className="h-80">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={barDataLucroHa}><CartesianGrid strokeDasharray="3 3" vertical={false}/><XAxis dataKey="name"/><YAxis tickFormatter={(v) => `R$ ${v.toLocaleString('pt-BR')}`}/><Tooltip formatter={(v) => `R$ ${v.toLocaleString('pt-BR')}/ha`}/><Bar dataKey="Lucro/ha" fill="#059669" radius={[4, 4, 0, 0]}/></BarChart>
-                </ResponsiveContainer>
-              </div>
-            </CardContent>
-          </Card>
-          <Card className="border-stone-100 rounded-2xl shadow-sm overflow-hidden">
+            
+            <Card className="lg:col-span-2 border-stone-100 rounded-[2rem] shadow-sm overflow-hidden">
+              <CardHeader><CardTitle className="text-lg">Detalhamento dos Custos</CardTitle></CardHeader>
               <Table>
                 <TableHeader className="bg-stone-50">
                   <TableRow>
-                    <TableHead className="pl-6">Talhão</TableHead>
-                    <TableHead className="text-right">Área</TableHead>
-                    <TableHead className="text-right">Receita</TableHead>
-                    <TableHead className="text-right">Custo de Insumos</TableHead>
-                    <TableHead className="text-right text-purple-600">Rateio Custos Gerais</TableHead>
-                    <TableHead className="text-right">Lucro/Prejuízo</TableHead>
-                    <TableHead className="text-right pr-6">Lucro/Ha</TableHead>
+                    <TableHead className="pl-6">Categoria</TableHead>
+                    <TableHead className="text-right">Valor Total</TableHead>
+                    <TableHead className="text-right pr-6">%</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {talhoesComDados.map((t) => (
-                  <TableRow key={t.id}>
-                    <TableCell className="pl-6 font-medium">{t.nome}</TableCell>
-                    <TableCell className="text-right">{t.area} ha</TableCell>
-                    <TableCell className="text-right text-emerald-600">R$ {t.receita.toLocaleString('pt-BR')}</TableCell>
-                    <TableCell className="text-right text-red-600">R$ {t.custoInsumos.toLocaleString('pt-BR')}</TableCell>
-                    <TableCell className="text-right text-purple-600">R$ {t.custoRateio.toLocaleString('pt-BR')}</TableCell>
-                    <TableCell className={`text-right font-bold ${t.lucro >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>R$ {t.lucro.toLocaleString('pt-BR')}</TableCell>
-                    <TableCell className={`text-right pr-6 font-bold ${t.lucroPorHa >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
-                        R$ {t.lucroPorHa.toLocaleString('pt-BR')}
-                    </TableCell>
-                  </TableRow>
-                ))}
-                
-                {/* Linha de Totais Gerais */}
-                {talhoesComDados.length > 0 && (
-                    <TableRow className="bg-stone-100 font-bold border-t-2 border-stone-200">
-                        <TableCell className="pl-6">TOTAL</TableCell>
-                        <TableCell className="text-right">{totaisGeraisProdutividade.area.toFixed(2)} ha</TableCell>
-                        <TableCell className="text-right text-emerald-700">R$ {totaisGeraisProdutividade.receita.toLocaleString('pt-BR')}</TableCell>
-                        <TableCell className="text-right text-red-700">R$ {totaisGeraisProdutividade.custoInsumos.toLocaleString('pt-BR')}</TableCell>
-                        <TableCell className="text-right text-purple-700">R$ {totaisGeraisProdutividade.custoRateio.toLocaleString('pt-BR')}</TableCell>
-                        <TableCell className={`text-right ${totaisGeraisProdutividade.lucro >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>R$ {totaisGeraisProdutividade.lucro.toLocaleString('pt-BR')}</TableCell>
-                        <TableCell className="text-right pr-6">-</TableCell>
+                  {pieDataCustos.map((item, index) => (
+                    <TableRow key={index} className="hover:bg-stone-50">
+                      <TableCell className="pl-6 font-medium text-stone-700">{item.name}</TableCell>
+                      <TableCell className="text-right font-bold text-stone-800">R$ {item.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</TableCell>
+                      <TableCell className="text-right pr-6 text-stone-500">{custoTotal > 0 ? ((item.value / custoTotal) * 100).toFixed(1) : 0}%</TableCell>
                     </TableRow>
-                )}
+                  ))}
                 </TableBody>
               </Table>
-          </Card>
+            </Card>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="produtividade" className="space-y-6">
+          {/* Layout Assimétrico: Gráfico KPI (Topo) + Tabela Detalhada (Abaixo) */}
+          <div className="grid grid-cols-1 gap-6">
+              <Card className="border-stone-100 rounded-[2rem] shadow-sm">
+                <CardHeader><CardTitle className="text-lg">KPI: Lucro por Hectare</CardTitle></CardHeader>
+                <CardContent>
+                  <div className="h-80">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={barDataLucroHa} margin={{top: 20, right: 30, left: 20, bottom: 5}}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+                          <XAxis dataKey="name" axisLine={false} tickLine={false} />
+                          <YAxis tickFormatter={(v) => `R$${v/1000}k`} axisLine={false} tickLine={false} />
+                          <Tooltip 
+                            cursor={{fill: '#f3f4f6'}}
+                            formatter={(v) => [`R$ ${v.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`, 'Lucro/ha']}
+                          />
+                          <Bar dataKey="Lucro/ha" radius={[6, 6, 0, 0]}>
+                            {barDataLucroHa.map((entry, index) => (
+                                <Cell key={`cell-${index}`} fill={entry['Lucro/ha'] >= 0 ? '#10b981' : '#ef4444'} />
+                            ))}
+                          </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="border-stone-100 rounded-[2rem] shadow-sm overflow-hidden">
+                  <CardHeader><CardTitle>Demonstrativo de Resultados por Talhão</CardTitle></CardHeader>
+                  <Table>
+                    <TableHeader className="bg-stone-50">
+                      <TableRow>
+                        <TableHead className="pl-6">Talhão</TableHead>
+                        <TableHead className="text-right">Área</TableHead>
+                        <TableHead className="text-right">Receita</TableHead>
+                        <TableHead className="text-right">Custo Insumos</TableHead>
+                        <TableHead className="text-right text-purple-600">Rateio Geral</TableHead>
+                        <TableHead className="text-right font-bold">Lucro/Prejuízo</TableHead>
+                        <TableHead className="text-right pr-6">Lucro/Ha</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {talhoesComDados.map((t) => (
+                      <TableRow key={t.id} className="hover:bg-stone-50">
+                        <TableCell className="pl-6 font-medium">{t.nome}</TableCell>
+                        <TableCell className="text-right">{t.area} ha</TableCell>
+                        <TableCell className="text-right text-emerald-600 font-medium">R$ {t.receita.toLocaleString('pt-BR')}</TableCell>
+                        <TableCell className="text-right text-stone-600">R$ {t.custoInsumos.toLocaleString('pt-BR')}</TableCell>
+                        <TableCell className="text-right text-purple-600">R$ {t.custoRateio.toLocaleString('pt-BR', {maximumFractionDigits: 2})}</TableCell>
+                        <TableCell className={`text-right font-bold ${t.lucro >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>R$ {t.lucro.toLocaleString('pt-BR')}</TableCell>
+                        <TableCell className={`text-right pr-6 font-bold ${t.lucroPorHa >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                            R$ {t.lucroPorHa.toLocaleString('pt-BR')}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    
+                    {talhoesComDados.length > 0 && (
+                        <TableRow className="bg-stone-100 font-bold border-t-2 border-stone-200">
+                            <TableCell className="pl-6">TOTAL GERAL</TableCell>
+                            <TableCell className="text-right">{totaisGeraisProdutividade.area.toFixed(2)} ha</TableCell>
+                            <TableCell className="text-right text-emerald-700">R$ {totaisGeraisProdutividade.receita.toLocaleString('pt-BR')}</TableCell>
+                            <TableCell className="text-right text-stone-700">R$ {totaisGeraisProdutividade.custoInsumos.toLocaleString('pt-BR')}</TableCell>
+                            <TableCell className="text-right text-purple-700">R$ {totaisGeraisProdutividade.custoRateio.toLocaleString('pt-BR')}</TableCell>
+                            <TableCell className={`text-right ${totaisGeraisProdutividade.lucro >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>R$ {totaisGeraisProdutividade.lucro.toLocaleString('pt-BR')}</TableCell>
+                            <TableCell className="text-right pr-6">-</TableCell>
+                        </TableRow>
+                    )}
+                    </TableBody>
+                  </Table>
+              </Card>
+          </div>
         </TabsContent>
 
         <TabsContent value="evolucao">
-          <Card className="border-stone-100 rounded-2xl shadow-sm">
-            <CardHeader><CardTitle className="text-lg">Evolução Mensal (Receita vs Custos)</CardTitle></CardHeader>
+          <Card className="border-stone-100 rounded-[2rem] shadow-sm">
+            <CardHeader><CardTitle className="text-lg">Fluxo de Caixa Mensal</CardTitle></CardHeader>
             <CardContent>
-              <div className="h-80">
+              <div className="h-96">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={lineData}><CartesianGrid strokeDasharray="3 3" vertical={false}/><XAxis dataKey="mes"/><YAxis/><Tooltip formatter={(v) => `R$ ${v.toLocaleString('pt-BR')}`}/><Legend/><Line type="monotone" dataKey="receita" name="Receita" stroke="#10b981" strokeWidth={2} dot={{r: 4}}/><Line type="monotone" dataKey="custos" name="Custos" stroke="#ef4444" strokeWidth={2} dot={{r: 4}}/></LineChart>
+                  <LineChart data={lineData} margin={{top: 20, right: 30, left: 20, bottom: 5}}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+                      <XAxis dataKey="mes" axisLine={false} tickLine={false} dy={10} />
+                      <YAxis axisLine={false} tickLine={false} />
+                      <Tooltip 
+                        contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                        formatter={(v) => `R$ ${v.toLocaleString('pt-BR')}`} 
+                      />
+                      <Legend verticalAlign="top" height={36}/>
+                      <Line type="monotone" dataKey="receita" name="Receita" stroke="#10b981" strokeWidth={3} dot={{r: 4, fill: '#10b981'}} activeDot={{r: 6}} />
+                      <Line type="monotone" dataKey="custos" name="Custos" stroke="#ef4444" strokeWidth={3} dot={{r: 4, fill: '#ef4444'}} activeDot={{r: 6}} />
+                  </LineChart>
                 </ResponsiveContainer>
               </div>
             </CardContent>

@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, Edit, Trash2, Wheat, Filter, Package } from 'lucide-react';
+import { Plus, Edit, Trash2, Wheat, Filter, Package, TrendingUp, Calendar, FileText } from 'lucide-react';
 import EmptyState from '@/components/ui/EmptyState';
 import StatCard from '@/components/ui/StatCard';
 import { format } from 'date-fns';
@@ -32,10 +32,14 @@ const tiposColheitaGoiaba = [
 export default function Colheitas() {
   const [open, setOpen] = useState(false);
   const [editingColheita, setEditingColheita] = useState(null);
+  
+  // Filtros
   const [filtroTalhao, setFiltroTalhao] = useState('todos');
   const [filtroCultura, setFiltroCultura] = useState('todos');
   const [dataInicio, setDataInicio] = useState('');
   const [dataFim, setDataFim] = useState('');
+  
+  // Dialogs e Dados
   const [openTipoDialog, setOpenTipoDialog] = useState(false);
   const [novoTipoColheita, setNovoTipoColheita] = useState({ nome: '', cultura: '' });
   const [formData, setFormData] = useState({
@@ -54,21 +58,20 @@ export default function Colheitas() {
 
   const queryClient = useQueryClient();
 
+  // --- QUERIES ---
   const { data: talhoes = [] } = useQuery({
     queryKey: ['talhoes'],
     queryFn: async () => {
       const { data, error } = await supabase.from('talhoes').select('*');
-      if (error) throw error;
-      return data;
+      if (error) throw error; return data;
     }
   });
 
-  const { data: colheitas = [], isLoading } = useQuery({
+  const { data: colheitas = [] } = useQuery({
     queryKey: ['colheitas'],
     queryFn: async () => {
       const { data, error } = await supabase.from('colheitas').select('*').order('data', { ascending: false });
-      if (error) throw error;
-      return data;
+      if (error) throw error; return data;
     }
   });
 
@@ -76,16 +79,15 @@ export default function Colheitas() {
     queryKey: ['tipos-colheita'],
     queryFn: async () => {
       const { data, error } = await supabase.from('tipos_colheita').select('*');
-      if (error) throw error;
-      return data;
+      if (error) throw error; return data;
     }
   });
 
+  // --- MUTATIONS ---
   const createMutation = useMutation({
     mutationFn: async (data) => {
       const { data: result, error } = await supabase.from('colheitas').insert(data).select();
-      if (error) throw error;
-      return result;
+      if (error) throw error; return result;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['colheitas'] });
@@ -96,8 +98,7 @@ export default function Colheitas() {
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }) => {
       const { data: result, error } = await supabase.from('colheitas').update(data).eq('id', id).select();
-      if (error) throw error;
-      return result;
+      if (error) throw error; return result;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['colheitas'] });
@@ -118,8 +119,7 @@ export default function Colheitas() {
   const createTipoMutation = useMutation({
     mutationFn: async (data) => {
       const { data: result, error } = await supabase.from('tipos_colheita').insert(data).select();
-      if (error) throw error;
-      return result;
+      if (error) throw error; return result;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tipos-colheita'] });
@@ -128,19 +128,12 @@ export default function Colheitas() {
     }
   });
 
+  // --- LÓGICA ---
   const resetForm = () => {
     setFormData({
-      talhao_id: '',
-      data: format(new Date(), 'yyyy-MM-dd'),
-      cultura: '',
-      tipo_colheita: '',
-      quantidade_kg: '',
-      quantidade_caixas: '',
-      preco_unitario: '',
-      unidade_preco: 'kg',
-      custo_colheita: '',
-      unidade_custo: 'kg',
-      observacoes: ''
+      talhao_id: '', data: format(new Date(), 'yyyy-MM-dd'), cultura: '', tipo_colheita: '',
+      quantidade_kg: '', quantidade_caixas: '', preco_unitario: '', unidade_preco: 'kg',
+      custo_colheita: '', unidade_custo: 'kg', observacoes: ''
     });
     setEditingColheita(null);
     setOpen(false);
@@ -165,17 +158,13 @@ export default function Colheitas() {
   };
 
   const calcularValorTotal = () => {
-    const qtd = formData.unidade_preco === 'kg' 
-      ? parseFloat(formData.quantidade_kg) || 0
-      : parseFloat(formData.quantidade_caixas) || 0;
+    const qtd = formData.unidade_preco === 'kg' ? parseFloat(formData.quantidade_kg) || 0 : parseFloat(formData.quantidade_caixas) || 0;
     const preco = parseFloat(formData.preco_unitario) || 0;
     return qtd * preco;
   };
 
   const calcularCustoTotal = () => {
-    const qtd = formData.unidade_custo === 'kg' 
-      ? parseFloat(formData.quantidade_kg) || 0
-      : parseFloat(formData.quantidade_caixas) || 0;
+    const qtd = formData.unidade_custo === 'kg' ? parseFloat(formData.quantidade_kg) || 0 : parseFloat(formData.quantidade_caixas) || 0;
     const custo = parseFloat(formData.custo_colheita) || 0;
     return qtd * custo;
   };
@@ -213,20 +202,13 @@ export default function Colheitas() {
     }
   };
 
-  const tiposColheitaPadrao = formData.cultura === 'manga' ? tiposColheitaManga : 
-                               formData.cultura === 'goiaba' ? tiposColheitaGoiaba : [];
-  
+  const tiposColheitaPadrao = formData.cultura === 'manga' ? tiposColheitaManga : formData.cultura === 'goiaba' ? tiposColheitaGoiaba : [];
   const tiposCustomizadosFiltrados = tiposCustomizados.filter(t => t.cultura === formData.cultura);
-  
-  const tiposColheita = [
-    ...tiposColheitaPadrao,
-    ...tiposCustomizadosFiltrados.map(t => ({ value: t.nome, label: t.nome }))
-  ];
+  const tiposColheita = [ ...tiposColheitaPadrao, ...tiposCustomizadosFiltrados.map(t => ({ value: t.nome, label: t.nome })) ];
 
   const colheitasFiltradas = colheitas.filter(c => {
     if (filtroTalhao !== 'todos' && c.talhao_id !== filtroTalhao) return false;
     if (filtroCultura !== 'todos' && c.cultura !== filtroCultura) return false;
-    
     if (dataInicio && c.data) {
       const dataColheita = new Date(c.data);
       const dataInicioDate = new Date(dataInicio);
@@ -237,7 +219,6 @@ export default function Colheitas() {
       const dataFimDate = new Date(dataFim);
       if (dataColheita > dataFimDate) return false;
     }
-    
     return true;
   });
 
@@ -257,452 +238,247 @@ export default function Colheitas() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      {/* Header Padronizado */}
+      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 bg-white p-4 rounded-[1.5rem] border border-stone-100 shadow-sm">
         <div>
-          <h1 className="text-2xl font-bold text-stone-900">Colheitas</h1>
-          <p className="text-stone-500">Registro e acompanhamento de colheitas</p>
+          <h1 className="text-2xl font-bold text-stone-900 tracking-tight">Colheitas</h1>
+          <p className="text-stone-500 font-medium">Registro e histórico de produção</p>
         </div>
+        
         <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <Button className="bg-amber-600 hover:bg-amber-700">
-              <Plus className="w-4 h-4 mr-2" />
-              Nova Colheita
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>
-                {editingColheita ? 'Editar Colheita' : 'Nova Colheita'}
-              </DialogTitle>
-              <DialogDescription className="sr-only">
-                Registre os dados de produção colhida por talhão e cultura.
-              </DialogDescription>
-            </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Talhão</Label>
-                  <Select
-                    value={formData.talhao_id || ""}
-                    onValueChange={(value) => setFormData({ ...formData, talhao_id: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {talhoes.map((talhao) => (
-                        <SelectItem key={talhao.id} value={talhao.id}>
-                          {talhao.nome}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Data</Label>
-                  <Input
-                    type="date"
-                    value={formData.data || ""}
-                    onChange={(e) => setFormData({ ...formData, data: e.target.value })}
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Cultura</Label>
-                  <Select
-                    value={formData.cultura || ""}
-                    onValueChange={(value) => setFormData({ ...formData, cultura: value, tipo_colheita: '' })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="manga">Manga</SelectItem>
-                      <SelectItem value="goiaba">Goiaba</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label>Tipo de Colheita</Label>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setOpenTipoDialog(true)}
-                      className="h-7 text-xs"
-                      disabled={!formData.cultura}
-                    >
-                      <Plus className="w-3 h-3 mr-1" />
-                      Novo Tipo
-                    </Button>
-                  </div>
-                  <Select
-                    value={formData.tipo_colheita || ""}
-                    onValueChange={(value) => setFormData({ ...formData, tipo_colheita: value })}
-                    disabled={!formData.cultura}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {tiposColheita.map((tipo) => (
-                        <SelectItem key={tipo.value} value={tipo.value}>
-                          {tipo.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Quantidade (kg)</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    value={formData.quantidade_kg || ""}
-                    onChange={(e) => setFormData({ ...formData, quantidade_kg: e.target.value })}
-                    placeholder="Ex: 1500"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Quantidade (caixas)</Label>
-                  <Input
-                    type="number"
-                    value={formData.quantidade_caixas || ""}
-                    onChange={(e) => setFormData({ ...formData, quantidade_caixas: e.target.value })}
-                    placeholder="Ex: 100"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label>Preço Unitário</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    value={formData.preco_unitario || ""}
-                    onChange={(e) => setFormData({ ...formData, preco_unitario: e.target.value })}
-                    placeholder="R$"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Unidade</Label>
-                  <Select
-                    value={formData.unidade_preco || ""}
-                    onValueChange={(value) => setFormData({ ...formData, unidade_preco: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="kg">Por kg</SelectItem>
-                      <SelectItem value="caixa">Por caixa</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Receita Total</Label>
-                  <div className="h-10 px-3 py-2 bg-emerald-50 rounded-md flex items-center font-medium text-emerald-700">
-                    R$ {calcularValorTotal().toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                  </div>
-                </div>
-              </div>
-
-              <div className="p-4 bg-stone-50 rounded-xl">
-                <Label className="text-base font-medium mb-3 block">Custo da Colheita (Terceirizado)</Label>
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="space-y-2">
-                    <Label>Custo Unit.</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={formData.custo_colheita || ""}
-                      onChange={(e) => setFormData({ ...formData, custo_colheita: e.target.value })}
-                      placeholder="R$"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Unidade</Label>
-                    <Select
-                      value={formData.unidade_custo || ""}
-                      onValueChange={(value) => setFormData({ ...formData, unidade_custo: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="kg">Por kg</SelectItem>
-                        <SelectItem value="caixa">Por caixa</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Custo Total</Label>
-                    <div className="h-10 px-3 py-2 bg-red-50 rounded-md flex items-center font-medium text-red-700">
-                      R$ {calcularCustoTotal().toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+            <DialogTrigger asChild>
+                <Button className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl h-10 px-5 shadow-lg shadow-emerald-100 transition-all active:scale-95 ml-2">
+                <Plus className="w-4 h-4 mr-2" /> Registrar Colheita
+                </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto rounded-[2rem]">
+                <DialogHeader>
+                <DialogTitle>{editingColheita ? 'Editar Colheita' : 'Nova Colheita'}</DialogTitle>
+                <DialogDescription>Dados de produção colhida.</DialogDescription>
+                </DialogHeader>
+                <form onSubmit={handleSubmit} className="space-y-4 pt-2">
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                            <Label>Talhão</Label>
+                            <Select value={formData.talhao_id || ""} onValueChange={(value) => setFormData({ ...formData, talhao_id: value })}>
+                                <SelectTrigger className="rounded-xl"><SelectValue placeholder="Selecione" /></SelectTrigger>
+                                <SelectContent>
+                                    {talhoes.map((talhao) => (<SelectItem key={talhao.id} value={talhao.id}>{talhao.nome}</SelectItem>))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Data</Label>
+                            <Input type="date" value={formData.data || ""} onChange={(e) => setFormData({ ...formData, data: e.target.value })} required className="rounded-xl" />
+                        </div>
                     </div>
-                  </div>
-                </div>
-              </div>
 
-              <div className="space-y-2">
-                <Label>Observações</Label>
-                <Textarea
-                  value={formData.observacoes || ""}
-                  onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })}
-                  placeholder="Observações sobre a colheita..."
-                  rows={2}
-                />
-              </div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                            <Label>Cultura</Label>
+                            <Select value={formData.cultura || ""} onValueChange={(value) => setFormData({ ...formData, cultura: value, tipo_colheita: '' })}>
+                                <SelectTrigger className="rounded-xl"><SelectValue placeholder="Selecione" /></SelectTrigger>
+                                <SelectContent><SelectItem value="manga">Manga</SelectItem><SelectItem value="goiaba">Goiaba</SelectItem></SelectContent>
+                            </Select>
+                        </div>
+                        <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                                <Label>Tipo</Label>
+                                <Button type="button" variant="ghost" size="sm" onClick={() => setOpenTipoDialog(true)} className="h-6 text-xs px-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg" disabled={!formData.cultura}>
+                                    <Plus className="w-3 h-3 mr-1" /> Novo
+                                </Button>
+                            </div>
+                            <Select value={formData.tipo_colheita || ""} onValueChange={(value) => setFormData({ ...formData, tipo_colheita: value })} disabled={!formData.cultura}>
+                                <SelectTrigger className="rounded-xl"><SelectValue placeholder="Selecione" /></SelectTrigger>
+                                <SelectContent>{tiposColheita.map((tipo) => (<SelectItem key={tipo.value} value={tipo.value}>{tipo.label}</SelectItem>))}</SelectContent>
+                            </Select>
+                        </div>
+                    </div>
 
-              <div className="flex justify-end gap-3 pt-4">
-                <Button type="button" variant="outline" onClick={resetForm}>
-                  Cancelar
-                </Button>
-                <Button 
-                  type="submit" 
-                  className="bg-amber-600 hover:bg-amber-700"
-                  disabled={createMutation.isPending || updateMutation.isPending}
-                >
-                  {editingColheita ? 'Salvar' : 'Registrar'}
-                </Button>
-              </div>
-            </form>
-          </DialogContent>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                            <Label>Qtd (kg)</Label>
+                            <Input type="number" step="0.01" value={formData.quantidade_kg || ""} onChange={(e) => setFormData({ ...formData, quantidade_kg: e.target.value })} placeholder="Ex: 1500" className="rounded-xl" />
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Qtd (caixas)</Label>
+                            <Input type="number" value={formData.quantidade_caixas || ""} onChange={(e) => setFormData({ ...formData, quantidade_caixas: e.target.value })} placeholder="Ex: 100" className="rounded-xl" />
+                        </div>
+                    </div>
+
+                    <div className="p-4 bg-stone-50 rounded-xl space-y-3 border border-stone-100">
+                        <Label className="text-stone-700 font-medium">Dados Financeiros</Label>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <Label className="text-xs text-stone-500">Preço Unit.</Label>
+                                <Input type="number" step="0.01" value={formData.preco_unitario || ""} onChange={(e) => setFormData({ ...formData, preco_unitario: e.target.value })} placeholder="R$" className="rounded-xl bg-white" />
+                            </div>
+                            <div className="space-y-2">
+                                <Label className="text-xs text-stone-500">Unidade</Label>
+                                <Select value={formData.unidade_preco || ""} onValueChange={(value) => setFormData({ ...formData, unidade_preco: value })}>
+                                    <SelectTrigger className="rounded-xl bg-white"><SelectValue /></SelectTrigger>
+                                    <SelectContent><SelectItem value="kg">Por kg</SelectItem><SelectItem value="caixa">Por caixa</SelectItem></SelectContent>
+                                </Select>
+                            </div>
+                        </div>
+                        <div className="flex items-center justify-between pt-1">
+                            <span className="text-sm font-medium text-stone-600">Receita Total:</span>
+                            <span className="text-lg font-bold text-emerald-600">R$ {calcularValorTotal().toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                        </div>
+                    </div>
+
+                    <div className="p-4 bg-red-50/50 rounded-xl space-y-3 border border-red-100">
+                        <Label className="text-red-800 font-medium">Custo da Colheita (Terceirizado)</Label>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <Label className="text-xs text-red-700">Custo Unit.</Label>
+                                <Input type="number" step="0.01" value={formData.custo_colheita || ""} onChange={(e) => setFormData({ ...formData, custo_colheita: e.target.value })} placeholder="R$" className="rounded-xl bg-white border-red-200" />
+                            </div>
+                            <div className="space-y-2">
+                                <Label className="text-xs text-red-700">Unidade</Label>
+                                <Select value={formData.unidade_custo || ""} onValueChange={(value) => setFormData({ ...formData, unidade_custo: value })}>
+                                    <SelectTrigger className="rounded-xl bg-white border-red-200"><SelectValue /></SelectTrigger>
+                                    <SelectContent><SelectItem value="kg">Por kg</SelectItem><SelectItem value="caixa">Por caixa</SelectItem></SelectContent>
+                                </Select>
+                            </div>
+                        </div>
+                        <div className="flex items-center justify-between pt-1">
+                            <span className="text-sm font-medium text-red-800">Custo Total:</span>
+                            <span className="text-lg font-bold text-red-600">R$ {calcularCustoTotal().toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                        </div>
+                    </div>
+
+                    <div className="space-y-2">
+                        <Label>Observações</Label>
+                        <Textarea value={formData.observacoes || ""} onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })} placeholder="Detalhes..." rows={2} className="rounded-xl" />
+                    </div>
+
+                    <div className="flex justify-end gap-3 pt-2">
+                        <Button type="button" variant="outline" onClick={resetForm} className="rounded-xl border-stone-200">Cancelar</Button>
+                        <Button type="submit" className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl px-6" disabled={createMutation.isPending || updateMutation.isPending}>
+                            {editingColheita ? 'Salvar' : 'Registrar'}
+                        </Button>
+                    </div>
+                </form>
+            </DialogContent>
         </Dialog>
 
+        {/* Dialog Novo Tipo */}
         <Dialog open={openTipoDialog} onOpenChange={setOpenTipoDialog}>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle>Criar Novo Tipo de Colheita</DialogTitle>
-              <DialogDescription className="sr-only">
-                Adicione categorias personalizadas para classificação da colheita.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label>Cultura</Label>
-                <Select
-                  value={novoTipoColheita.cultura || ""}
-                  onValueChange={(value) => setNovoTipoColheita({ ...novoTipoColheita, cultura: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="manga">Manga</SelectItem>
-                    <SelectItem value="goiaba">Goiaba</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Nome do Tipo</Label>
-                <Input
-                  value={novoTipoColheita.nome || ""}
-                  onChange={(e) => setNovoTipoColheita({ ...novoTipoColheita, nome: e.target.value })}
-                  placeholder="Ex: Premium, Segunda, etc."
-                />
-              </div>
-              <div className="flex justify-end gap-3">
-                <Button variant="outline" onClick={() => setOpenTipoDialog(false)}>
-                  Cancelar
-                </Button>
-                <Button 
-                  onClick={() => createTipoMutation.mutate(novoTipoColheita)}
-                  disabled={!novoTipoColheita.nome || !novoTipoColheita.cultura || createTipoMutation.isPending}
-                >
-                  Criar
-                </Button>
-              </div>
-            </div>
-          </DialogContent>
+            <DialogContent className="sm:max-w-md rounded-[2rem]">
+                <DialogHeader>
+                    <DialogTitle>Novo Tipo de Colheita</DialogTitle>
+                    <DialogDescription className="sr-only">Cadastrar tipo</DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4">
+                    <div className="space-y-2">
+                        <Label>Cultura</Label>
+                        <Select value={novoTipoColheita.cultura || ""} onValueChange={(value) => setNovoTipoColheita({ ...novoTipoColheita, cultura: value })}>
+                            <SelectTrigger className="rounded-xl"><SelectValue placeholder="Selecione" /></SelectTrigger>
+                            <SelectContent><SelectItem value="manga">Manga</SelectItem><SelectItem value="goiaba">Goiaba</SelectItem></SelectContent>
+                        </Select>
+                    </div>
+                    <div className="space-y-2">
+                        <Label>Nome do Tipo</Label>
+                        <Input value={novoTipoColheita.nome || ""} onChange={(e) => setNovoTipoColheita({ ...novoTipoColheita, nome: e.target.value })} placeholder="Ex: Premium" className="rounded-xl" />
+                    </div>
+                    <div className="flex justify-end gap-3 pt-2">
+                        <Button variant="outline" onClick={() => setOpenTipoDialog(false)} className="rounded-xl">Cancelar</Button>
+                        <Button onClick={() => createTipoMutation.mutate(novoTipoColheita)} disabled={!novoTipoColheita.nome || !novoTipoColheita.cultura || createTipoMutation.isPending} className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl">Criar</Button>
+                    </div>
+                </div>
+            </DialogContent>
         </Dialog>
       </div>
 
+      {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard
-          title="Total Colhido (Kg)"
-          value={`${(totalKg / 1000).toFixed(1)} ton`}
-          icon={Wheat}
-          iconBg="bg-amber-50"
-          iconColor="text-amber-600"
-        />
-         <StatCard
-          title="Total Colhido (Cx)"
-          value={`${totalCaixas.toLocaleString('pt-BR')} cx`}
-          icon={Package}
-          iconBg="bg-blue-50"
-          iconColor="text-blue-600"
-        />
-        <StatCard
-          title="Receita Total"
-          value={`R$ ${totalReceita.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
-          iconBg="bg-emerald-50"
-          iconColor="text-emerald-600"
-        />
-         <StatCard
-          title="Registros"
-          value={colheitasFiltradas.length}
-          iconBg="bg-stone-100"
-          iconColor="text-stone-600"
-        />
+        <StatCard title="Total Colhido (Kg)" value={`${(totalKg / 1000).toFixed(1)} ton`} icon={Wheat} color="text-amber-600" />
+        <StatCard title="Total Colhido (Cx)" value={`${totalCaixas.toLocaleString('pt-BR')} cx`} icon={Package} color="text-blue-600" />
+        <StatCard title="Receita Total" value={`R$ ${totalReceita.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} icon={TrendingUp} color="text-emerald-600" />
+        <StatCard title="Registros" value={colheitasFiltradas.length} icon={FileText} color="text-stone-600" />
       </div>
 
-      <Card className="border-stone-100">
-        <CardContent className="pt-4">
-          <div className="flex flex-wrap items-center gap-4">
-            <div className="flex items-center gap-2">
-              <Filter className="w-4 h-4 text-stone-400" />
-              <span className="text-sm font-medium text-stone-600">Filtros:</span>
+      {/* Filtros e Tabela */}
+      <Card className="border-stone-100 rounded-[2rem] shadow-sm">
+        <CardContent className="pt-6 pb-6">
+            <div className="flex flex-wrap items-center gap-4">
+                <div className="flex items-center gap-2 text-stone-500">
+                    <Filter className="w-4 h-4" />
+                    <span className="text-sm font-bold uppercase tracking-wide">Filtros:</span>
+                </div>
+                <Select value={filtroTalhao || "todos"} onValueChange={setFiltroTalhao}>
+                    <SelectTrigger className="w-40 rounded-xl bg-stone-50 border-stone-200"><SelectValue placeholder="Talhão" /></SelectTrigger>
+                    <SelectContent>{talhoes.map((t) => (<SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>))}<SelectItem value="todos">Todos Talhões</SelectItem></SelectContent>
+                </Select>
+                <Select value={filtroCultura || "todos"} onValueChange={setFiltroCultura}>
+                    <SelectTrigger className="w-40 rounded-xl bg-stone-50 border-stone-200"><SelectValue placeholder="Cultura" /></SelectTrigger>
+                    <SelectContent><SelectItem value="todos">Todas Culturas</SelectItem><SelectItem value="manga">Manga</SelectItem><SelectItem value="goiaba">Goiaba</SelectItem></SelectContent>
+                </Select>
+                <div className="flex items-center gap-2 bg-stone-50 p-1 px-3 rounded-xl border border-stone-200">
+                    <Calendar className="w-4 h-4 text-stone-400" />
+                    <Input type="date" value={dataInicio || ""} onChange={(e) => setDataInicio(e.target.value)} min="2020-01-01" max="2040-12-31" className="w-32 border-none bg-transparent h-8 p-0 text-sm" />
+                    <span className="text-stone-400">-</span>
+                    <Input type="date" value={dataFim || ""} onChange={(e) => setDataFim(e.target.value)} min="2020-01-01" max="2040-12-31" className="w-32 border-none bg-transparent h-8 p-0 text-sm" />
+                </div>
             </div>
-            <Select value={filtroTalhao || "todos"} onValueChange={setFiltroTalhao}>
-              <SelectTrigger className="w-40">
-                <SelectValue placeholder="Talhão" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todos">Todos Talhões</SelectItem>
-                {talhoes.map((t) => (
-                  <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={filtroCultura || "todos"} onValueChange={setFiltroCultura}>
-              <SelectTrigger className="w-40">
-                <SelectValue placeholder="Cultura" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todos">Todas Culturas</SelectItem>
-                <SelectItem value="manga">Manga</SelectItem>
-                <SelectItem value="goiaba">Goiaba</SelectItem>
-              </SelectContent>
-            </Select>
-            <div className="flex items-center gap-2">
-              <Label className="text-sm text-stone-600">De:</Label>
-              <Input
-                type="date"
-                value={dataInicio || ""}
-                onChange={(e) => setDataInicio(e.target.value)}
-                min="2020-01-01"
-                max="2040-12-31"
-                className="w-36"
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <Label className="text-sm text-stone-600">Até:</Label>
-              <Input
-                type="date"
-                value={dataFim || ""}
-                onChange={(e) => setDataFim(e.target.value)}
-                min="2020-01-01"
-                max="2040-12-31"
-                className="w-36"
-              />
-            </div>
-          </div>
         </CardContent>
       </Card>
 
       {colheitasFiltradas.length === 0 ? (
-        <EmptyState
-          icon={Wheat}
-          title="Nenhuma colheita registrada"
-          description="Registre suas colheitas para acompanhar a produção e o faturamento."
-          actionLabel="Registrar Colheita"
-          onAction={() => setOpen(true)}
-        />
+        <EmptyState icon={Wheat} title="Nenhuma colheita registrada" description="Registre suas colheitas para acompanhar a produção." actionLabel="Registrar" onAction={() => setOpen(true)} />
       ) : (
-        <Card className="border-stone-100 overflow-hidden">
-          <div className="overflow-x-auto">
+        <Card className="border-stone-100 rounded-[2rem] shadow-sm overflow-hidden">
+            <div className="overflow-x-auto">
             <Table>
-              <TableHeader>
-                <TableRow className="bg-stone-50">
-                  <TableHead>Data</TableHead>
-                  <TableHead>Talhão</TableHead>
-                  <TableHead>Cultura</TableHead>
-                  <TableHead>Tipo</TableHead>
-                  <TableHead className="text-right">Quantidade</TableHead>
-                  <TableHead className="text-right">Venda Total</TableHead>
-                  <TableHead className="w-24"></TableHead>
+                <TableHeader className="bg-stone-50">
+                <TableRow>
+                    <TableHead className="pl-6">Data</TableHead>
+                    <TableHead>Talhão</TableHead>
+                    <TableHead>Cultura</TableHead>
+                    <TableHead>Tipo</TableHead>
+                    <TableHead className="text-right">Quantidade</TableHead>
+                    <TableHead className="text-right">Venda Total</TableHead>
+                    <TableHead className="text-right pr-6 w-[120px]">Ações</TableHead>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
+                </TableHeader>
+                <TableBody>
                 {colheitasFiltradas.map((colheita) => (
-                  <TableRow key={colheita.id} className="hover:bg-stone-50">
-                    <TableCell>
-                      {colheita.data ? format(new Date(colheita.data + 'T12:00:00'), 'dd/MM/yyyy') : '-'}
-                    </TableCell>
-                    <TableCell className="font-medium">{getTalhaoNome(colheita.talhao_id)}</TableCell>
-                    <TableCell>
-                      <Badge className={
-                        colheita.cultura === 'manga' ? 'bg-orange-100 text-orange-700' : 'bg-pink-100 text-pink-700'
-                      }>
-                        {colheita.cultura === 'manga' ? (
-                            <span className="flex items-center gap-1">🥭 Manga</span>
-                        ) : (
-                            <span className="flex items-center gap-1">🍈 Goiaba</span>
-                        )}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="capitalize">{tipoColheitaLabel(colheita.tipo_colheita)}</TableCell>
-                    
-                    <TableCell className="text-right">
-                        <div className="flex flex-col items-end">
-                            {colheita.quantidade_kg > 0 && (
-                                <span className="font-medium text-stone-700">{colheita.quantidade_kg.toLocaleString('pt-BR')} kg</span>
-                            )}
-                            {colheita.quantidade_caixas > 0 && (
-                                <span className="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full mt-0.5">
-                                    {colheita.quantidade_caixas.toLocaleString('pt-BR')} cx
-                                </span>
-                            )}
-                            {!colheita.quantidade_kg && !colheita.quantidade_caixas && (
-                                <span className="text-stone-400">-</span>
-                            )}
-                        </div>
-                    </TableCell>
-
-                    <TableCell className="text-right">
-                        <div className="flex flex-col items-end">
-                            <span className="font-bold text-emerald-600">
-                                R$ {colheita.valor_total?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                            </span>
-                            <span className="text-xs text-stone-400">
-                                (R$ {colheita.preco_unitario?.toFixed(2)}/{colheita.unidade_preco})
-                            </span>
-                        </div>
-                    </TableCell>
-                    
-                    <TableCell>
-                      <div className="flex items-center justify-end gap-1">
-                        <Button 
-                          variant="ghost" 
-                          size="sm"
-                          onClick={() => handleEdit(colheita)}
-                        >
-                          <Edit className="w-4 h-4" />
-                        </Button>
-                        <Button 
-                          variant="ghost" 
-                          size="sm"
-                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                          onClick={() => deleteMutation.mutate(colheita.id)}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
+                    <TableRow key={colheita.id} className="hover:bg-stone-50 transition-colors">
+                        <TableCell className="pl-6 font-medium text-stone-600">
+                            {colheita.data ? format(new Date(colheita.data + 'T12:00:00'), 'dd/MM/yyyy') : '-'}
+                        </TableCell>
+                        <TableCell className="font-bold text-stone-700">{getTalhaoNome(colheita.talhao_id)}</TableCell>
+                        <TableCell>
+                            <Badge className={colheita.cultura === 'manga' ? 'bg-orange-100 text-orange-800 border-orange-200 border' : 'bg-pink-100 text-pink-800 border-pink-200 border'}>
+                                {colheita.cultura === 'manga' ? '🥭 Manga' : '🍈 Goiaba'}
+                            </Badge>
+                        </TableCell>
+                        <TableCell className="capitalize text-stone-600">{tipoColheitaLabel(colheita.tipo_colheita)}</TableCell>
+                        <TableCell className="text-right">
+                            <div className="flex flex-col items-end">
+                                {colheita.quantidade_kg > 0 && <span className="font-medium text-stone-700">{colheita.quantidade_kg.toLocaleString('pt-BR')} kg</span>}
+                                {colheita.quantidade_caixas > 0 && <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md mt-0.5">{colheita.quantidade_caixas.toLocaleString('pt-BR')} cx</span>}
+                                {!colheita.quantidade_kg && !colheita.quantidade_caixas && <span className="text-stone-400">-</span>}
+                            </div>
+                        </TableCell>
+                        <TableCell className="text-right">
+                            <div className="flex flex-col items-end">
+                                <span className="font-bold text-emerald-600">R$ {colheita.valor_total?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                                <span className="text-[10px] text-stone-400 font-medium mt-0.5">R$ {colheita.preco_unitario?.toFixed(2)}/{colheita.unidade_preco}</span>
+                            </div>
+                        </TableCell>
+                        <TableCell className="text-right pr-6">
+                            <div className="flex justify-end gap-1">
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-stone-400 hover:text-stone-700 hover:bg-stone-100 rounded-lg" onClick={() => handleEdit(colheita)}><Edit className="w-4 h-4" /></Button>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-red-300 hover:text-red-500 hover:bg-red-50 rounded-lg" onClick={() => deleteMutation.mutate(colheita.id)}><Trash2 className="w-4 h-4" /></Button>
+                            </div>
+                        </TableCell>
+                    </TableRow>
                 ))}
-              </TableBody>
+                </TableBody>
             </Table>
-          </div>
+            </div>
         </Card>
       )}
     </div>
