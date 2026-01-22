@@ -46,7 +46,7 @@ export default function Financeiro({ showMessage }) {
   const [filtroCategoria, setFiltroCategoria] = useState('todos');
   
   // ESTADOS PARA FILTRO DE MÊS/ANO
-  const [tipoFiltroData, setTipoFiltroData] = useState('geral'); // 'geral' ou 'mensal'
+  const [tipoFiltroData, setTipoFiltroData] = useState('geral'); 
   const [filtroMes, setFiltroMes] = useState(format(new Date(), 'MM'));
   const [filtroAno, setFiltroAno] = useState(format(new Date(), 'yyyy'));
 
@@ -83,33 +83,29 @@ export default function Financeiro({ showMessage }) {
     }
   });
 
-  // GERA LISTA DE ANOS DISPONÍVEIS ATÉ 2030
   const anosDisponiveis = useMemo(() => {
     const anoAtual = new Date().getFullYear();
     const anos = new Set();
-
-    // Adiciona range do ano atual até 2030
     for (let i = anoAtual; i <= 2030; i++) {
         anos.add(i);
     }
-
-    // Adiciona também anos passados que existam nos dados (para não perder histórico)
     custosBrutos.forEach(c => {
         if (c.data) anos.add(parseInt(c.data.split('-')[0]));
     });
-
-    return Array.from(anos).sort((a, b) => b - a); // Ordena decrescente (2030 -> 2025)
+    return Array.from(anos).sort((a, b) => b - a); 
   }, [custosBrutos]);
 
+  // CORREÇÃO: Leitura limpa dos dados, priorizando as colunas reais do banco
   const custos = useMemo(() => {
     return custosBrutos.map(c => {
-      let status = c.status_pagamento || c.status;
+      // Prioriza a coluna real. Se não existir, tenta ler da observação (legado)
+      let status = c.status_pagamento;
       let tipo = c.tipo_lancamento;
       
+      // Fallback para dados antigos (compatibilidade)
       if (!status && c.observacoes) {
         if (c.observacoes.includes('[S:PG]')) status = 'pago';
         else if (c.observacoes.includes('[S:PD]')) status = 'pendente';
-        else status = 'pago';
       }
       
       if (!tipo && c.observacoes) {
@@ -117,10 +113,16 @@ export default function Financeiro({ showMessage }) {
         else tipo = 'despesa';
       }
 
+      // Limpa as tags antigas da visualização
       let obsLimpa = c.observacoes || '';
       obsLimpa = obsLimpa.replace('[S:PG]', '').replace('[S:PD]', '').replace('[T:REC]', '').replace('[T:DESP]', '').trim();
 
-      return { ...c, status_pagamento: status || 'pago', tipo_lancamento: tipo || 'despesa', observacoes_exibicao: obsLimpa };
+      return { 
+          ...c, 
+          status_pagamento: status || 'pendente', // Default seguro
+          tipo_lancamento: tipo || 'despesa', 
+          observacoes_exibicao: obsLimpa 
+      };
     });
   }, [custosBrutos]);
 
@@ -135,6 +137,7 @@ export default function Financeiro({ showMessage }) {
 
   const saveMutation = useMutation({
     mutationFn: async (data) => {
+      // Limpa campos undefined
       const cleanData = Object.fromEntries(
         Object.entries(data).filter(([_, v]) => v !== undefined)
       );
@@ -187,8 +190,8 @@ export default function Financeiro({ showMessage }) {
       talhao_id: custo.talhao_id || '',
       valor: custo.valor || '',
       data: custo.data || '',
-      status_pagamento: custo.status_pagamento || 'pago',
-      tipo_lancamento: custo.tipo_lancamento || 'despesa',
+      status_pagamento: custo.status_pagamento || 'pago', // Usa o valor real
+      tipo_lancamento: custo.tipo_lancamento || 'despesa', // Usa o valor real
       observacoes: custo.observacoes_exibicao || ''
     });
     setOpen(true);
@@ -204,17 +207,17 @@ export default function Financeiro({ showMessage }) {
     if (!dataProcessada) {
         dataProcessada = new Date().toISOString().split('T')[0];
     }
-    const tagStatus = formData.status_pagamento === 'pago' ? '[S:PG]' : '[S:PD]';
-    const tagTipo = formData.tipo_lancamento === 'receita' ? '[T:REC]' : '[T:DESP]';
-    const obsFinal = `${formData.observacoes || ''} ${tagStatus} ${tagTipo}`.trim();
 
+    // CORREÇÃO: Envia status e tipo diretamente para as colunas, sem tags na observação
     const dataToSave = {
       descricao: formData.descricao,
       categoria: formData.categoria,
       talhao_id: talhaoIdProcessado,
       valor: parseFloat(formData.valor) || 0,
       data: dataProcessada,
-      observacoes: obsFinal
+      observacoes: formData.observacoes, // Salva observação limpa
+      status_pagamento: formData.status_pagamento, // Salva na coluna correta
+      tipo_lancamento: formData.tipo_lancamento    // Salva na coluna correta
     };
     
     saveMutation.mutate(dataToSave);
@@ -224,7 +227,6 @@ export default function Financeiro({ showMessage }) {
     if (filtroTalhao !== 'todos' && c.talhao_id !== filtroTalhao) return false;
     if (filtroCategoria !== 'todos' && c.categoria !== filtroCategoria) return false;
     
-    // Filtro de Mês/Ano Separado
     if (tipoFiltroData === 'mensal') {
         const prefixo = `${filtroAno}-${filtroMes}`;
         return c.data.startsWith(prefixo); 
@@ -241,7 +243,6 @@ export default function Financeiro({ showMessage }) {
       return true;
   });
 
-  // --- LÓGICA DE AGRUPAMENTO VISUAL ---
   const listaVisual = useMemo(() => {
     const agrupados = [];
     const mapMeses = {};
@@ -279,7 +280,6 @@ export default function Financeiro({ showMessage }) {
     setExpandedGroups(prev => ({ ...prev, [groupId]: !prev[groupId] }));
   };
 
-  // --- CÁLCULOS TOTAIS ---
   const totalDespesasPagas = custosFiltrados
     .filter(c => c.tipo_lancamento === 'despesa' && c.status_pagamento === 'pago')
     .reduce((acc, c) => acc + (c.valor || 0), 0);
@@ -314,10 +314,9 @@ export default function Financeiro({ showMessage }) {
           <p className="text-stone-500">Gestão de fluxo de caixa e compromissos</p>
         </div>
         
-        {/* BARRA DE FERRAMENTAS E FILTROS */}
+        {/* BARRA DE FERRAMENTAS */}
         <div className="flex flex-wrap items-center gap-3 bg-white p-1.5 rounded-[1.5rem] border border-stone-100 shadow-sm pr-2">
             
-            {/* Toggle Switch */}
             <div className="flex bg-stone-100/80 p-1 rounded-2xl">
                 <button 
                     onClick={() => setTipoFiltroData('geral')}
@@ -342,12 +341,10 @@ export default function Financeiro({ showMessage }) {
                 </button>
             </div>
 
-            {/* Seletores de Mês e Ano Separados (Mais Elegante e Funcional) */}
             {tipoFiltroData === 'mensal' && (
                 <div className="animate-in fade-in slide-in-from-left-2 duration-300 flex items-center gap-2">
                     <div className="h-8 w-px bg-stone-200 mx-1"></div>
                     
-                    {/* Seletor de Mês */}
                     <Select value={filtroMes} onValueChange={setFiltroMes}>
                         <SelectTrigger className="w-36 h-10 rounded-xl border-stone-200 bg-stone-50/50 focus:ring-emerald-200">
                             <div className="flex items-center gap-2 text-stone-600">
@@ -362,7 +359,6 @@ export default function Financeiro({ showMessage }) {
                         </SelectContent>
                     </Select>
 
-                    {/* Seletor de Ano (Até 2030) */}
                     <Select value={filtroAno} onValueChange={setFiltroAno}>
                         <SelectTrigger className="w-24 h-10 rounded-xl border-stone-200 bg-stone-50/50 focus:ring-emerald-200 font-bold text-stone-700">
                             <SelectValue />
@@ -376,7 +372,6 @@ export default function Financeiro({ showMessage }) {
                 </div>
             )}
 
-            {/* Botão de Novo Lançamento */}
             <div className="ml-auto pl-2">
                 <Dialog open={open} onOpenChange={setOpen}>
                     <DialogTrigger asChild>
