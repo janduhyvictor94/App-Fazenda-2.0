@@ -4,8 +4,8 @@ import { supabase } from '@/lib/supabaseClient';
 import StatCard from '@/components/ui/StatCard'; 
 import WeatherWidget from '@/components/ui/WeatherWidget'; 
 import { 
-  Map, Wheat, DollarSign, Calendar, TrendingUp, 
-  Package, AlertTriangle, Clock, Wallet, CheckCircle2 
+  Map, Wheat, TrendingUp, 
+  Clock, Wallet, CheckCircle2, DollarSign, Activity, Calendar
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -46,7 +46,8 @@ export default function Dashboard() {
   const { data: atividades = [] } = useQuery({
     queryKey: ['atividades'],
     queryFn: async () => {
-      const { data } = await supabase.from('atividades').select('*').order('data_programada', { ascending: true });
+      // Busca todas as atividades para cálculo correto de custos
+      const { data } = await supabase.from('atividades').select('*').order('data_programada', { ascending: false });
       return data || [];
     },
     ...queryOptions
@@ -56,15 +57,6 @@ export default function Dashboard() {
     queryKey: ['custos'],
     queryFn: async () => {
       const { data } = await supabase.from('custos').select('*');
-      return data || [];
-    },
-    ...queryOptions
-  });
-
-  const { data: insumos = [] } = useQuery({
-    queryKey: ['insumos'],
-    queryFn: async () => {
-      const { data } = await supabase.from('insumos').select('*');
       return data || [];
     },
     ...queryOptions
@@ -88,27 +80,44 @@ export default function Dashboard() {
     }
   });
 
-  // CÁLCULOS FINANCEIROS
-  const totalReceita = colheitas.reduce((acc, c) => acc + (c.valor_total || 0), 0);
+  // --- CÁLCULOS FINANCEIROS E KPI ---
+
+  // 1. Receita: Soma colheitas + Receitas lançadas no financeiro (Pagas)
+  const receitaColheitas = colheitas.reduce((acc, c) => acc + (Number(c.valor_total) || 0), 0);
   
-  // REGRA: Apenas atividades 'concluida' entram no custo total
+  const itensFinanceirosPagos = custos.filter(c => c.status_pagamento && c.status_pagamento.toLowerCase() === 'pago');
+
+  const receitaFinanceiro = itensFinanceirosPagos
+    .filter(c => c.tipo_lancamento === 'receita')
+    .reduce((acc, c) => acc + (Number(c.valor) || 0), 0);
+  
+  const totalReceita = receitaColheitas + receitaFinanceiro;
+  
+  // 2. Custos Financeiros (PAGOS) - (Contas + Funcionários)
+  const custoFinanceiroPago = itensFinanceirosPagos
+    .filter(c => c.tipo_lancamento === 'despesa')
+    .reduce((acc, c) => acc + (Number(c.valor) || 0), 0);
+
+  // 3. Custo de Atividades (Operacional) - Apenas concluídas
   const custoAtividadesConcluidas = atividades
     .filter(a => a.status === 'concluida')
-    .reduce((acc, a) => acc + (a.custo_total || 0), 0);
+    .reduce((acc, a) => acc + (Number(a.custo_total) || 0), 0);
 
-  const totalCustos = custos.reduce((acc, c) => acc + (c.valor || 0), 0) + custoAtividadesConcluidas;
+  // 4. Custo Total Geral (Financeiro Pago + Atividades Operacionais)
+  const custoTotalGeral = custoFinanceiroPago + custoAtividadesConcluidas;
   
-  const lucroEstimado = totalReceita - totalCustos;
+  // 5. Lucro / Prejuízo (Receita - Custo Total Geral)
+  // Agora subtrai o custo TOTAL (Financeiro + Atividades)
+  const lucroPrejuizo = totalReceita - custoTotalGeral;
   
+  // Listas e Gráficos
   const atividadesPendentes = atividades
     .filter(a => a.status !== 'concluida')
-    .slice(0, 5);
-
-  const insumosBaixoEstoque = insumos.filter(i => i.estoque_atual <= i.estoque_minimo);
+    .slice(0, 5); // Pega apenas as 5 primeiras para exibir
 
   const dadosProducao = [
-    { name: 'Manga', value: colheitas.filter(c => c.cultura === 'manga').reduce((acc, c) => acc + (c.quantidade_kg || 0), 0) },
-    { name: 'Goiaba', value: colheitas.filter(c => c.cultura === 'goiaba').reduce((acc, c) => acc + (c.quantidade_kg || 0), 0) },
+    { name: 'Manga', value: colheitas.filter(c => c.cultura === 'manga').reduce((acc, c) => acc + (Number(c.quantidade_kg) || 0), 0) },
+    { name: 'Goiaba', value: colheitas.filter(c => c.cultura === 'goiaba').reduce((acc, c) => acc + (Number(c.quantidade_kg) || 0), 0) },
   ].filter(d => d.value > 0);
 
   return (
@@ -126,17 +135,40 @@ export default function Dashboard() {
       </div>
 
       {/* Estatísticas */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-        <StatCard title="Área Total" value={`${talhoes.reduce((acc, t) => acc + (t.area_hectares || 0), 0).toFixed(1)} ha`} icon={Map} />
-        <StatCard title="Receita" value={`R$ ${totalReceita.toLocaleString('pt-BR')}`} icon={TrendingUp} />
-        <StatCard title="Custos" value={`R$ ${totalCustos.toLocaleString('pt-BR')}`} icon={DollarSign} />
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+        {/* 1. Área - com .toFixed(2) para evitar casas decimais infinitas */}
+        <StatCard title="Área Total" value={`${talhoes.reduce((acc, t) => acc + (Number(t.area_hectares) || 0), 0).toFixed(2)} ha`} icon={Map} />
+        
+        {/* 2. Colheita - Proteção contra NaN */}
+        <StatCard title="Colheita Total" value={`${(colheitas.reduce((acc, c) => acc + (Number(c.quantidade_toneladas) || (Number(c.quantidade_kg) / 1000) || 0), 0)).toFixed(1)} ton`} icon={Wheat} />
+        
+        {/* 3. Receita */}
+        <StatCard title="Receita" value={`R$ ${totalReceita.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} icon={TrendingUp} color="text-blue-600" />
+        
+        {/* 4. Contas + Funcionarios */}
         <StatCard 
-            title="Lucro Estimado" 
-            value={`R$ ${lucroEstimado.toLocaleString('pt-BR')}`} 
-            icon={Wallet}
-            className={lucroEstimado >= 0 ? "border-emerald-200" : "border-red-200"}
+            title="(Contas + Funcionarios)" 
+            value={`R$ ${custoFinanceiroPago.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} 
+            icon={DollarSign} 
+            color="text-red-600"
         />
-        <StatCard title="Alertas" value={insumosBaixoEstoque.length} icon={AlertTriangle} />
+
+        {/* 5. Custo Totais */}
+        <StatCard 
+            title="Custo Totais" 
+            value={`R$ ${custoTotalGeral.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} 
+            icon={Activity} 
+            color="text-amber-600"
+        />
+
+        {/* 6. Lucro / Prejuízo (Atualizado) */}
+        <StatCard 
+            title="Lucro / Prejuízo" 
+            value={`R$ ${lucroPrejuizo.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} 
+            icon={Wallet}
+            className={lucroPrejuizo >= 0 ? "border-emerald-200" : "border-red-200"}
+            color={lucroPrejuizo >= 0 ? "text-emerald-600" : "text-red-500"}
+        />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -160,7 +192,7 @@ export default function Dashboard() {
                       <p className="text-sm text-stone-500">Talhão: {talhoes.find(t => t.id === ativ.talhao_id)?.nome || '-'}</p>
                     </div>
                     <div className="flex items-center gap-3">
-                      <Badge variant="outline" className="bg-white">{format(parseISO(ativ.data_programada), 'dd/MM')}</Badge>
+                      <Badge variant="outline" className="bg-white">{ativ.data_programada ? format(parseISO(ativ.data_programada), 'dd/MM') : '--/--'}</Badge>
                       <Button
                         size="sm"
                         variant="ghost"
