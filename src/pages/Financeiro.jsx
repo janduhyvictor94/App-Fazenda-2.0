@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabaseClient';
 import { Button } from '@/components/ui/button';
@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, Edit, Trash2, TrendingUp, TrendingDown, Wallet, Clock, ChevronDown, ChevronRight, Users, Filter } from 'lucide-react';
+import { Plus, Edit, Trash2, TrendingUp, TrendingDown, Wallet, Clock, ChevronDown, ChevronRight, Users, Filter, CalendarDays } from 'lucide-react';
 import StatCard from '@/components/ui/StatCard';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -28,6 +28,15 @@ const categoriaLabels = {
   outro: { label: 'Outro', color: 'bg-stone-100 text-stone-700' }
 };
 
+const mesesDoAno = [
+  { value: '01', label: 'Janeiro' }, { value: '02', label: 'Fevereiro' },
+  { value: '03', label: 'Março' }, { value: '04', label: 'Abril' },
+  { value: '05', label: 'Maio' }, { value: '06', label: 'Junho' },
+  { value: '07', label: 'Julho' }, { value: '08', label: 'Agosto' },
+  { value: '09', label: 'Setembro' }, { value: '10', label: 'Outubro' },
+  { value: '11', label: 'Novembro' }, { value: '12', label: 'Dezembro' }
+];
+
 const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316', '#84cc16', '#6b7280'];
 
 export default function Financeiro({ showMessage }) {
@@ -36,9 +45,10 @@ export default function Financeiro({ showMessage }) {
   const [filtroTalhao, setFiltroTalhao] = useState('todos');
   const [filtroCategoria, setFiltroCategoria] = useState('todos');
   
-  // ESTADOS PARA FILTRO DE MÊS
+  // ESTADOS PARA FILTRO DE MÊS/ANO
   const [tipoFiltroData, setTipoFiltroData] = useState('geral'); // 'geral' ou 'mensal'
-  const [mesSelecionado, setMesSelecionado] = useState(format(new Date(), 'yyyy-MM')); // Default mês atual
+  const [filtroMes, setFiltroMes] = useState(format(new Date(), 'MM'));
+  const [filtroAno, setFiltroAno] = useState(format(new Date(), 'yyyy'));
 
   const [expandedGroups, setExpandedGroups] = useState({});
 
@@ -72,6 +82,24 @@ export default function Financeiro({ showMessage }) {
       return data;
     }
   });
+
+  // GERA LISTA DE ANOS DISPONÍVEIS ATÉ 2030
+  const anosDisponiveis = useMemo(() => {
+    const anoAtual = new Date().getFullYear();
+    const anos = new Set();
+
+    // Adiciona range do ano atual até 2030
+    for (let i = anoAtual; i <= 2030; i++) {
+        anos.add(i);
+    }
+
+    // Adiciona também anos passados que existam nos dados (para não perder histórico)
+    custosBrutos.forEach(c => {
+        if (c.data) anos.add(parseInt(c.data.split('-')[0]));
+    });
+
+    return Array.from(anos).sort((a, b) => b - a); // Ordena decrescente (2030 -> 2025)
+  }, [custosBrutos]);
 
   const custos = useMemo(() => {
     return custosBrutos.map(c => {
@@ -196,18 +224,19 @@ export default function Financeiro({ showMessage }) {
     if (filtroTalhao !== 'todos' && c.talhao_id !== filtroTalhao) return false;
     if (filtroCategoria !== 'todos' && c.categoria !== filtroCategoria) return false;
     
-    // Filtro de Mês/Geral
+    // Filtro de Mês/Ano Separado
     if (tipoFiltroData === 'mensal') {
-        return c.data.startsWith(mesSelecionado); // "2026-01" matches "2026-01-15"
+        const prefixo = `${filtroAno}-${filtroMes}`;
+        return c.data.startsWith(prefixo); 
     }
     
     return true;
   });
 
   const colheitasFiltradas = colheitas.filter(c => {
-      // Aplica o mesmo filtro de data para receitas de colheita
       if (tipoFiltroData === 'mensal') {
-          return c.data && c.data.startsWith(mesSelecionado);
+          const prefixo = `${filtroAno}-${filtroMes}`;
+          return c.data && c.data.startsWith(prefixo);
       }
       return true;
   });
@@ -285,10 +314,10 @@ export default function Financeiro({ showMessage }) {
           <p className="text-stone-500">Gestão de fluxo de caixa e compromissos</p>
         </div>
         
-        {/* BARRA DE FERRAMENTAS E FILTROS REDESENHADA */}
+        {/* BARRA DE FERRAMENTAS E FILTROS */}
         <div className="flex flex-wrap items-center gap-3 bg-white p-1.5 rounded-[1.5rem] border border-stone-100 shadow-sm pr-2">
             
-            {/* Toggle Switch (Estilo Aba) */}
+            {/* Toggle Switch */}
             <div className="flex bg-stone-100/80 p-1 rounded-2xl">
                 <button 
                     onClick={() => setTipoFiltroData('geral')}
@@ -313,21 +342,37 @@ export default function Financeiro({ showMessage }) {
                 </button>
             </div>
 
-            {/* Input de Mês com Animação Suave */}
+            {/* Seletores de Mês e Ano Separados (Mais Elegante e Funcional) */}
             {tipoFiltroData === 'mensal' && (
-                <div className="animate-in fade-in slide-in-from-left-2 duration-300 flex items-center">
-                    <div className="h-8 w-px bg-stone-200 mx-2"></div> {/* Separador Vertical */}
-                    <div className="relative group">
-                        <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
-                            <span className="text-[10px] font-black text-stone-400 uppercase tracking-wider group-hover:text-emerald-500 transition-colors">REF:</span>
-                        </div>
-                        <Input 
-                            type="month" 
-                            value={mesSelecionado} 
-                            onChange={(e) => setMesSelecionado(e.target.value)} 
-                            className="pl-12 h-10 w-44 rounded-xl border-stone-200 bg-stone-50/50 focus:bg-white focus:ring-emerald-200 focus:border-emerald-300 transition-all font-bold text-stone-700 text-sm shadow-none"
-                        />
-                    </div>
+                <div className="animate-in fade-in slide-in-from-left-2 duration-300 flex items-center gap-2">
+                    <div className="h-8 w-px bg-stone-200 mx-1"></div>
+                    
+                    {/* Seletor de Mês */}
+                    <Select value={filtroMes} onValueChange={setFiltroMes}>
+                        <SelectTrigger className="w-36 h-10 rounded-xl border-stone-200 bg-stone-50/50 focus:ring-emerald-200">
+                            <div className="flex items-center gap-2 text-stone-600">
+                                <CalendarDays className="w-4 h-4" />
+                                <SelectValue />
+                            </div>
+                        </SelectTrigger>
+                        <SelectContent className="max-h-60">
+                            {mesesDoAno.map((m) => (
+                                <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+
+                    {/* Seletor de Ano (Até 2030) */}
+                    <Select value={filtroAno} onValueChange={setFiltroAno}>
+                        <SelectTrigger className="w-24 h-10 rounded-xl border-stone-200 bg-stone-50/50 focus:ring-emerald-200 font-bold text-stone-700">
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {anosDisponiveis.map((ano) => (
+                                <SelectItem key={ano} value={ano.toString()}>{ano}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
                 </div>
             )}
 
