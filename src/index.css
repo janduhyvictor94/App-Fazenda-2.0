@@ -2,78 +2,6 @@
 @tailwind components;
 @tailwind utilities;
 
-
-/* :root {
-  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
-
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
-
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
-}
-a:hover {
-  color: #535bf2;
-}
-
-body {
-  margin: 0;
-  display: flex;
-  place-items: center;
-  min-width: 320px;
-  min-height: 100vh;
-}
-
-h1 {
-  font-size: 3.2em;
-  line-height: 1.1;
-}
-
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  background-color: #1a1a1a;
-  cursor: pointer;
-  transition: border-color 0.25s;
-}
-button:hover {
-  border-color: #646cff;
-}
-button:focus,
-button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
-}
-
-@media (prefers-color-scheme: light) {
-  :root {
-    color: #213547;
-    background-color: #ffffff;
-  }
-  a:hover {
-    color: #747bff;
-  }
-  button {
-    background-color: #f9f9f9;
-  }
-} */
-
-
-
 @layer base {
   :root {
     --background: 0 0% 100%;
@@ -146,8 +74,6 @@ button:focus-visible {
   }
 }
 
-
-
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -155,4 +81,48 @@ button:focus-visible {
   body {
     @apply bg-background text-foreground;
   }
+}
+
+/* --- MELHORIAS VISUAIS (Agro-Tech Premium) --- */
+
+/* 1. Barra de Rolagem (Scrollbar) Fina e Arredondada */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent; 
+}
+
+::-webkit-scrollbar-thumb {
+  background: #d6d3d1; /* Stone 300 - cor neutra suave */
+  border-radius: 10px;
+  border: 2px solid transparent; /* Cria um respiro entre a barra e a borda */
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #a8a29e; /* Stone 400 - um pouco mais escuro no hover */
+}
+
+/* Suporte para Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #d6d3d1 transparent;
+}
+
+/* 2. Efeito Glassmorphism para Tooltips de Gráficos (Recharts) */
+/* Isso será usado automaticamente onde definimos a classe ou o estilo inline nos gráficos */
+.glass-tooltip {
+  background-color: rgba(255, 255, 255, 0.9) !important;
+  backdrop-filter: blur(8px) !important;
+  border-radius: 16px !important;
+  border: 1px solid rgba(231, 229, 228, 0.6) !important; /* Borda Stone 200 sutil */
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.025) !important;
+  padding: 12px !important;
+  outline: none !important;
+  color: #44403c !important; /* Stone 700 */
+  font-weight: 600 !important;
+  font-size: 13px !important;
 }

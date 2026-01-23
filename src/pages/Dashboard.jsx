@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabaseClient';
 import StatCard from '@/components/ui/StatCard'; 
 import WeatherWidget from '@/components/ui/WeatherWidget'; 
+import PageSkeleton from '@/components/ui/PageSkeleton'; // NOVO
 import { 
   Map, Wheat, TrendingUp, 
   Clock, Wallet, CheckCircle2, DollarSign, Activity, Calendar, ArrowRight
@@ -19,88 +20,57 @@ const COLORS = ['#10b981', '#f59e0b', '#3b82f6', '#ef4444', '#8b5cf6', '#ec4899'
 
 export default function Dashboard() {
   const queryClient = useQueryClient();
-  const queryOptions = {
-    refetchOnWindowFocus: true,
-    staleTime: 0
-  };
+  const queryOptions = { refetchOnWindowFocus: true, staleTime: 0 };
 
-  // --- QUERIES (LÓGICA INTACTA) ---
-  const { data: talhoes = [] } = useQuery({
+  // --- QUERIES COM LOADING ---
+  const { data: talhoes = [], isLoading: l1 } = useQuery({
     queryKey: ['talhoes'],
-    queryFn: async () => {
-      const { data } = await supabase.from('talhoes').select('*');
-      return data || [];
-    },
+    queryFn: async () => { const { data } = await supabase.from('talhoes').select('*'); return data || []; },
     ...queryOptions
   });
 
-  const { data: colheitas = [] } = useQuery({
+  const { data: colheitas = [], isLoading: l2 } = useQuery({
     queryKey: ['colheitas'],
-    queryFn: async () => {
-      const { data } = await supabase.from('colheitas').select('*');
-      return data || [];
-    },
+    queryFn: async () => { const { data } = await supabase.from('colheitas').select('*'); return data || []; },
     ...queryOptions
   });
 
-  const { data: atividades = [] } = useQuery({
+  const { data: atividades = [], isLoading: l3 } = useQuery({
     queryKey: ['atividades'],
-    queryFn: async () => {
-      const { data } = await supabase.from('atividades').select('*').order('data_programada', { ascending: false });
-      return data || [];
-    },
+    queryFn: async () => { const { data } = await supabase.from('atividades').select('*').order('data_programada', { ascending: false }); return data || []; },
     ...queryOptions
   });
 
-  const { data: custos = [] } = useQuery({
+  const { data: custos = [], isLoading: l4 } = useQuery({
     queryKey: ['custos'],
-    queryFn: async () => {
-      const { data } = await supabase.from('custos').select('*');
-      return data || [];
-    },
+    queryFn: async () => { const { data } = await supabase.from('custos').select('*'); return data || []; },
     ...queryOptions
   });
 
   // MUTATION
   const completeActivityMutation = useMutation({
     mutationFn: async (id) => {
-      const { data, error } = await supabase
-        .from('atividades')
-        .update({ 
-          status: 'concluida',
-          data_realizada: format(new Date(), 'yyyy-MM-dd')
-        })
-        .eq('id', id);
-      if (error) throw error;
-      return data;
+      const { data, error } = await supabase.from('atividades').update({ status: 'concluida', data_realizada: format(new Date(), 'yyyy-MM-dd') }).eq('id', id);
+      if (error) throw error; return data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['atividades'] });
-    }
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['atividades'] }); }
   });
 
-  // --- CÁLCULOS (LÓGICA INTACTA) ---
+  // LOADING STATE
+  if (l1 || l2 || l3 || l4) return <PageSkeleton />;
+
+  // --- CÁLCULOS ---
   const receitaColheitas = colheitas.reduce((acc, c) => acc + (Number(c.valor_total) || 0), 0);
   const itensFinanceirosPagos = custos.filter(c => c.status_pagamento && c.status_pagamento.toLowerCase() === 'pago');
-  const receitaFinanceiro = itensFinanceirosPagos
-    .filter(c => c.tipo_lancamento === 'receita')
-    .reduce((acc, c) => acc + (Number(c.valor) || 0), 0);
+  const receitaFinanceiro = itensFinanceirosPagos.filter(c => c.tipo_lancamento === 'receita').reduce((acc, c) => acc + (Number(c.valor) || 0), 0);
   const totalReceita = receitaColheitas + receitaFinanceiro;
   
-  const custoFinanceiroPago = itensFinanceirosPagos
-    .filter(c => c.tipo_lancamento === 'despesa')
-    .reduce((acc, c) => acc + (Number(c.valor) || 0), 0);
-
-  const custoAtividadesConcluidas = atividades
-    .filter(a => a.status === 'concluida')
-    .reduce((acc, a) => acc + (Number(a.custo_total) || 0), 0);
-
+  const custoFinanceiroPago = itensFinanceirosPagos.filter(c => c.tipo_lancamento === 'despesa').reduce((acc, c) => acc + (Number(c.valor) || 0), 0);
+  const custoAtividadesConcluidas = atividades.filter(a => a.status === 'concluida').reduce((acc, a) => acc + (Number(a.custo_total) || 0), 0);
   const custoTotalGeral = custoFinanceiroPago + custoAtividadesConcluidas;
   const lucroPrejuizo = totalReceita - custoTotalGeral;
   
-  const atividadesPendentes = atividades
-    .filter(a => a.status !== 'concluida')
-    .slice(0, 5);
+  const atividadesPendentes = atividades.filter(a => a.status !== 'concluida').slice(0, 5);
 
   const dadosProducao = [
     { name: 'Manga', value: colheitas.filter(c => c.cultura === 'manga').reduce((acc, c) => acc + (Number(c.quantidade_kg) || 0), 0) },
@@ -108,10 +78,10 @@ export default function Dashboard() {
   ].filter(d => d.value > 0);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
       {/* Header & Clima */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 p-8 rounded-[1.5rem] bg-stone-900 text-white shadow-lg flex flex-col justify-center relative overflow-hidden">
+        <div className="lg:col-span-2 p-8 rounded-[1.5rem] bg-stone-900 text-white shadow-lg flex flex-col justify-center relative overflow-hidden group">
             <div className="relative z-10">
                 <div className="flex items-center gap-2 mb-2">
                     <span className="bg-emerald-500/20 text-emerald-300 text-[10px] font-bold px-2 py-0.5 rounded-full border border-emerald-500/30">ONLINE</span>
@@ -120,15 +90,14 @@ export default function Dashboard() {
                 <h1 className="text-3xl font-bold mb-1 tracking-tight">Fazenda Cassiano's</h1>
                 <p className="text-stone-400 opacity-90 text-sm">Visão geral de performance e controle operacional.</p>
             </div>
-            {/* Elemento decorativo sutil */}
-            <Wheat className="absolute right-[-10px] bottom-[-20px] w-40 h-40 text-emerald-500/10 rotate-12" />
+            <Wheat className="absolute right-[-10px] bottom-[-20px] w-40 h-40 text-emerald-500/10 rotate-12 transition-transform group-hover:rotate-[15deg] duration-700" />
         </div>
         <div className="h-full">
             <WeatherWidget className="h-full rounded-[1.5rem] shadow-sm border border-stone-100" />
         </div>
       </div>
 
-      {/* KPI Cards - Estilo Limpo */}
+      {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
         <StatCard title="Área Total" value={`${talhoes.reduce((acc, t) => acc + (Number(t.area_hectares) || 0), 0).toFixed(2)} ha`} icon={Map} color="text-stone-600" />
         <StatCard title="Colheita Total" value={`${(colheitas.reduce((acc, c) => acc + (Number(c.quantidade_toneladas) || (Number(c.quantidade_kg) / 1000) || 0), 0)).toFixed(1)} ton`} icon={Wheat} color="text-amber-600" />
@@ -144,10 +113,10 @@ export default function Dashboard() {
         />
       </div>
 
-      {/* Grid Principal - Inspirado no Layout de Referência (Rosquinha esq, Lista dir) */}
+      {/* Grid Principal */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
-        {/* Coluna 1: Gráfico de Produção (Estilo Donut Chart do exemplo) */}
+        {/* Gráfico de Produção */}
         <Card className="lg:col-span-1 border-stone-100 rounded-[1.5rem] shadow-sm flex flex-col">
           <CardHeader className="pb-2">
             <CardTitle className="text-lg text-stone-800 font-bold">Produção (kg)</CardTitle>
@@ -167,11 +136,13 @@ export default function Dashboard() {
                     >
                       {dadosProducao.map((_, index) => <Cell key={index} fill={COLORS[index % COLORS.length]} />)}
                     </Pie>
+                    {/* TOOLTIP ESTILO GLASS */}
                     <Tooltip 
-                        contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                        contentStyle={{ backgroundColor: 'rgba(255, 255, 255, 0.8)', backdropFilter: 'blur(8px)', borderRadius: '16px', border: '1px solid rgba(231, 229, 228, 0.5)', padding: '12px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}
+                        itemStyle={{ color: '#44403c', fontWeight: 600, fontSize: '13px' }}
                         formatter={(value) => `${value.toLocaleString('pt-BR')} kg`}
                     />
-                    <Legend verticalAlign="bottom" height={36} />
+                    <Legend verticalAlign="bottom" height={36} iconType="circle" />
                   </PieChart>
                 </ResponsiveContainer>
               ) : (
@@ -180,9 +151,8 @@ export default function Dashboard() {
                 </div>
               )}
             </div>
-            {/* Pequeno resumo textual abaixo do gráfico */}
             <div className="mt-4 text-center">
-                <p className="text-xs text-stone-400 uppercase font-bold tracking-wider">Cultura Predominante</p>
+                <p className="text-xs text-stone-400 uppercase font-bold tracking-wider">Predominante</p>
                 <p className="text-lg font-bold text-stone-700">
                     {dadosProducao.length > 0 
                         ? dadosProducao.reduce((prev, current) => (prev.value > current.value) ? prev : current).name 
@@ -192,7 +162,7 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        {/* Coluna 2 e 3: Lista de Atividades (Estilo Timeline/Tabela limpa) */}
+        {/* Lista de Atividades */}
         <Card className="lg:col-span-2 border-stone-100 rounded-[1.5rem] shadow-sm overflow-hidden flex flex-col">
           <CardHeader className="bg-white border-b border-stone-50 pb-4 pt-6">
             <div className="flex items-center justify-between">
@@ -204,7 +174,7 @@ export default function Dashboard() {
               </div>
               <Link to={createPageUrl('Atividades')}>
                 <Button variant="ghost" size="sm" className="text-stone-400 hover:text-blue-600 hover:bg-blue-50 transition-colors text-xs font-bold uppercase tracking-wide">
-                    Ver Agenda Completa <ArrowRight className="w-3 h-3 ml-1" />
+                    Agenda Completa <ArrowRight className="w-3 h-3 ml-1" />
                 </Button>
               </Link>
             </div>
@@ -215,7 +185,6 @@ export default function Dashboard() {
                 {atividadesPendentes.map((ativ) => (
                   <div key={ativ.id} className="p-4 px-6 hover:bg-stone-50/80 transition-all flex items-center justify-between group">
                     <div className="flex items-center gap-4">
-                      {/* Indicador visual de tipo */}
                       <div className={`w-10 h-10 rounded-full flex items-center justify-center border ${
                           ativ.tipo === 'colheita' ? 'bg-amber-50 border-amber-100 text-amber-600' : 
                           ativ.tipo === 'adubacao' ? 'bg-emerald-50 border-emerald-100 text-emerald-600' : 
@@ -246,7 +215,7 @@ export default function Dashboard() {
                       
                       <Button
                         size="icon"
-                        className="rounded-full w-9 h-9 bg-white border border-stone-200 text-stone-400 hover:text-emerald-600 hover:border-emerald-200 hover:bg-emerald-50 shadow-sm transition-all"
+                        className="rounded-full w-9 h-9 bg-white border border-stone-200 text-stone-400 hover:text-emerald-600 hover:border-emerald-200 hover:bg-emerald-50 shadow-sm transition-all active:scale-95"
                         onClick={() => completeActivityMutation.mutate(ativ.id)}
                         disabled={completeActivityMutation.isPending}
                         title="Marcar como concluída"
@@ -267,7 +236,7 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      {/* Atalhos Rápidos - Rodapé */}
+      {/* Atalhos Rodapé */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
           { label: 'Novo Talhão', icon: Map, path: 'Talhoes', color: 'text-emerald-600', hoverBg: 'hover:bg-emerald-50 hover:border-emerald-200' },
@@ -278,7 +247,7 @@ export default function Dashboard() {
           <Link 
             key={i} 
             to={createPageUrl(item.path)}
-            className={`p-4 bg-white rounded-[1rem] border border-stone-100 shadow-sm transition-all flex items-center justify-center gap-3 group ${item.hoverBg}`}
+            className={`p-4 bg-white rounded-[1rem] border border-stone-100 shadow-sm transition-all active:scale-95 flex items-center justify-center gap-3 group ${item.hoverBg}`}
           >
             <div className={`w-8 h-8 rounded-full flex items-center justify-center bg-stone-50 group-hover:bg-white group-hover:shadow-sm transition-all`}>
               <item.icon className={`w-4 h-4 ${item.color}`} />

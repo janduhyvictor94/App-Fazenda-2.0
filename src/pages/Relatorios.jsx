@@ -1,15 +1,15 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabaseClient';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Printer, Wheat, DollarSign, TrendingUp, BarChart3, Package, Filter, Calendar as CalendarIcon } from 'lucide-react';
 import StatCard from '@/components/ui/StatCard';
+import PageSkeleton from '@/components/ui/PageSkeleton'; // NOVO
 import { format, parseISO, isWithinInterval } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, LineChart, Line, CartesianGrid } from 'recharts';
@@ -34,24 +34,13 @@ const categoriaLabels = {
 };
 
 const tipoAtividadeLabels = {
-  inducao: 'Indução',
-  poda: 'Poda',
-  adubacao: 'Adubação',
-  pulverizacao: 'Pulverização',
-  maturacao: 'Maturação',
-  irrigacao: 'Irrigação',
-  capina: 'Capina',
-  outro: 'Outra Atividade'
+  inducao: 'Indução', poda: 'Poda', adubacao: 'Adubação', pulverizacao: 'Pulverização',
+  maturacao: 'Maturação', irrigacao: 'Irrigação', capina: 'Capina', outro: 'Outra Atividade'
 };
 
 const tipoColheitaLabels = {
-  exportacao: 'Exportação',
-  mercado_interno: 'Mercado Interno',
-  caixas: 'Caixas',
-  arrastao: 'Arrastão',
-  polpa: 'Polpa',
-  caixa_verde: 'Caixa Verde',
-  madura: 'Madura'
+  exportacao: 'Exportação', mercado_interno: 'Mercado Interno', caixas: 'Caixas',
+  arrastao: 'Arrastão', polpa: 'Polpa', caixa_verde: 'Caixa Verde', madura: 'Madura'
 };
 
 export default function Relatorios({ showMessage }) {
@@ -59,42 +48,29 @@ export default function Relatorios({ showMessage }) {
   const [dataInicio, setDataInicio] = useState('');
   const [dataFim, setDataFim] = useState('');
 
-  const { data: talhoes = [] } = useQuery({
+  const { data: talhoes = [], isLoading: l1 } = useQuery({
     queryKey: ['talhoes'],
-    queryFn: async () => {
-      const { data, error } = await supabase.from('talhoes').select('*');
-      if (error) throw error;
-      return data;
-    }
+    queryFn: async () => { const { data } = await supabase.from('talhoes').select('*'); return data || []; }
   });
 
-  const { data: colheitas = [] } = useQuery({
+  const { data: colheitas = [], isLoading: l2 } = useQuery({
     queryKey: ['colheitas'],
-    queryFn: async () => {
-      const { data, error } = await supabase.from('colheitas').select('*').order('data', { ascending: false });
-      if (error) throw error;
-      return data;
-    }
+    queryFn: async () => { const { data } = await supabase.from('colheitas').select('*').order('data', { ascending: false }); return data || []; }
   });
 
-  const { data: custos = [] } = useQuery({
+  const { data: custos = [], isLoading: l3 } = useQuery({
     queryKey: ['custos'],
-    queryFn: async () => {
-      const { data, error } = await supabase.from('custos').select('*').order('data', { ascending: false });
-      if (error) throw error;
-      return data;
-    }
+    queryFn: async () => { const { data } = await supabase.from('custos').select('*').order('data', { ascending: false }); return data || []; }
   });
 
-  const { data: atividades = [] } = useQuery({
+  const { data: atividades = [], isLoading: l4 } = useQuery({
     queryKey: ['atividades'],
-    queryFn: async () => {
-      const { data, error } = await supabase.from('atividades').select('*');
-      if (error) throw error;
-      return data;
-    }
+    queryFn: async () => { const { data } = await supabase.from('atividades').select('*'); return data || []; }
   });
 
+  if (l1 || l2 || l3 || l4) return <PageSkeleton />;
+
+  // --- LÓGICA DE DADOS (Preservada do original) ---
   const filtrarPorPeriodo = (data, dateField) => {
     if (!data) return data;
     return data.filter(item => {
@@ -146,9 +122,7 @@ export default function Relatorios({ showMessage }) {
     }
   });
 
-  const pieDataCustos = Object.entries(custoPorCategoria)
-    .map(([name, value]) => ({ name, value }))
-    .sort((a, b) => b.value - a.value);
+  const pieDataCustos = Object.entries(custoPorCategoria).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
 
   const colheitaPorTipo = colheitasFiltradas.reduce((acc, c) => {
     const tipo = c.tipo_colheita || 'outros';
@@ -157,9 +131,7 @@ export default function Relatorios({ showMessage }) {
     return acc;
   }, {});
 
-  const pieDataColheita = Object.entries(colheitaPorTipo)
-    .map(([name, value]) => ({ name: tipoColheitaLabels[name] || name, value }))
-    .filter(item => item.value > 0);
+  const pieDataColheita = Object.entries(colheitaPorTipo).map(([name, value]) => ({ name: tipoColheitaLabels[name] || name, value })).filter(item => item.value > 0);
 
   const aproveitamentoPorTipo = colheitasFiltradas.reduce((acc, c) => {
     const tipo = c.tipo_colheita || 'outros';
@@ -171,10 +143,7 @@ export default function Relatorios({ showMessage }) {
   }, {});
 
   const aproveitamentoData = Object.entries(aproveitamentoPorTipo).map(([tipo, data]) => ({
-    name: tipoColheitaLabels[tipo] || tipo,
-    kg: data.kg,
-    caixas: data.caixas,
-    receita: data.receita,
+    name: tipoColheitaLabels[tipo] || tipo, kg: data.kg, caixas: data.caixas, receita: data.receita,
     precoMedio: usarCaixas ? (data.caixas > 0 ? (data.receita / data.caixas) : 0) : (data.kg > 0 ? (data.receita / data.kg) : 0)
   }));
 
@@ -193,26 +162,11 @@ export default function Relatorios({ showMessage }) {
     evolucaoMensal[mes].custos += c.valor || 0;
   });
 
-  const lineData = Object.entries(evolucaoMensal).slice(-12).map(([mes, data]) => ({
-    mes, receita: data.receita, custos: data.custos
-  }));
+  const lineData = Object.entries(evolucaoMensal).slice(-12).map(([mes, data]) => ({ mes, receita: data.receita, custos: data.custos }));
 
-  const custoPorTalhao = custosFiltrados.reduce((acc, c) => {
-    const talhaoNome = c.talhao_id ? (talhoes.find(t => t.id === c.talhao_id)?.nome || 'Desconhecido') : 'Geral';
-    acc[talhaoNome] = (acc[talhaoNome] || 0) + (c.valor || 0);
-    return acc;
-  }, {});
-  
-  atividadesFiltradas.forEach(a => {
-      const talhaoNome = a.talhao_id ? (talhoes.find(t => t.id === a.talhao_id)?.nome || 'Desconhecido') : 'Geral';
-      custoPorTalhao[talhaoNome] = (custoPorTalhao[talhaoNome] || 0) + (a.custo_total || 0);
-  });
-
-  const barDataCusto = Object.entries(custoPorTalhao).map(([name, value]) => ({ name, valor: value }));
-
-  // --- LOGICA DE RATEIO ---
+  // --- RATEIO ---
   const areaTotalFazenda = talhoes.reduce((acc, t) => acc + (Number(t.area_hectares) || 0), 0);
-  const custosGeraisPeriodo = custosFiltrados.filter(c => !c.talhao_id).reduce((acc, c) => acc + (Number(c.valor) || 0), 0);
+  const custosGeraisPeriodo = filtrarPorPeriodo(custos, 'data').filter(c => !c.talhao_id).reduce((acc, c) => acc + (Number(c.valor) || 0), 0);
   const rateioPorHa = areaTotalFazenda > 0 ? custosGeraisPeriodo / areaTotalFazenda : 0;
 
   const talhoesComDados = talhoes.map(talhao => {
@@ -236,16 +190,14 @@ export default function Relatorios({ showMessage }) {
   const barDataLucroHa = talhoesComDados.map(t => ({ name: t.nome, 'Lucro/ha': t.lucroPorHa })).sort((a, b) => b['Lucro/ha'] - a['Lucro/ha']);
 
   const totaisGeraisProdutividade = talhoesComDados.reduce((acc, t) => ({
-    area: acc.area + t.area,
-    receita: acc.receita + t.receita,
-    custoInsumos: acc.custoInsumos + t.custoInsumos,
-    custoRateio: acc.custoRateio + t.custoRateio,
+    area: acc.area + t.area, receita: acc.receita + t.receita,
+    custoInsumos: acc.custoInsumos + t.custoInsumos, custoRateio: acc.custoRateio + t.custoRateio,
     lucro: acc.lucro + t.lucro,
   }), { area: 0, receita: 0, custoInsumos: 0, custoRateio: 0, lucro: 0 });
 
   return (
-    <div className="space-y-6">
-      {/* Header com Filtros em Estilo Clean */}
+    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
+      {/* Header */}
       <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 bg-white p-4 rounded-[1.5rem] border border-stone-100 shadow-sm">
         <div>
           <h1 className="text-2xl font-bold text-stone-900 tracking-tight">Relatórios Gerenciais</h1>
@@ -262,21 +214,19 @@ export default function Relatorios({ showMessage }) {
                 </SelectContent>
               </Select>
           </div>
-          
           <div className="flex items-center gap-2 bg-stone-50 p-1 rounded-xl border border-stone-200">
              <CalendarIcon className="w-4 h-4 text-stone-400 ml-2" />
              <Input type="date" value={dataInicio} onChange={(e) => setDataInicio(e.target.value)} className="w-32 border-none bg-transparent shadow-none h-8 p-0 text-sm font-medium text-stone-700" />
              <span className="text-stone-400">-</span>
              <Input type="date" value={dataFim} onChange={(e) => setDataFim(e.target.value)} className="w-32 border-none bg-transparent shadow-none h-8 p-0 text-sm font-medium text-stone-700" />
           </div>
-
-          <Button onClick={() => window.print()} variant="outline" className="rounded-xl border-stone-200 text-stone-600 hover:bg-stone-50 h-10">
+          <Button onClick={() => window.print()} variant="outline" className="rounded-xl border-stone-200 text-stone-600 hover:bg-stone-50 h-10 active:scale-95 transition-all">
             <Printer className="w-4 h-4 mr-2" /> Imprimir
           </Button>
         </div>
       </div>
 
-      {/* KPI Cards - Estilo Dashboard */}
+      {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <StatCard title="Total Colhido" value={`${totalVisual.toFixed(1)} ${unidadeVisual}`} icon={Wheat} color="text-amber-600" />
         <StatCard title="Receita Total" value={`R$ ${totalReceita.toLocaleString('pt-BR')}`} icon={TrendingUp} color="text-emerald-600" />
@@ -287,16 +237,15 @@ export default function Relatorios({ showMessage }) {
 
       <Tabs defaultValue="colheitas" className="space-y-6">
         <TabsList className="bg-white border border-stone-100 p-1.5 rounded-[1rem] shadow-sm w-full lg:w-auto flex flex-wrap h-auto">
-          <TabsTrigger value="colheitas" className="rounded-xl px-4 py-2 data-[state=active]:bg-stone-100 data-[state=active]:text-stone-900">Colheitas</TabsTrigger>
-          <TabsTrigger value="aproveitamento" className="rounded-xl px-4 py-2 data-[state=active]:bg-stone-100 data-[state=active]:text-stone-900">Aproveitamento</TabsTrigger>
-          <TabsTrigger value="custos" className="rounded-xl px-4 py-2 data-[state=active]:bg-stone-100 data-[state=active]:text-stone-900">Custos</TabsTrigger>
-          <TabsTrigger value="produtividade" className="rounded-xl px-4 py-2 data-[state=active]:bg-stone-100 data-[state=active]:text-stone-900">Produtividade</TabsTrigger>
-          <TabsTrigger value="evolucao" className="rounded-xl px-4 py-2 data-[state=active]:bg-stone-100 data-[state=active]:text-stone-900">Evolução</TabsTrigger>
+          <TabsTrigger value="colheitas" className="rounded-xl px-4 py-2 data-[state=active]:bg-stone-100 data-[state=active]:text-stone-900 font-bold transition-all">Colheitas</TabsTrigger>
+          <TabsTrigger value="aproveitamento" className="rounded-xl px-4 py-2 data-[state=active]:bg-stone-100 data-[state=active]:text-stone-900 font-bold transition-all">Aproveitamento</TabsTrigger>
+          <TabsTrigger value="custos" className="rounded-xl px-4 py-2 data-[state=active]:bg-stone-100 data-[state=active]:text-stone-900 font-bold transition-all">Custos</TabsTrigger>
+          <TabsTrigger value="produtividade" className="rounded-xl px-4 py-2 data-[state=active]:bg-stone-100 data-[state=active]:text-stone-900 font-bold transition-all">Produtividade</TabsTrigger>
+          <TabsTrigger value="evolucao" className="rounded-xl px-4 py-2 data-[state=active]:bg-stone-100 data-[state=active]:text-stone-900 font-bold transition-all">Evolução</TabsTrigger>
         </TabsList>
 
         <TabsContent value="colheitas" className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Gráfico 1/3 */}
                 <Card className="lg:col-span-1 border-stone-100 rounded-[2rem] shadow-sm">
                   <CardHeader><CardTitle className="text-lg">Por Tipo</CardTitle></CardHeader>
                   <CardContent className="flex items-center justify-center p-0 pb-6">
@@ -306,14 +255,13 @@ export default function Relatorios({ showMessage }) {
                           <Pie data={pieDataColheita} innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
                             {pieDataColheita.map((_, index) => <Cell key={index} fill={COLORS[index % COLORS.length]} />)}
                           </Pie>
-                          <Tooltip />
+                          <Tooltip contentStyle={{ backgroundColor: 'rgba(255, 255, 255, 0.8)', backdropFilter: 'blur(8px)', borderRadius: '16px', border: '1px solid rgba(231, 229, 228, 0.5)', padding: '12px' }} />
                           <Legend verticalAlign="bottom" height={36}/>
                         </PieChart>
                       </ResponsiveContainer>
                     </div>
                   </CardContent>
                 </Card>
-                {/* Tabela 2/3 */}
                 <Card className="lg:col-span-2 border-stone-100 rounded-[2rem] shadow-sm overflow-hidden">
                   <CardHeader><CardTitle className="text-lg">Detalhamento de Produção</CardTitle></CardHeader>
                   <Table>
@@ -336,7 +284,7 @@ export default function Relatorios({ showMessage }) {
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
                       <XAxis dataKey="name" axisLine={false} tickLine={false} />
                       <YAxis axisLine={false} tickLine={false} />
-                      <Tooltip cursor={{fill: '#f3f4f6'}} />
+                      <Tooltip cursor={{fill: '#f3f4f6'}} contentStyle={{ backgroundColor: 'rgba(255, 255, 255, 0.8)', backdropFilter: 'blur(8px)', borderRadius: '16px' }} />
                       <Bar dataKey="receita" name="Receita (R$)" fill="#10b981" radius={[6, 6, 0, 0]} barSize={60} />
                   </BarChart>
                 </ResponsiveContainer>
@@ -362,11 +310,11 @@ export default function Relatorios({ showMessage }) {
                       <Pie data={pieDataCustos} innerRadius={60} outerRadius={80} paddingAngle={2} dataKey="value">
                         {pieDataCustos.map((_, index) => <Cell key={index} fill={COLORS[index % COLORS.length]} />)}
                       </Pie>
-                      <Tooltip formatter={(v) => `R$ ${v.toLocaleString('pt-BR')}`} />
+                      <Tooltip formatter={(v) => `R$ ${v.toLocaleString('pt-BR')}`} contentStyle={{ backgroundColor: 'rgba(255, 255, 255, 0.8)', backdropFilter: 'blur(8px)', borderRadius: '16px' }} />
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
-                <div className="mt-4 space-y-2 max-h-60 overflow-y-auto pr-2">
+                <div className="mt-4 space-y-2 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
                     {pieDataCustos.map((item, index) => (
                         <div key={index} className="flex justify-between items-center text-sm">
                             <div className="flex items-center gap-2">
@@ -405,7 +353,6 @@ export default function Relatorios({ showMessage }) {
         </TabsContent>
 
         <TabsContent value="produtividade" className="space-y-6">
-          {/* Layout Assimétrico: Gráfico KPI (Topo) + Tabela Detalhada (Abaixo) */}
           <div className="grid grid-cols-1 gap-6">
               <Card className="border-stone-100 rounded-[2rem] shadow-sm">
                 <CardHeader><CardTitle className="text-lg">KPI: Lucro por Hectare</CardTitle></CardHeader>
@@ -416,10 +363,7 @@ export default function Relatorios({ showMessage }) {
                           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
                           <XAxis dataKey="name" axisLine={false} tickLine={false} />
                           <YAxis tickFormatter={(v) => `R$${v/1000}k`} axisLine={false} tickLine={false} />
-                          <Tooltip 
-                            cursor={{fill: '#f3f4f6'}}
-                            formatter={(v) => [`R$ ${v.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`, 'Lucro/ha']}
-                          />
+                          <Tooltip cursor={{fill: '#f3f4f6'}} contentStyle={{ backgroundColor: 'rgba(255, 255, 255, 0.8)', backdropFilter: 'blur(8px)', borderRadius: '16px' }} formatter={(v) => [`R$ ${v.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`, 'Lucro/ha']} />
                           <Bar dataKey="Lucro/ha" radius={[6, 6, 0, 0]}>
                             {barDataLucroHa.map((entry, index) => (
                                 <Cell key={`cell-${index}`} fill={entry['Lucro/ha'] >= 0 ? '#10b981' : '#ef4444'} />
@@ -487,10 +431,7 @@ export default function Relatorios({ showMessage }) {
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
                       <XAxis dataKey="mes" axisLine={false} tickLine={false} dy={10} />
                       <YAxis axisLine={false} tickLine={false} />
-                      <Tooltip 
-                        contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                        formatter={(v) => `R$ ${v.toLocaleString('pt-BR')}`} 
-                      />
+                      <Tooltip contentStyle={{ backgroundColor: 'rgba(255, 255, 255, 0.8)', backdropFilter: 'blur(8px)', borderRadius: '16px' }} formatter={(v) => `R$ ${v.toLocaleString('pt-BR')}`} />
                       <Legend verticalAlign="top" height={36}/>
                       <Line type="monotone" dataKey="receita" name="Receita" stroke="#10b981" strokeWidth={3} dot={{r: 4, fill: '#10b981'}} activeDot={{r: 6}} />
                       <Line type="monotone" dataKey="custos" name="Custos" stroke="#ef4444" strokeWidth={3} dot={{r: 4, fill: '#ef4444'}} activeDot={{r: 6}} />

@@ -17,12 +17,12 @@ import { format, addMonths, startOfMonth, isWeekend, isBefore, differenceInMonth
 import { ptBR } from 'date-fns/locale';
 
 const statusLabels = {
-  ativo: { label: 'Ativo', color: 'bg-emerald-50 text-emerald-700 border-emerald-100' },
-  inativo: { label: 'Inativo', color: 'bg-stone-50 text-stone-700 border-stone-100' },
-  ferias: { label: 'Férias', color: 'bg-blue-50 text-blue-700 border-blue-100' }
+  ativo: { label: 'Ativo', color: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  inativo: { label: 'Inativo', color: 'bg-stone-50 text-stone-700 border-stone-200' },
+  ferias: { label: 'Férias', color: 'bg-blue-50 text-blue-700 border-blue-200' }
 };
 
-// --- LÓGICA DE CÁLCULO ---
+// --- LÓGICA DE CÁLCULO (MANTIDA INTACTA) ---
 
 const getSalarioNaData = (historico, salarioAtual, dataReferencia) => {
   if (!historico || !Array.isArray(historico) || historico.length === 0) {
@@ -243,37 +243,24 @@ export default function Funcionarios() {
     }
   });
 
-  // *** MUTAÇÃO DE EXCLUSÃO COM INTEGRAÇÃO FINANCEIRA ***
   const deleteMutation = useMutation({
     mutationFn: async (id) => {
-      // 1. Busca os dados do funcionário para pegar o nome
-      const { data: func, error: fetchError } = await supabase
-        .from('funcionarios')
-        .select('nome')
-        .eq('id', id)
-        .single();
-      
+      // 1. Busca nome
+      const { data: func, error: fetchError } = await supabase.from('funcionarios').select('nome').eq('id', id).single();
       if (fetchError) throw fetchError;
 
-      // 2. Apaga os custos associados no Financeiro
-      // Procura custos da categoria 'funcionario' que tenham o nome na descrição
+      // 2. Apaga custos
       if (func && func.nome) {
-        const { error: deleteCustosError } = await supabase
-            .from('custos')
-            .delete()
-            .eq('categoria', 'funcionario')
-            .ilike('descricao', `%${func.nome}%`);
-            
+        const { error: deleteCustosError } = await supabase.from('custos').delete().eq('categoria', 'funcionario').ilike('descricao', `%${func.nome}%`);
         if (deleteCustosError) console.error("Erro ao apagar custos:", deleteCustosError);
       }
 
-      // 3. Apaga o funcionário
+      // 3. Apaga funcionário
       const { error } = await supabase.from('funcionarios').delete().eq('id', id);
       if (error) throw error;
     },
     onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: ['funcionarios'] });
-        // Também invalida custos para atualizar dashboard se necessário
         queryClient.invalidateQueries({ queryKey: ['custos'] }); 
         alert("Funcionário e seus lançamentos financeiros foram removidos.");
     },
@@ -422,48 +409,49 @@ export default function Funcionarios() {
   const totalFolhaBase = funcionarios.filter(f => f.status === 'ativo').reduce((acc, f) => acc + (f.salario || 0), 0);
 
   return (
-    <div className="space-y-8">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div className="space-y-6">
+      {/* Header Padronizado */}
+      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 bg-white p-4 rounded-[1.5rem] border border-stone-100 shadow-sm">
         <div>
-          <h1 className="text-3xl font-bold text-stone-900 tracking-tight">Funcionários</h1>
+          <h1 className="text-2xl font-bold text-stone-900 tracking-tight">Funcionários</h1>
           <p className="text-stone-500 font-medium">Gestão de equipe e folha inteligente</p>
         </div>
         
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
-            <Button className="bg-blue-600 hover:bg-blue-700 rounded-2xl h-12 px-6 shadow-lg shadow-blue-100">
-              <Plus className="w-5 h-5 mr-2" /> Novo Funcionário
+            <Button className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl h-10 px-5 shadow-lg shadow-emerald-100 transition-all active:scale-95 ml-2">
+              <Plus className="w-4 h-4 mr-2" /> Novo Funcionário
             </Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-lg rounded-[2rem]">
             <DialogHeader>
-              <DialogTitle className="text-2xl font-bold">{editingFuncionario ? 'Editar' : 'Novo'} Funcionário</DialogTitle>
-              <DialogDescription className="sr-only">Formulário.</DialogDescription>
+              <DialogTitle>{editingFuncionario ? 'Editar' : 'Novo'} Funcionário</DialogTitle>
+              <DialogDescription className="sr-only">Formulário de cadastro.</DialogDescription>
             </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4 pt-4">
               <div className="space-y-2">
                 <Label>Nome Completo</Label>
-                <Input value={formData.nome} onChange={(e) => setFormData({ ...formData, nome: e.target.value })} className="rounded-xl h-11" required />
+                <Input value={formData.nome} onChange={(e) => setFormData({ ...formData, nome: e.target.value })} className="rounded-xl" required />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Cargo</Label>
-                  <Input value={formData.cargo} onChange={(e) => setFormData({ ...formData, cargo: e.target.value })} className="rounded-xl h-11" required />
+                  <Input value={formData.cargo} onChange={(e) => setFormData({ ...formData, cargo: e.target.value })} className="rounded-xl" required />
                 </div>
                 <div className="space-y-2">
                   <Label>Salário Inicial (R$)</Label>
-                  <Input type="number" step="0.01" value={formData.salario} onChange={(e) => setFormData({ ...formData, salario: e.target.value })} className="rounded-xl h-11" required />
+                  <Input type="number" step="0.01" value={formData.salario} onChange={(e) => setFormData({ ...formData, salario: e.target.value })} className="rounded-xl" required />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Data Admissão</Label>
-                  <Input type="date" value={formData.data_admissao} onChange={(e) => setFormData({ ...formData, data_admissao: e.target.value })} className="rounded-xl h-11" required />
+                  <Input type="date" value={formData.data_admissao} onChange={(e) => setFormData({ ...formData, data_admissao: e.target.value })} className="rounded-xl" required />
                 </div>
                 <div className="space-y-2">
                   <Label>Status</Label>
                   <Select value={formData.status || ""} onValueChange={(value) => setFormData({ ...formData, status: value })}>
-                    <SelectTrigger className="rounded-xl h-11"><SelectValue /></SelectTrigger>
+                    <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="ativo">Ativo</SelectItem>
                       <SelectItem value="inativo">Inativo</SelectItem>
@@ -475,12 +463,12 @@ export default function Funcionarios() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Telefone</Label>
-                  <Input value={formData.telefone} onChange={(e) => setFormData({ ...formData, telefone: e.target.value })} className="rounded-xl h-11" placeholder="(00) 00000-0000" />
+                  <Input value={formData.telefone} onChange={(e) => setFormData({ ...formData, telefone: e.target.value })} className="rounded-xl" placeholder="(00) 00000-0000" />
                 </div>
                 <div className="space-y-2">
                   <Label>Talhão Principal</Label>
                   <Select value={formData.talhao_principal || "none"} onValueChange={(value) => setFormData({ ...formData, talhao_principal: value === "none" ? null : value })}>
-                    <SelectTrigger className="rounded-xl h-11"><SelectValue placeholder="Selecione" /></SelectTrigger>
+                    <SelectTrigger className="rounded-xl"><SelectValue placeholder="Selecione" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">Nenhum</SelectItem>
                       {talhoes.map((t) => <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>)}
@@ -493,30 +481,30 @@ export default function Funcionarios() {
                 <Textarea value={formData.observacoes} onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })} className="rounded-xl" rows={2} />
               </div>
               <div className="flex justify-end gap-3 pt-4">
-                <Button type="button" variant="ghost" onClick={resetForm} className="rounded-xl">Cancelar</Button>
-                <Button type="submit" className="bg-blue-600 rounded-xl px-8" disabled={createMutation.isPending || updateMutation.isPending}>{editingFuncionario ? 'Salvar' : 'Cadastrar'}</Button>
+                <Button type="button" variant="outline" onClick={resetForm} className="rounded-xl">Cancelar</Button>
+                <Button type="submit" className="bg-emerald-600 hover:bg-emerald-700 rounded-xl px-8" disabled={createMutation.isPending || updateMutation.isPending}>{editingFuncionario ? 'Salvar' : 'Cadastrar'}</Button>
               </div>
             </form>
           </DialogContent>
         </Dialog>
 
+        {/* Dialog de Folha & Financeiro (Layout Modernizado) */}
         <Dialog open={folhaOpen} onOpenChange={setFolhaOpen}>
           <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto rounded-[2rem]">
             <DialogHeader>
               <DialogTitle className="text-2xl font-bold flex items-center justify-between text-stone-800">
                 <div className="flex items-center gap-2">
-                    <Calculator className="w-6 h-6 text-blue-600" />
+                    <div className="p-2 bg-blue-50 text-blue-600 rounded-lg"><Calculator className="w-6 h-6" /></div>
                     Gestão de Folha & Financeiro
                 </div>
                 {selectedFuncionario && (
                     <Button 
                         size="sm" 
                         variant="outline" 
-                        className="bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
+                        className="rounded-xl border-emerald-200 text-emerald-700 hover:bg-emerald-50"
                         onClick={() => setReajusteOpen(true)}
                     >
-                        <TrendingUp className="w-4 h-4 mr-2" />
-                        Reajustar Salário
+                        <TrendingUp className="w-4 h-4 mr-2" /> Reajustar Salário
                     </Button>
                 )}
               </DialogTitle>
@@ -527,6 +515,7 @@ export default function Funcionarios() {
             
             {selectedFuncionario && (
               <div className="space-y-6 pt-4">
+                {/* Resumo Financeiro (KPIs Internos) */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                     <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100 relative overflow-hidden">
                         <div className="absolute right-0 top-0 p-3 opacity-10"><DollarSign className="w-12 h-12 text-emerald-600" /></div>
@@ -539,17 +528,18 @@ export default function Funcionarios() {
                         <p className="text-lg font-black text-amber-700">R$ {totalDecimo.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
                     </div>
                     <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100 relative overflow-hidden">
-                         <div className="absolute right-0 top-0 p-3 opacity-10"><DollarSign className="w-12 h-12 text-blue-600" /></div>
+                          <div className="absolute right-0 top-0 p-3 opacity-10"><DollarSign className="w-12 h-12 text-blue-600" /></div>
                         <p className="text-xs font-bold text-blue-600 uppercase tracking-wider mb-1">Férias (Pago)</p>
                         <p className="text-lg font-black text-blue-700">R$ {totalFerias.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
                     </div>
-                    <div className="bg-stone-100 p-4 rounded-2xl border border-stone-200 relative overflow-hidden">
+                    <div className="bg-stone-50 p-4 rounded-2xl border border-stone-200 relative overflow-hidden">
                         <p className="text-xs font-bold text-stone-500 uppercase tracking-wider mb-1">Pendente / Futuro</p>
                         <p className="text-lg font-black text-stone-600">R$ {totalProjetadoFuturo.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
                     </div>
                 </div>
 
-                <div className="rounded-2xl border border-stone-100 overflow-hidden shadow-sm">
+                {/* Tabela de Folha */}
+                <div className="rounded-[2rem] border border-stone-100 overflow-hidden shadow-sm">
                   <Table>
                     <TableHeader className="bg-stone-50">
                       <TableRow>
@@ -565,9 +555,7 @@ export default function Funcionarios() {
                     <TableBody>
                       {eventosFolha.map((evento, index) => (
                         <TableRow key={index} className="hover:bg-stone-50 transition-colors">
-                          <TableCell className="pl-6 font-medium text-stone-700 capitalize">
-                            {evento.referencia}
-                          </TableCell>
+                          <TableCell className="pl-6 font-medium text-stone-700 capitalize">{evento.referencia}</TableCell>
                           <TableCell>
                             <Badge variant="outline" className={
                                 evento.tipo.includes('Salário') ? 'bg-white text-emerald-700 border-emerald-200' :
@@ -577,67 +565,22 @@ export default function Funcionarios() {
                                 {evento.tipo}
                             </Badge>
                           </TableCell>
-                          <TableCell className="text-stone-600 text-sm">
-                            {format(evento.data_pagamento, 'dd/MM/yyyy')}
-                          </TableCell>
-                          <TableCell className="text-xs text-stone-500 max-w-[200px] truncate" title={evento.detalhe}>
-                            {evento.detalhe}
-                          </TableCell>
-                          <TableCell className="text-right font-bold text-stone-800">
-                            R$ {evento.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                          </TableCell>
+                          <TableCell className="text-stone-600 text-sm">{format(evento.data_pagamento, 'dd/MM/yyyy')}</TableCell>
+                          <TableCell className="text-xs text-stone-500 max-w-[200px] truncate" title={evento.detalhe}>{evento.detalhe}</TableCell>
+                          <TableCell className="text-right font-bold text-stone-800">R$ {evento.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</TableCell>
                           <TableCell className="text-center">
-                            {evento.status === 'pago' && (
-                                <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-emerald-200">
-                                    <CheckCircle2 className="w-3 h-3 mr-1" /> PAGO
-                                </Badge>
-                            )}
-                            {evento.status === 'pendente_financeiro' && (
-                                <Badge className="bg-amber-100 text-amber-700 border-amber-200 hover:bg-amber-200">
-                                    <Clock className="w-3 h-3 mr-1" /> PENDENTE
-                                </Badge>
-                            )}
-                            {evento.status === 'pendente_lancamento' && (
-                                <Badge className="bg-red-50 text-red-600 border-red-200 hover:bg-red-100">
-                                    NÃO LANÇADO
-                                </Badge>
-                            )}
-                            {evento.status === 'provisionado' && (
-                                <Badge variant="outline" className="text-stone-400 border-stone-200">
-                                    FUTURO
-                                </Badge>
-                            )}
+                            {evento.status === 'pago' && <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 border hover:bg-emerald-200"><CheckCircle2 className="w-3 h-3 mr-1" /> PAGO</Badge>}
+                            {evento.status === 'pendente_financeiro' && <Badge className="bg-amber-100 text-amber-700 border-amber-200 border hover:bg-amber-200"><Clock className="w-3 h-3 mr-1" /> PENDENTE</Badge>}
+                            {evento.status === 'pendente_lancamento' && <Badge className="bg-red-50 text-red-600 border-red-200 border hover:bg-red-100">NÃO LANÇADO</Badge>}
+                            {evento.status === 'provisionado' && <Badge variant="outline" className="text-stone-400 border-stone-200">FUTURO</Badge>}
                           </TableCell>
                           <TableCell className="text-right pr-6">
                             {evento.status === 'pago' || evento.status === 'pendente_financeiro' ? (
-                                <span className="text-xs text-stone-400 font-medium select-none">
-                                    Já no Financeiro
-                                </span>
+                                <span className="text-xs text-stone-400 font-medium select-none">No Financeiro</span>
                             ) : (
                                 <div className="flex justify-end gap-2">
-                                    <Button 
-                                    size="sm" 
-                                    variant="outline"
-                                    className="h-8 text-xs font-bold text-amber-600 border-amber-200 hover:bg-amber-50"
-                                    onClick={() => {
-                                        if(confirm(`Lançar como PENDENTE no financeiro?`)) {
-                                            lancarCustoMutation.mutate({ evento, statusInicial: 'pendente' });
-                                        }
-                                    }}
-                                    >
-                                    Lançar Pendente
-                                    </Button>
-                                    <Button 
-                                    size="sm" 
-                                    className="h-8 text-xs font-bold bg-emerald-600 hover:bg-emerald-700"
-                                    onClick={() => {
-                                        if(confirm(`Lançar como PAGO no financeiro?`)) {
-                                            lancarCustoMutation.mutate({ evento, statusInicial: 'pago' });
-                                        }
-                                    }}
-                                    >
-                                    Lançar Pago
-                                    </Button>
+                                    <Button size="sm" variant="outline" className="h-8 text-xs font-bold text-amber-600 border-amber-200 hover:bg-amber-50 rounded-lg" onClick={() => { if(confirm(`Lançar como PENDENTE no financeiro?`)) { lancarCustoMutation.mutate({ evento, statusInicial: 'pendente' }); } }}>Lançar Pendente</Button>
+                                    <Button size="sm" className="h-8 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 rounded-lg" onClick={() => { if(confirm(`Lançar como PAGO no financeiro?`)) { lancarCustoMutation.mutate({ evento, statusInicial: 'pago' }); } }}>Lançar Pago</Button>
                                 </div>
                             )}
                           </TableCell>
@@ -651,8 +594,9 @@ export default function Funcionarios() {
           </DialogContent>
         </Dialog>
 
+        {/* Dialog de Reajuste Salarial */}
         <Dialog open={reajusteOpen} onOpenChange={setReajusteOpen}>
-            <DialogContent className="sm:max-w-sm rounded-2xl">
+            <DialogContent className="sm:max-w-sm rounded-[2rem]">
                 <DialogHeader>
                     <DialogTitle>Reajustar Salário</DialogTitle>
                     <DialogDescription>Atualiza valor e mantém histórico.</DialogDescription>
@@ -660,37 +604,39 @@ export default function Funcionarios() {
                 <div className="space-y-4 py-4">
                     <div className="space-y-2">
                         <Label>Novo Salário (R$)</Label>
-                        <Input type="number" step="0.01" value={reajusteData.novo_salario} onChange={(e) => setReajusteData({...reajusteData, novo_salario: e.target.value})}/>
+                        <Input type="number" step="0.01" value={reajusteData.novo_salario} onChange={(e) => setReajusteData({...reajusteData, novo_salario: e.target.value})} className="rounded-xl"/>
                     </div>
                     <div className="space-y-2">
                         <Label>Data de Vigência</Label>
-                        <Input type="date" value={reajusteData.data_vigencia} onChange={(e) => setReajusteData({...reajusteData, data_vigencia: e.target.value})}/>
+                        <Input type="date" value={reajusteData.data_vigencia} onChange={(e) => setReajusteData({...reajusteData, data_vigencia: e.target.value})} className="rounded-xl"/>
                     </div>
                 </div>
                 <DialogFooter>
-                    <Button variant="outline" onClick={() => setReajusteOpen(false)}>Cancelar</Button>
-                    <Button onClick={() => reajusteMutation.mutate()} className="bg-emerald-600 hover:bg-emerald-700">Confirmar</Button>
+                    <Button variant="outline" onClick={() => setReajusteOpen(false)} className="rounded-xl">Cancelar</Button>
+                    <Button onClick={() => reajusteMutation.mutate()} className="bg-emerald-600 hover:bg-emerald-700 rounded-xl">Confirmar</Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>
       </div>
 
+      {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
         <StatCard title="Equipe Total" value={totalFuncionarios} icon={Users} />
         <StatCard title="Ativos Hoje" value={funcionariosAtivos} icon={User} color="text-emerald-600" />
         <StatCard title="Folha Base Mensal" value={`R$ ${totalFolhaBase.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} icon={Briefcase} color="text-amber-600" />
       </div>
 
+      {/* Grid de Funcionários (Visual Renovado) */}
       {funcionarios.length === 0 ? (
         <EmptyState icon={Users} title="Nenhum funcionário" onAction={() => setOpen(true)} actionLabel="Cadastrar" />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {funcionarios.map((funcionario) => (
-            <Card key={funcionario.id} className="border-none shadow-sm rounded-[2rem] hover:shadow-xl transition-all duration-300 group bg-white overflow-hidden">
-              <CardHeader className="pb-3">
+            <Card key={funcionario.id} className="border-none shadow-sm rounded-[2rem] hover:shadow-xl transition-all duration-300 group bg-white overflow-hidden border border-stone-100">
+              <CardHeader className="pb-3 bg-stone-50/50 border-b border-stone-50">
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-4">
-                    <div className="w-14 h-14 bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-100 transition-transform group-hover:rotate-3">
+                    <div className="w-14 h-14 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-200 transition-transform group-hover:scale-105">
                       <span className="text-xl font-bold text-white">{funcionario.nome?.charAt(0).toUpperCase()}</span>
                     </div>
                     <div>
@@ -703,7 +649,7 @@ export default function Funcionarios() {
                   </Badge>
                 </div>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-4 pt-4">
                 <div className="grid grid-cols-1 gap-2 bg-stone-50 p-4 rounded-2xl border border-stone-100">
                   <div className="flex items-center gap-2 text-sm font-medium text-stone-600">
                     <Phone className="w-4 h-4 text-stone-400" /> {funcionario.telefone || '(00) 00000-0000'}
@@ -729,7 +675,7 @@ export default function Funcionarios() {
                   <Button variant="secondary" size="sm" className="flex-1 rounded-xl font-bold hover:bg-stone-100 transition-colors" onClick={() => handleEdit(funcionario)}>
                     <Edit className="w-4 h-4 mr-2" /> Editar
                   </Button>
-                  <Button variant="ghost" size="sm" className="rounded-xl text-red-400 hover:bg-red-50 hover:text-red-600" onClick={() => deleteMutation.mutate(funcionario.id)}>
+                  <Button variant="ghost" size="sm" className="rounded-xl text-red-400 hover:bg-red-50 hover:text-red-600" onClick={() => { if(confirm("Tem certeza que deseja excluir este funcionário? Isso removerá também seus lançamentos financeiros.")) deleteMutation.mutate(funcionario.id); }}>
                     <Trash2 className="w-4 h-4" />
                   </Button>
                 </div>
