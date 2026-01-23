@@ -7,10 +7,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Printer, Wheat, DollarSign, TrendingUp, BarChart3, Package, Filter, Calendar as CalendarIcon } from 'lucide-react';
+import { Printer, Wheat, DollarSign, TrendingUp, BarChart3, Package, Filter, Calendar as CalendarIcon, Calculator, Sprout } from 'lucide-react';
 import StatCard from '@/components/ui/StatCard';
-import PageSkeleton from '@/components/ui/PageSkeleton'; // NOVO
-import { format, parseISO, isWithinInterval } from 'date-fns';
+import PageSkeleton from '@/components/ui/PageSkeleton';
+import { format, parseISO, isWithinInterval, startOfYear, endOfYear } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, LineChart, Line, CartesianGrid } from 'recharts';
 
@@ -45,8 +45,11 @@ const tipoColheitaLabels = {
 
 export default function Relatorios({ showMessage }) {
   const [filtroTalhao, setFiltroTalhao] = useState('todos');
-  const [dataInicio, setDataInicio] = useState('');
-  const [dataFim, setDataFim] = useState('');
+  
+  // Datas padrão: Ano Atual
+  const currentYear = new Date().getFullYear();
+  const [dataInicio, setDataInicio] = useState(`${currentYear}-01-01`);
+  const [dataFim, setDataFim] = useState(`${currentYear}-12-31`);
 
   const { data: talhoes = [], isLoading: l1 } = useQuery({
     queryKey: ['talhoes'],
@@ -70,9 +73,9 @@ export default function Relatorios({ showMessage }) {
 
   if (l1 || l2 || l3 || l4) return <PageSkeleton />;
 
-  // --- LÓGICA DE DADOS (Preservada do original) ---
+  // --- LÓGICA DE DADOS ---
   const filtrarPorPeriodo = (data, dateField) => {
-    if (!data) return data;
+    if (!data) return [];
     return data.filter(item => {
       if (!item[dateField]) return false;
       const itemDate = new Date(item[dateField] + 'T12:00:00');
@@ -88,25 +91,101 @@ export default function Relatorios({ showMessage }) {
     return data.filter(item => item[talhaoField] === filtroTalhao);
   };
 
-  const colheitasFiltradas = filtrarPorTalhao(filtrarPorPeriodo(colheitas, 'data'));
-  const custosFiltrados = filtrarPorTalhao(filtrarPorPeriodo(custos, 'data'));
-  const atividadesFiltradas = filtrarPorTalhao(filtrarPorPeriodo(atividades.filter(a => a.status === 'concluida'), 'data_programada'));
+  // 1. Filtragem Base por Data
+  const colheitasNoPeriodo = filtrarPorPeriodo(colheitas, 'data');
+  const custosNoPeriodo = filtrarPorPeriodo(custos, 'data');
+  const atividadesNoPeriodo = filtrarPorPeriodo(atividades.filter(a => a.status === 'concluida'), 'data_programada');
 
+  // 2. Filtro de "PAGO" (Crucial para o Relatório Real)
+  // Criamos uma lista específica de custos que foram efetivamente pagos neste período
+  const custosPagosNoPeriodo = custosNoPeriodo.filter(c => c.status_pagamento === 'pago');
+
+  // 3. Aplica filtro de talhão para as abas VISUAIS e KPIs
+  const colheitasFiltradas = filtrarPorTalhao(colheitasNoPeriodo);
+  
+  // Para KPIs de Custo, usamos APENAS OS PAGOS filtrados por talhão
+  const custosFiltradosPagos = filtrarPorTalhao(custosPagosNoPeriodo); 
+  const atividadesFiltradas = filtrarPorTalhao(atividadesNoPeriodo);
+
+  // --- KPI GERAIS (Cards do Topo) ---
   const totalColheitaKg = colheitasFiltradas.reduce((acc, c) => acc + (c.quantidade_kg || 0), 0);
   const totalColheitaCaixas = colheitasFiltradas.reduce((acc, c) => acc + (c.quantidade_caixas || 0), 0);
   const totalReceita = colheitasFiltradas.reduce((acc, c) => acc + (c.valor_total || 0), 0);
   
-  const totalCustosFinanceiro = custosFiltrados.reduce((acc, c) => acc + (c.valor || 0), 0);
+  // Total Custos = Custos Financeiros PAGOS + Custos de Atividades Concluídas
+  const totalCustosFinanceiro = custosFiltradosPagos.reduce((acc, c) => acc + (c.valor || 0), 0);
   const custoAtividades = atividadesFiltradas.reduce((acc, a) => acc + (a.custo_total || 0), 0);
   const custoTotal = totalCustosFinanceiro + custoAtividades;
+  
   const lucro = totalReceita - custoTotal;
 
   const usarCaixas = totalColheitaKg < 1 && totalColheitaCaixas > 0;
   const unidadeVisual = usarCaixas ? 'cx' : 'ton';
   const totalVisual = usarCaixas ? totalColheitaCaixas : (totalColheitaKg / 1000);
 
+  // --- LÓGICA DE SAFRA & CUSTOS (Rateio Real - SOMENTE PAGOS) ---
+  
+  const areaTotalFazenda = talhoes.reduce((acc, t) => acc + (Number(t.area_hectares) || 0), 0);
+  
+  // Custos Gerais (Sem talhão definido) -> SÓ PAGOS
+  // Isso pega folha de pagamento geral, energia, etc., que estão como 'pago' e sem talhão
+  const custosGeraisPeriodo = custosPagosNoPeriodo.filter(c => !c.talhao_id).reduce((acc, c) => acc + (Number(c.valor) || 0), 0);
+  
+  // Rateio por Hectare
+  const rateioPorHa = areaTotalFazenda > 0 ? custosGeraisPeriodo / areaTotalFazenda : 0;
+
+  // Montagem dos dados completos por talhão (Safra)
+  const talhoesComDados = talhoes.map(talhao => {
+    const area = Number(talhao.area_hectares) || 0;
+    
+    // Receita (Filtra colheitas deste talhão no período)
+    const receitaTalhao = colheitasNoPeriodo.filter(c => c.talhao_id === talhao.id).reduce((acc, c) => acc + (c.valor_total || 0), 0);
+    
+    // Custos Diretos (Financeiro PAGO com ID do talhão + Atividades do talhão)
+    const custoFinDir = custosPagosNoPeriodo.filter(c => c.talhao_id === talhao.id).reduce((acc, c) => acc + (c.valor || 0), 0);
+    const custoAtivDir = atividadesNoPeriodo.filter(a => a.talhao_id === talhao.id).reduce((acc, a) => acc + (a.custo_total || 0), 0);
+    const custoDiretoTotal = custoFinDir + custoAtivDir;
+
+    // Custos Indiretos (Rateio baseado na área - Origem: Custos Gerais PAGOS)
+    const custoIndiretoRateio = area * rateioPorHa;
+
+    // Totais
+    const custoTotalTalhao = custoDiretoTotal + custoIndiretoRateio;
+    const lucroTalhao = receitaTalhao - custoTotalTalhao;
+    const lucroPorHa = area > 0 ? (lucroTalhao / area) : 0;
+    const custoPorHa = area > 0 ? (custoTotalTalhao / area) : 0;
+
+    return { 
+        id: talhao.id, 
+        nome: talhao.nome,
+        cultura: talhao.cultura,
+        area, 
+        receita: receitaTalhao, 
+        custoDireto: custoDiretoTotal, 
+        custoIndireto: custoIndiretoRateio, 
+        custoTotal: custoTotalTalhao, 
+        custoPorHa,
+        lucro: lucroTalhao, 
+        lucroPorHa 
+    };
+  }).filter(t => t.receita > 0 || t.custoTotal > 0); 
+
+  const barDataLucroHa = talhoesComDados.map(t => ({ name: t.nome, 'Lucro/ha': t.lucroPorHa })).sort((a, b) => b['Lucro/ha'] - a['Lucro/ha']);
+
+  // Totais Gerais da Safra
+  const totaisSafra = talhoesComDados.reduce((acc, t) => ({
+    area: acc.area + t.area, 
+    receita: acc.receita + t.receita,
+    custoDireto: acc.custoDireto + t.custoDireto, 
+    custoIndireto: acc.custoIndireto + t.custoIndireto,
+    custoTotal: acc.custoTotal + t.custoTotal,
+    lucro: acc.lucro + t.lucro,
+  }), { area: 0, receita: 0, custoDireto: 0, custoIndireto: 0, custoTotal: 0, lucro: 0 });
+
+  // --- DADOS PARA GRÁFICOS DAS OUTRAS ABAS ---
+  // Pie Chart: Usa custos filtrados PAGOS
   const custoPorCategoria = {};
-  custosFiltrados.forEach(c => {
+  custosFiltradosPagos.forEach(c => {
     let catLabel = c.categoria ? (categoriaLabels[c.categoria]?.label || c.categoria) : 'Não categorizado';
     catLabel = catLabel.charAt(0).toUpperCase() + catLabel.slice(1);
     custoPorCategoria[catLabel] = (custoPorCategoria[catLabel] || 0) + (c.valor || 0);
@@ -155,45 +234,20 @@ export default function Relatorios({ showMessage }) {
     return acc;
   }, {});
 
+  // Evolução usa dados gerais (para ver tendência), mas podemos restringir a pagos se quiser consistência total.
+  // Vou manter consistência: Só soma custos se PAGO.
   custos.forEach(c => {
     if (!c.data) return;
     const mes = format(new Date(c.data + 'T12:00:00'), 'MMM/yy', { locale: ptBR });
     if (!evolucaoMensal[mes]) evolucaoMensal[mes] = { receita: 0, custos: 0 };
-    evolucaoMensal[mes].custos += c.valor || 0;
+    
+    // Filtro PAGO aqui também para o gráfico bater com os cards
+    if (c.status_pagamento === 'pago') {
+        evolucaoMensal[mes].custos += c.valor || 0;
+    }
   });
 
   const lineData = Object.entries(evolucaoMensal).slice(-12).map(([mes, data]) => ({ mes, receita: data.receita, custos: data.custos }));
-
-  // --- RATEIO ---
-  const areaTotalFazenda = talhoes.reduce((acc, t) => acc + (Number(t.area_hectares) || 0), 0);
-  const custosGeraisPeriodo = filtrarPorPeriodo(custos, 'data').filter(c => !c.talhao_id).reduce((acc, c) => acc + (Number(c.valor) || 0), 0);
-  const rateioPorHa = areaTotalFazenda > 0 ? custosGeraisPeriodo / areaTotalFazenda : 0;
-
-  const talhoesComDados = talhoes.map(talhao => {
-    const receitaTalhao = colheitas.filter(c => c.talhao_id === talhao.id).reduce((acc, c) => acc + (c.valor_total || 0), 0);
-    const custoDirTalhao = custos.filter(c => c.talhao_id === talhao.id).reduce((acc, c) => acc + (c.valor || 0), 0);
-    const custoAtivTalhao = atividades.filter(a => a.talhao_id === talhao.id && a.status === 'concluida').reduce((acc, a) => acc + (a.custo_total || 0), 0);
-    const custoInsumos = custoDirTalhao + custoAtivTalhao;
-    const area = Number(talhao.area_hectares) || 0;
-    const custoRateio = area * rateioPorHa;
-    const custoTotalTalhao = custoInsumos + custoRateio;
-    const lucroTalhao = receitaTalhao - custoTotalTalhao;
-    const lucroPorHa = area > 0 ? (lucroTalhao / area) : 0;
-
-    return { 
-        id: talhao.id, nome: talhao.nome, area, 
-        receita: receitaTalhao, custoInsumos, custoRateio, 
-        custo: custoTotalTalhao, lucro: lucroTalhao, lucroPorHa 
-    };
-  }).filter(t => t.receita > 0 || t.custoInsumos > 0 || t.custoRateio > 0);
-
-  const barDataLucroHa = talhoesComDados.map(t => ({ name: t.nome, 'Lucro/ha': t.lucroPorHa })).sort((a, b) => b['Lucro/ha'] - a['Lucro/ha']);
-
-  const totaisGeraisProdutividade = talhoesComDados.reduce((acc, t) => ({
-    area: acc.area + t.area, receita: acc.receita + t.receita,
-    custoInsumos: acc.custoInsumos + t.custoInsumos, custoRateio: acc.custoRateio + t.custoRateio,
-    lucro: acc.lucro + t.lucro,
-  }), { area: 0, receita: 0, custoInsumos: 0, custoRateio: 0, lucro: 0 });
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -201,7 +255,7 @@ export default function Relatorios({ showMessage }) {
       <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 bg-white p-4 rounded-[1.5rem] border border-stone-100 shadow-sm">
         <div>
           <h1 className="text-2xl font-bold text-stone-900 tracking-tight">Relatórios Gerenciais</h1>
-          <p className="text-stone-500 font-medium">Visão estratégica e análise de resultados</p>
+          <p className="text-stone-500 font-medium">Análise de safra, custos e resultados</p>
         </div>
         <div className="flex flex-wrap gap-2 items-center">
           <div className="flex items-center gap-2 bg-stone-50 p-1 rounded-xl border border-stone-200">
@@ -226,23 +280,114 @@ export default function Relatorios({ showMessage }) {
         </div>
       </div>
 
-      {/* KPI Cards */}
+      {/* KPI Cards (Respeitam filtro visual de talhão E data E STATUS PAGO) */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <StatCard title="Total Colhido" value={`${totalVisual.toFixed(1)} ${unidadeVisual}`} icon={Wheat} color="text-amber-600" />
         <StatCard title="Receita Total" value={`R$ ${totalReceita.toLocaleString('pt-BR')}`} icon={TrendingUp} color="text-emerald-600" />
-        <StatCard title="Custos Totais" value={`R$ ${custoTotal.toLocaleString('pt-BR')}`} icon={DollarSign} color="text-red-600" />
+        <StatCard title="Custos (Pagos)" value={`R$ ${custoTotal.toLocaleString('pt-BR')}`} icon={DollarSign} color="text-red-600" />
         <StatCard title="Lucro/Prejuízo" value={`R$ ${lucro.toLocaleString('pt-BR')}`} icon={BarChart3} color={lucro >= 0 ? "text-emerald-600" : "text-red-600"} />
         <StatCard title="Margem" value={`${totalReceita > 0 ? ((lucro/totalReceita)*100).toFixed(1) : 0}%`} icon={Package} color="text-blue-600" />
       </div>
 
-      <Tabs defaultValue="colheitas" className="space-y-6">
+      <Tabs defaultValue="safra" className="space-y-6">
         <TabsList className="bg-white border border-stone-100 p-1.5 rounded-[1rem] shadow-sm w-full lg:w-auto flex flex-wrap h-auto">
+          <TabsTrigger value="safra" className="rounded-xl px-4 py-2 data-[state=active]:bg-stone-100 data-[state=active]:text-stone-900 font-bold transition-all">Safra & Custos</TabsTrigger>
           <TabsTrigger value="colheitas" className="rounded-xl px-4 py-2 data-[state=active]:bg-stone-100 data-[state=active]:text-stone-900 font-bold transition-all">Colheitas</TabsTrigger>
           <TabsTrigger value="aproveitamento" className="rounded-xl px-4 py-2 data-[state=active]:bg-stone-100 data-[state=active]:text-stone-900 font-bold transition-all">Aproveitamento</TabsTrigger>
-          <TabsTrigger value="custos" className="rounded-xl px-4 py-2 data-[state=active]:bg-stone-100 data-[state=active]:text-stone-900 font-bold transition-all">Custos</TabsTrigger>
+          <TabsTrigger value="custos" className="rounded-xl px-4 py-2 data-[state=active]:bg-stone-100 data-[state=active]:text-stone-900 font-bold transition-all">Custos (Detalhado)</TabsTrigger>
           <TabsTrigger value="produtividade" className="rounded-xl px-4 py-2 data-[state=active]:bg-stone-100 data-[state=active]:text-stone-900 font-bold transition-all">Produtividade</TabsTrigger>
           <TabsTrigger value="evolucao" className="rounded-xl px-4 py-2 data-[state=active]:bg-stone-100 data-[state=active]:text-stone-900 font-bold transition-all">Evolução</TabsTrigger>
         </TabsList>
+
+        {/* --- NOVA ABA: SAFRA & CUSTOS --- */}
+        <TabsContent value="safra" className="space-y-6">
+            <div className="grid grid-cols-1 gap-6">
+                <Card className="border-stone-100 rounded-[2rem] shadow-sm">
+                    <CardHeader className="border-b border-stone-50 pb-4">
+                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                            <div>
+                                <CardTitle className="text-xl text-stone-800 flex items-center gap-2">
+                                    <Sprout className="w-5 h-5 text-emerald-600" />
+                                    Demonstrativo de Safra (Rateio - Somente Pagos)
+                                </CardTitle>
+                                <p className="text-sm text-stone-500 mt-1">
+                                    Período: <strong>{format(parseISO(dataInicio || `${currentYear}-01-01`), 'dd/MM/yyyy')}</strong> até <strong>{format(parseISO(dataFim || `${currentYear}-12-31`), 'dd/MM/yyyy')}</strong>
+                                    <span className="ml-2 text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-bold">REALIZADO</span>
+                                </p>
+                            </div>
+                            <div className="flex gap-4">
+                                <div className="text-right">
+                                    <span className="text-xs font-bold text-stone-400 uppercase">Custos Gerais (Rateio)</span>
+                                    <p className="text-lg font-bold text-purple-600">R$ {custosGeraisPeriodo.toLocaleString('pt-BR', {maximumFractionDigits: 2})}</p>
+                                </div>
+                                <div className="text-right">
+                                    <span className="text-xs font-bold text-stone-400 uppercase">Custo Médio / Ha</span>
+                                    <p className="text-xl font-bold text-stone-800">R$ {(totaisSafra.area > 0 ? totaisSafra.custoTotal / totaisSafra.area : 0).toLocaleString('pt-BR', {maximumFractionDigits: 2})}</p>
+                                </div>
+                            </div>
+                        </div>
+                    </CardHeader>
+                    <div className="overflow-x-auto">
+                        <Table>
+                            <TableHeader className="bg-stone-50">
+                                <TableRow>
+                                    <TableHead className="pl-6">Talhão / Cultura</TableHead>
+                                    <TableHead className="text-right">Área (ha)</TableHead>
+                                    <TableHead className="text-right text-stone-600">Custos Diretos</TableHead>
+                                    <TableHead className="text-right text-purple-600">Rateio (Geral/Folha)</TableHead>
+                                    <TableHead className="text-right font-bold text-red-600 bg-red-50/50">Custo Total</TableHead>
+                                    <TableHead className="text-right font-bold text-emerald-600">Receita</TableHead>
+                                    <TableHead className="text-right font-black">Lucro</TableHead>
+                                    <TableHead className="text-right pr-6">Lucro/Ha</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {talhoesComDados.length === 0 ? (
+                                    <TableRow>
+                                        <TableCell colSpan={8} className="text-center h-24 text-stone-400">Nenhum dado encontrado para o período selecionado.</TableCell>
+                                    </TableRow>
+                                ) : (
+                                    talhoesComDados.map((item) => (
+                                        <TableRow key={item.id} className="hover:bg-stone-50 border-b border-stone-100 transition-colors">
+                                            <TableCell className="pl-6">
+                                                <div className="font-bold text-stone-700">{item.nome}</div>
+                                                <div className="text-xs text-stone-400 capitalize">{item.cultura}</div>
+                                            </TableCell>
+                                            <TableCell className="text-right text-stone-600">{item.area.toFixed(2)}</TableCell>
+                                            <TableCell className="text-right text-stone-600">R$ {item.custoDireto.toLocaleString('pt-BR')}</TableCell>
+                                            <TableCell className="text-right text-purple-600 font-medium">R$ {item.custoIndireto.toLocaleString('pt-BR')}</TableCell>
+                                            <TableCell className="text-right font-bold text-red-600 bg-red-50/50">R$ {item.custoTotal.toLocaleString('pt-BR')}</TableCell>
+                                            <TableCell className="text-right font-bold text-emerald-600">R$ {item.receita.toLocaleString('pt-BR')}</TableCell>
+                                            <TableCell className={`text-right font-black ${item.lucro >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                                                R$ {item.lucro.toLocaleString('pt-BR')}
+                                            </TableCell>
+                                            <TableCell className={`text-right pr-6 font-bold ${item.lucroPorHa >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                                                R$ {item.lucroPorHa.toLocaleString('pt-BR', {maximumFractionDigits: 0})}
+                                            </TableCell>
+                                        </TableRow>
+                                    ))
+                                )}
+                                {/* Linha de Total */}
+                                {talhoesComDados.length > 0 && (
+                                    <TableRow className="bg-stone-100 border-t-2 border-stone-200 font-bold text-stone-800">
+                                        <TableCell className="pl-6">TOTAL SAFRA</TableCell>
+                                        <TableCell className="text-right">{totaisSafra.area.toFixed(2)}</TableCell>
+                                        <TableCell className="text-right">R$ {totaisSafra.custoDireto.toLocaleString('pt-BR')}</TableCell>
+                                        <TableCell className="text-right text-purple-700">R$ {totaisSafra.custoIndireto.toLocaleString('pt-BR')}</TableCell>
+                                        <TableCell className="text-right text-red-700 bg-red-100/50">R$ {totaisSafra.custoTotal.toLocaleString('pt-BR')}</TableCell>
+                                        <TableCell className="text-right text-emerald-700">R$ {totaisSafra.receita.toLocaleString('pt-BR')}</TableCell>
+                                        <TableCell className={`text-right ${totaisSafra.lucro >= 0 ? 'text-emerald-800' : 'text-red-800'}`}>
+                                            R$ {totaisSafra.lucro.toLocaleString('pt-BR')}
+                                        </TableCell>
+                                        <TableCell className="text-right pr-6 text-xs text-stone-500 font-normal">MÉDIA GLOBAL</TableCell>
+                                    </TableRow>
+                                )}
+                            </TableBody>
+                        </Table>
+                    </div>
+                </Card>
+            </div>
+        </TabsContent>
 
         <TabsContent value="colheitas" className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -395,8 +540,8 @@ export default function Relatorios({ showMessage }) {
                         <TableCell className="pl-6 font-medium">{t.nome}</TableCell>
                         <TableCell className="text-right">{t.area} ha</TableCell>
                         <TableCell className="text-right text-emerald-600 font-medium">R$ {t.receita.toLocaleString('pt-BR')}</TableCell>
-                        <TableCell className="text-right text-stone-600">R$ {t.custoInsumos.toLocaleString('pt-BR')}</TableCell>
-                        <TableCell className="text-right text-purple-600">R$ {t.custoRateio.toLocaleString('pt-BR', {maximumFractionDigits: 2})}</TableCell>
+                        <TableCell className="text-right text-stone-600">R$ {t.custoDireto.toLocaleString('pt-BR')}</TableCell>
+                        <TableCell className="text-right text-purple-600">R$ {t.custoIndireto.toLocaleString('pt-BR', {maximumFractionDigits: 2})}</TableCell>
                         <TableCell className={`text-right font-bold ${t.lucro >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>R$ {t.lucro.toLocaleString('pt-BR')}</TableCell>
                         <TableCell className={`text-right pr-6 font-bold ${t.lucroPorHa >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
                             R$ {t.lucroPorHa.toLocaleString('pt-BR')}
@@ -407,11 +552,11 @@ export default function Relatorios({ showMessage }) {
                     {talhoesComDados.length > 0 && (
                         <TableRow className="bg-stone-100 font-bold border-t-2 border-stone-200">
                             <TableCell className="pl-6">TOTAL GERAL</TableCell>
-                            <TableCell className="text-right">{totaisGeraisProdutividade.area.toFixed(2)} ha</TableCell>
-                            <TableCell className="text-right text-emerald-700">R$ {totaisGeraisProdutividade.receita.toLocaleString('pt-BR')}</TableCell>
-                            <TableCell className="text-right text-stone-700">R$ {totaisGeraisProdutividade.custoInsumos.toLocaleString('pt-BR')}</TableCell>
-                            <TableCell className="text-right text-purple-700">R$ {totaisGeraisProdutividade.custoRateio.toLocaleString('pt-BR')}</TableCell>
-                            <TableCell className={`text-right ${totaisGeraisProdutividade.lucro >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>R$ {totaisGeraisProdutividade.lucro.toLocaleString('pt-BR')}</TableCell>
+                            <TableCell className="text-right">{totaisSafra.area.toFixed(2)} ha</TableCell>
+                            <TableCell className="text-right text-emerald-700">R$ {totaisSafra.receita.toLocaleString('pt-BR')}</TableCell>
+                            <TableCell className="text-right text-stone-700">R$ {totaisSafra.custoDireto.toLocaleString('pt-BR')}</TableCell>
+                            <TableCell className="text-right text-purple-700">R$ {totaisSafra.custoIndireto.toLocaleString('pt-BR')}</TableCell>
+                            <TableCell className={`text-right ${totaisSafra.lucro >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>R$ {totaisSafra.lucro.toLocaleString('pt-BR')}</TableCell>
                             <TableCell className="text-right pr-6">-</TableCell>
                         </TableRow>
                     )}

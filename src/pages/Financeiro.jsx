@@ -244,7 +244,10 @@ export default function Financeiro({ showMessage }) {
                 agrupados.push(grupo);
             }
             mapMeses[mesAnoKey].itens.push(custo);
-            mapMeses[mesAnoKey].total += custo.valor || 0;
+            // SOMA APENAS SE ESTIVER PAGO NO AGRUPAMENTO
+            if (custo.status_pagamento === 'pago') {
+                mapMeses[mesAnoKey].total += custo.valor || 0;
+            }
         } else {
             agrupados.push(custo);
         }
@@ -256,16 +259,19 @@ export default function Financeiro({ showMessage }) {
     setExpandedGroups(prev => ({ ...prev, [groupId]: !prev[groupId] }));
   };
 
-  // --- TOTAIS ---
+  // --- TOTAIS (CORRIGIDOS PARA SOMAR APENAS PAGOS) ---
   const totalDespesasPagas = custosFiltrados.filter(c => c.tipo_lancamento === 'despesa' && c.status_pagamento === 'pago').reduce((acc, c) => acc + (c.valor || 0), 0);
   const totalDespesasPendentes = custosFiltrados.filter(c => c.tipo_lancamento === 'despesa' && c.status_pagamento === 'pendente').reduce((acc, c) => acc + (c.valor || 0), 0);
-  const totalReceitasExtras = custosFiltrados.filter(c => c.tipo_lancamento === 'receita').reduce((acc, c) => acc + (c.valor || 0), 0);
+  
+  // Receita: Soma colheitas (que assumimos como receita realizada) + Receitas extras PAGAS
+  const totalReceitasExtras = custosFiltrados.filter(c => c.tipo_lancamento === 'receita' && c.status_pagamento === 'pago').reduce((acc, c) => acc + (c.valor || 0), 0);
   const totalReceitasColheita = colheitasFiltradas.reduce((acc, c) => acc + (c.valor_total || 0), 0);
   const receitaTotalGeral = totalReceitasColheita + totalReceitasExtras;
+  
   const saldoAtual = receitaTotalGeral - totalDespesasPagas;
 
   const pieData = Object.entries(
-    custosFiltrados.filter(c => c.tipo_lancamento === 'despesa').reduce((acc, c) => {
+    custosFiltrados.filter(c => c.tipo_lancamento === 'despesa' && c.status_pagamento === 'pago').reduce((acc, c) => {
         const cat = categoriaLabels[c.categoria]?.label || 'Outro';
         acc[cat] = (acc[cat] || 0) + (c.valor || 0);
         return acc;
@@ -403,7 +409,7 @@ export default function Financeiro({ showMessage }) {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Gráfico 1/3 */}
         <Card className="lg:col-span-1 border-stone-100 rounded-[2rem] shadow-sm flex flex-col">
-          <CardHeader><CardTitle className="text-lg">Despesas por Categoria</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="text-lg">Despesas Pagas por Categoria</CardTitle></CardHeader>
           <CardContent className="flex-1">
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
@@ -468,7 +474,7 @@ export default function Financeiro({ showMessage }) {
                                         R$ {item.total.toLocaleString('pt-BR')}
                                     </TableCell>
                                     <TableCell className="text-center">
-                                        <Badge variant="secondary" className="bg-white border border-blue-200 text-blue-600 text-[10px]">AGRUPADO</Badge>
+                                        <Badge variant="secondary" className="bg-white border border-blue-200 text-blue-600 text-[10px]">AGRUPADO (PAGOS)</Badge>
                                     </TableCell>
                                     <TableCell className="text-right pr-6"><span className="text-xs text-blue-400">Ver itens</span></TableCell>
                                 </TableRow>
@@ -507,7 +513,7 @@ export default function Financeiro({ showMessage }) {
                             {item.tipo_lancamento === 'receita' && <span className="text-[10px] text-blue-600 font-bold uppercase tracking-wider bg-blue-50 px-1.5 py-0.5 rounded-md">Receita</span>}
                         </div>
                         </TableCell>
-                        <TableCell className={`text-right font-bold ${item.tipo_lancamento === 'receita' ? 'text-blue-600' : 'text-red-600'}`}>
+                        <TableCell className={`text-right font-bold ${item.tipo_lancamento === 'receita' ? 'text-blue-600' : 'text-red-600'} ${item.status_pagamento === 'pendente' ? 'opacity-50' : ''}`}>
                             {item.tipo_lancamento === 'despesa' ? '- ' : '+ '}
                             R$ {item.valor?.toLocaleString('pt-BR')}
                         </TableCell>
