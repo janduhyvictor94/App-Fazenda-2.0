@@ -24,6 +24,8 @@ import Pluviometria from "./Pluviometria"; // Já existente
 
 import Metas from "./Metas"; // Novo import
 
+import Safras from "./Safras"; // Nova página Safras
+
 import { BrowserRouter as Router, Route, Routes, useLocation } from 'react-router-dom';
 
 const PAGES = {
@@ -39,6 +41,8 @@ const PAGES = {
     Pluviometria: Pluviometria, // Já existente
     
     Metas: Metas, // Novo registro
+
+    Safras: Safras, // Novo registro Safras
     
     Calendario: Calendario,
     
@@ -90,6 +94,8 @@ function PagesContent() {
                 <Route path="/Pluviometria" element={<Pluviometria />} />
 
                 <Route path="/Metas" element={<Metas />} /> {/* Nova Rota */}
+
+                <Route path="/Safras" element={<Safras />} /> {/* Nova Rota Safras */}
                 
                 <Route path="/Calendario" element={<Calendario />} />
                 
