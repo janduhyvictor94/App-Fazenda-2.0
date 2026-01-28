@@ -7,13 +7,16 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Switch } from '@/components/ui/switch';
-import { Plus, Edit, Trash2, ClipboardList, Filter, Package, Copy, MessageCircle, CheckCircle2, Calendar as CalendarIcon, ListPlus, X, Send, FileText } from 'lucide-react';
+import { Plus, Edit, Trash2, ClipboardList, Filter, Package, Copy, MessageCircle, CheckCircle2, Calendar as CalendarIcon, ListPlus, X, Send, FileText, LayoutGrid, ArrowRight, FileDown } from 'lucide-react';
 import EmptyState from '@/components/ui/EmptyState';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, subDays, isWithinInterval, startOfDay, endOfDay } from 'date-fns';
+// IMPORTAÇÕES DO PDF
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 const tiposAtividadePadrao = [
   { value: 'inducao', label: 'Indução' },
@@ -38,6 +41,15 @@ export default function Atividades() {
   const [summaryOpen, setSummaryOpen] = useState(false);
   const [summaryText, setSummaryText] = useState('');
   
+  // ESTADO PARA VISÃO GERAL POR VÁLVULA
+  const [areaViewOpen, setAreaViewOpen] = useState(false);
+
+  // ESTADOS PARA O RELATÓRIO PDF
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportTalhao, setReportTalhao] = useState('todos');
+  const [reportStartDate, setReportStartDate] = useState(format(subDays(new Date(), 30), 'yyyy-MM-dd'));
+  const [reportEndDate, setReportEndDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+
   const [editingAtividade, setEditingAtividade] = useState(null);
   const [activityQueue, setActivityQueue] = useState([]);
 
@@ -90,6 +102,99 @@ export default function Atividades() {
     queryFn: async () => { const { data } = await supabase.from('tipos_atividade').select('*'); return data || []; }
   });
 
+  // --- DADOS PARA VISÃO GERAL ---
+  const areasResumo = useMemo(() => {
+    return talhoes.map(talhao => {
+        const atividadesArea = atividades.filter(a => a.talhao_id === talhao.id);
+        const totalCusto = atividadesArea.reduce((acc, curr) => acc + (curr.custo_total || 0), 0);
+        const pendentes = atividadesArea.filter(a => a.status === 'programada' || a.status === 'em_andamento');
+        const concluidas = atividadesArea.filter(a => a.status === 'concluida');
+        const proximas = pendentes.sort((a, b) => new Date(a.data_programada) - new Date(b.data_programada)).slice(0, 3);
+        return { ...talhao, totalCusto, qtdPendentes: pendentes.length, qtdConcluidas: concluidas.length, proximas };
+    });
+  }, [talhoes, atividades]);
+
+  // --- FUNÇÃO DE GERAÇÃO DE PDF (ATUALIZADA COM VALORES) ---
+  const generatePDF = () => {
+    const doc = new jsPDF();
+
+    const filteredActivities = atividades.filter(a => {
+        const date = parseISO(a.data_programada);
+        const start = startOfDay(parseISO(reportStartDate));
+        const end = endOfDay(parseISO(reportEndDate));
+        
+        const inDateRange = isWithinInterval(date, { start, end });
+        const inTalhao = reportTalhao === 'todos' || a.talhao_id === reportTalhao;
+        
+        return inDateRange && inTalhao;
+    }).sort((a, b) => new Date(a.data_programada) - new Date(b.data_programada));
+
+    // CALCULAR TOTAL GERAL
+    const totalGeral = filteredActivities.reduce((acc, curr) => acc + (curr.custo_total || 0), 0);
+
+    const nomeFiltro = reportTalhao === 'todos' ? 'Todas as Válvulas' : talhoes.find(t => t.id === reportTalhao)?.nome;
+
+    doc.setFontSize(18);
+    doc.text("Caderno de Campo - Fazenda Cassiano's", 14, 20);
+    
+    doc.setFontSize(10);
+    doc.text(`Filtro: ${nomeFiltro}`, 14, 28);
+    doc.text(`Período: ${format(parseISO(reportStartDate), 'dd/MM/yyyy')} a ${format(parseISO(reportEndDate), 'dd/MM/yyyy')}`, 14, 34);
+
+    // ADICIONADA COLUNA "VALOR"
+    const tableColumn = ["Data", "Válvula", "Atividade", "Detalhes / Insumos", "Status", "Resp.", "Valor"];
+    const tableRows = [];
+
+    filteredActivities.forEach(ativ => {
+        const dataFormatada = format(parseISO(ativ.data_programada), 'dd/MM/yy');
+        const nomeValvula = getTalhaoNome(ativ.talhao_id);
+        const tipo = ativ.tipo === 'outro' ? ativ.tipo_personalizado : getTipoLabel(ativ.tipo);
+        
+        let detalhes = "";
+        if (ativ.insumos_utilizados && ativ.insumos_utilizados.length > 0) {
+            detalhes = ativ.insumos_utilizados.map(i => `${i.nome} (${i.quantidade}${i.unidade})`).join(', ');
+        } else if (ativ.terceirizada) {
+            detalhes = "Serviço Terceirizado";
+        }
+        if (ativ.observacoes) detalhes += `\nObs: ${ativ.observacoes}`;
+
+        const status = statusLabels[ativ.status]?.label || ativ.status;
+        
+        // FORMATAR VALOR
+        const valorFormatado = (ativ.custo_total || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+        tableRows.push([
+            dataFormatada,
+            nomeValvula,
+            tipo,
+            detalhes,
+            status,
+            ativ.responsavel || '-',
+            valorFormatado // Coluna de valor
+        ]);
+    });
+
+    autoTable(doc, {
+        head: [tableColumn],
+        body: tableRows,
+        // ADICIONADO RODAPÉ COM TOTAL
+        foot: [
+            ["", "", "", "", "", "TOTAL GERAL:", totalGeral.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })]
+        ],
+        startY: 40,
+        theme: 'grid',
+        styles: { fontSize: 8, cellPadding: 2 },
+        headStyles: { fillColor: [16, 185, 129] }, // Emerald Green
+        footStyles: { fillColor: [240, 240, 240], textColor: [0,0,0], fontStyle: 'bold', halign: 'right' }, // Estilo do rodapé
+        columnStyles: {
+            6: { halign: 'right' } // Alinha a coluna de valor à direita
+        }
+    });
+
+    doc.save(`relatorio_campo_${format(new Date(), 'yyyyMMdd')}.pdf`);
+    setReportOpen(false);
+  };
+
   // --- MUTAÇÕES ---
   const createBatchMutation = useMutation({
     mutationFn: async (activities) => {
@@ -139,7 +244,7 @@ export default function Atividades() {
   const handleAddToQueue = (e) => {
       e.preventDefault();
       if (!formData.talhao_id || !formData.tipo || !formData.data_programada) {
-          alert("Preencha Válvula/Talhão, Tipo e Data para adicionar.");
+          alert("Preencha Válvula, Tipo e Data para adicionar.");
           return;
       }
       const talhaoNome = talhoes.find(t => t.id === formData.talhao_id)?.nome || 'Válvula';
@@ -155,7 +260,6 @@ export default function Atividades() {
       };
 
       setActivityQueue([...activityQueue, newItem]);
-      
       setFormData(prev => ({ 
           ...prev, 
           talhao_id: '', 
@@ -186,7 +290,7 @@ export default function Atividades() {
 
       let text = "*📋 PROGRAMAÇÃO DE ATIVIDADES*\n\n";
       Object.keys(grouped).forEach(talhao => {
-          text += `*📍 ${talhao.toUpperCase()}*\n`; // Nome do Talhão/Válvula
+          text += `*📍 ${talhao.toUpperCase()}*\n`;
           grouped[talhao].sort((a, b) => new Date(a.data_programada) - new Date(b.data_programada)).forEach(ativ => {
               const date = format(parseISO(ativ.data_programada), 'dd/MM');
               const tipoLabel = ativ.tipo === 'outro' ? ativ.tipo_personalizado : getTipoLabel(ativ.tipo);
@@ -214,7 +318,7 @@ export default function Atividades() {
     const data = format(new Date(atividade.data_programada + 'T12:00:00'), 'dd/MM/yyyy');
     
     let text = `📋 *DETALHES DA ATIVIDADE*\n\n`;
-    text += `📍 *Válvula:* ${talhaoNome}\n`; // ALTERADO PARA VÁLVULA
+    text += `📍 *Válvula:* ${talhaoNome}\n`;
     text += `🚜 *Atividade:* ${tipoNome}\n`;
     text += `📅 *Data:* ${data}\n`;
     
@@ -240,7 +344,6 @@ export default function Atividades() {
       alert("Texto copiado! Agora cole no WhatsApp do encarregado.");
   };
 
-  // --- LÓGICA PADRÃO ---
   const resetForm = () => {
     setFormData({
       talhao_id: '', tipo: '', tipo_personalizado: '',
@@ -352,21 +455,98 @@ export default function Atividades() {
     return customizado ? customizado.nome : tipo;
   };
 
-  const handleShareWhatsApp = (atividade) => {
-    const talhaoNome = getTalhaoNome(atividade.talhao_id);
-    const tipoNome = atividade.tipo === 'outro' ? atividade.tipo_personalizado : getTipoLabel(atividade.tipo);
-    const data = format(new Date(atividade.data_programada + 'T12:00:00'), 'dd/MM/yyyy');
-    const text = `🚜 *Nova Atividade Programada*\n\n📍 *Válvula:* ${talhaoNome}\n🔧 *Atividade:* ${tipoNome}\n📅 *Data:* ${data}\n${atividade.observacoes ? `📝 *Obs:* ${atividade.observacoes}` : ''}`;
-    const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
-    window.open(url, '_blank');
-  };
-
   const todosTipos = [ ...tiposAtividadePadrao, ...tiposCustomizados.map(t => ({ value: t.nome, label: t.nome })) ];
 
   return (
     <div className="space-y-6">
       
-      {/* Modal de Resumo para WhatsApp */}
+      {/* DIALOG DE RELATÓRIO PDF (REINSERIDO) */}
+      <Dialog open={reportOpen} onOpenChange={setReportOpen}>
+        <DialogContent className="sm:max-w-md rounded-[2rem]">
+            <DialogHeader>
+                <DialogTitle className="flex items-center gap-2 text-stone-800"><FileDown className="w-5 h-5 text-emerald-600" /> Exportar Caderno de Campo</DialogTitle>
+                <DialogDescription>Gere um relatório PDF detalhado das atividades.</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-2">
+                <div className="space-y-2">
+                    <Label>Válvula</Label>
+                    <Select value={reportTalhao} onValueChange={setReportTalhao}>
+                        <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="todos">Todas as Válvulas</SelectItem>
+                            {talhoes.map(t => <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                        <Label>Data Início</Label>
+                        <Input type="date" value={reportStartDate} onChange={(e) => setReportStartDate(e.target.value)} className="rounded-xl" />
+                    </div>
+                    <div className="space-y-2">
+                        <Label>Data Fim</Label>
+                        <Input type="date" value={reportEndDate} onChange={(e) => setReportEndDate(e.target.value)} className="rounded-xl" />
+                    </div>
+                </div>
+                <Button onClick={generatePDF} className="w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 font-bold text-white h-11">
+                    <FileDown className="w-4 h-4 mr-2" /> Baixar PDF
+                </Button>
+            </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* MODAL: VISÃO GERAL POR VÁLVULA */}
+      <Dialog open={areaViewOpen} onOpenChange={setAreaViewOpen}>
+        <DialogContent className="sm:max-w-5xl max-h-[90vh] overflow-y-auto rounded-[2rem] bg-stone-50">
+            <DialogHeader className="mb-4">
+                <DialogTitle className="flex items-center gap-2 text-xl text-stone-800">
+                    <LayoutGrid className="w-6 h-6 text-blue-600" /> Visão Geral por Válvula
+                </DialogTitle>
+                <DialogDescription>Resumo do preenchimento e atividades por área.</DialogDescription>
+            </DialogHeader>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {areasResumo.map((area) => (
+                    <Card key={area.id} className="border-stone-200 shadow-sm hover:shadow-md transition-shadow bg-white overflow-hidden">
+                        <div className="p-4 border-b border-stone-100 flex justify-between items-center bg-stone-50/50">
+                            <h3 className="font-bold text-stone-800 text-lg">{area.nome}</h3>
+                            <div className="text-xs font-semibold text-stone-500 bg-white px-2 py-1 rounded-lg border border-stone-200">{area.cultura || 'Diversos'}</div>
+                        </div>
+                        <div className="p-4 space-y-4">
+                            <div className="grid grid-cols-2 gap-2 text-center">
+                                <div className="bg-amber-50 rounded-lg p-2 border border-amber-100">
+                                    <div className="text-xl font-bold text-amber-600">{area.qtdPendentes}</div>
+                                    <div className="text-[10px] uppercase font-bold text-amber-700/60">Programadas</div>
+                                </div>
+                                <div className="bg-emerald-50 rounded-lg p-2 border border-emerald-100">
+                                    <div className="text-xl font-bold text-emerald-600">{area.qtdConcluidas}</div>
+                                    <div className="text-[10px] uppercase font-bold text-emerald-700/60">Concluídas</div>
+                                </div>
+                            </div>
+                            <div>
+                                <p className="text-xs font-bold text-stone-400 mb-2 uppercase tracking-wide">Próximas Atividades</p>
+                                {area.proximas.length > 0 ? (
+                                    <div className="space-y-1">
+                                        {area.proximas.map(a => (
+                                            <div key={a.id} className="flex justify-between items-center text-xs p-2 bg-stone-50 rounded-lg">
+                                                <span className="font-medium text-stone-700">{getTipoLabel(a.tipo)}</span>
+                                                <span className="text-stone-400">{format(parseISO(a.data_programada), 'dd/MM')}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (<div className="text-xs text-stone-300 italic text-center py-2 bg-stone-50 rounded-lg">Nenhuma atividade programada</div>)}
+                            </div>
+                            <div className="pt-2 border-t border-stone-100 flex justify-between items-center">
+                                <span className="text-xs font-medium text-stone-500">Custo Total Acumulado</span>
+                                <span className="font-bold text-stone-800">R$ {area.totalCusto.toLocaleString('pt-BR', {minimumFractionDigits: 0})}</span>
+                            </div>
+                        </div>
+                    </Card>
+                ))}
+            </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Resumo para Texto/WhatsApp */}
       <Dialog open={summaryOpen} onOpenChange={setSummaryOpen}>
         <DialogContent className="sm:max-w-md rounded-[2rem]">
             <DialogHeader>
@@ -391,211 +571,215 @@ export default function Atividades() {
           <p className="text-stone-500 font-medium">Gerenciamento de tarefas e manejo</p>
         </div>
         
-        <Dialog open={open} onOpenChange={(v) => { if(!v) resetForm(); setOpen(v); }}>
-          <DialogTrigger asChild>
-            <Button className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl h-10 px-5 shadow-lg shadow-emerald-100 transition-all active:scale-95 ml-2">
-              <Plus className="w-4 h-4 mr-2" /> Nova Programação
+        <div className="flex gap-2">
+            {/* BOTÃO RELATÓRIO PDF (REINSERIDO) */}
+            <Button onClick={() => setReportOpen(true)} className="bg-white border border-stone-200 text-stone-700 hover:bg-stone-50 rounded-xl h-10 px-4 shadow-sm">
+                <FileDown className="w-4 h-4 mr-2" /> Relatório PDF
             </Button>
-          </DialogTrigger>
-          {/* AUMENTADO A LARGURA DO MODAL PARA CABER A LISTA */}
-          <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto rounded-[2rem]">
-            <DialogHeader>
-              <DialogTitle>{editingAtividade ? 'Editar Atividade' : 'Planejamento de Atividades'}</DialogTitle>
-              <DialogDescription>
-                  {editingAtividade ? 'Edite os detalhes desta atividade.' : 'Adicione várias atividades à lista e salve tudo de uma vez.'}
-              </DialogDescription>
-            </DialogHeader>
+
+            <Button onClick={() => setAreaViewOpen(true)} className="bg-white border border-stone-200 text-stone-700 hover:bg-stone-50 rounded-xl h-10 px-4 shadow-sm">
+                <LayoutGrid className="w-4 h-4 mr-2" /> Visão por Válvula
+            </Button>
+
+            <Dialog open={open} onOpenChange={(v) => { if(!v) resetForm(); setOpen(v); }}>
+            <DialogTrigger asChild>
+                <Button className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl h-10 px-5 shadow-lg shadow-emerald-100 transition-all active:scale-95 ml-2">
+                <Plus className="w-4 h-4 mr-2" /> Nova Programação
+                </Button>
+            </DialogTrigger>
             
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pt-2">
+            <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto rounded-[2rem]">
+                <DialogHeader>
+                <DialogTitle>{editingAtividade ? 'Editar Atividade' : 'Planejamento de Atividades'}</DialogTitle>
+                <DialogDescription>
+                    {editingAtividade ? 'Edite os detalhes desta atividade.' : 'Adicione várias atividades à lista e salve tudo de uma vez.'}
+                </DialogDescription>
+                </DialogHeader>
                 
-                {/* COLUNA 1 e 2: FORMULÁRIO (OCUPA 2/3) */}
-                <div className="lg:col-span-2 space-y-4 border-r border-stone-100 pr-0 lg:pr-6">
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                        <Label>Válvula</Label> {/* ALTERADO AQUI */}
-                        <Select value={formData.talhao_id || ""} onValueChange={(value) => setFormData({ ...formData, talhao_id: value })}>
-                            <SelectTrigger className="rounded-xl"><SelectValue placeholder="Selecione" /></SelectTrigger>
-                            <SelectContent>{talhoes.map((talhao) => (<SelectItem key={talhao.id} value={talhao.id}>{talhao.nome}</SelectItem>))}</SelectContent>
-                        </Select>
-                        </div>
-                        <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                            <Label>Tipo de Atividade</Label>
-                            <Button type="button" variant="ghost" size="sm" onClick={() => setOpenTipoDialog(true)} className="h-6 text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50 px-2 rounded-lg">
-                                <Plus className="w-3 h-3 mr-1" /> Gerenciar Tipos
-                            </Button>
-                        </div>
-                        <Select value={formData.tipo || ""} onValueChange={(value) => setFormData({ ...formData, tipo: value })}>
-                            <SelectTrigger className="rounded-xl"><SelectValue placeholder="Selecione" /></SelectTrigger>
-                            <SelectContent>{todosTipos.map((tipo) => (<SelectItem key={tipo.value} value={tipo.value}>{tipo.label}</SelectItem>))}</SelectContent>
-                        </Select>
-                        </div>
-                    </div>
-
-                    {formData.tipo === 'outro' && (
-                        <div className="space-y-2"><Label>Nome da Atividade</Label><Input value={formData.tipo_personalizado || ""} onChange={(e) => setFormData({ ...formData, tipo_personalizado: e.target.value })} className="rounded-xl" /></div>
-                    )}
-
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2"><Label>Data Programada</Label><Input type="date" value={formData.data_programada || ""} onChange={(e) => setFormData({ ...formData, data_programada: e.target.value })} className="rounded-xl" /></div>
-                        <div className="space-y-2"><Label>Status</Label><Select value={formData.status || ""} onValueChange={(value) => setFormData({ ...formData, status: value })}><SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="programada">Programada</SelectItem><SelectItem value="em_andamento">Em Andamento</SelectItem><SelectItem value="concluida">Concluída</SelectItem></SelectContent></Select></div>
-                    </div>
-
-                    <div className="space-y-2"><Label>Responsável</Label><Input value={formData.responsavel || ""} onChange={(e) => setFormData({ ...formData, responsavel: e.target.value })} className="rounded-xl" /></div>
-
-                    {/* SEÇÃO TERCEIRIZAÇÃO */}
-                    <div className="p-4 bg-stone-50 rounded-xl space-y-4 border border-stone-100">
-                        <div className="flex items-center justify-between">
-                            <Label className="text-base font-medium text-stone-700">Atividade Terceirizada</Label>
-                            <Switch checked={formData.terceirizada} onCheckedChange={(checked) => setFormData({ ...formData, terceirizada: checked })} />
-                        </div>
-                        {formData.terceirizada && (
-                            <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
-                                <Label>Valor do Serviço</Label>
-                                <Input type="number" step="0.01" value={formData.valor_terceirizado || ""} onChange={(e) => setFormData({ ...formData, valor_terceirizado: e.target.value })} placeholder="R$ 0,00" className="rounded-xl" />
-                            </div>
-                        )}
-                    </div>
-
-                    {/* SEÇÃO INSUMOS */}
-                    <div className="p-4 bg-stone-50 rounded-xl space-y-3 border border-stone-100">
-                        <Label className="text-sm font-bold text-stone-700">Insumos (Opcional)</Label>
-                        <div className="flex gap-2">
-                            <Select value={insumoTemp.insumo_id || ""} onValueChange={(value) => setInsumoTemp({ ...insumoTemp, insumo_id: value })}>
-                                <SelectTrigger className="w-full rounded-xl bg-white h-9 text-xs"><SelectValue placeholder="Insumo" /></SelectTrigger>
-                                <SelectContent>{insumos.map((i) => (<SelectItem key={i.id} value={i.id}>{i.nome}</SelectItem>))}</SelectContent>
-                            </Select>
-                            <Input type="number" placeholder="Qtd" className="w-20 rounded-xl bg-white h-9 text-xs" value={insumoTemp.quantidade || ""} onChange={(e) => setInsumoTemp({ ...insumoTemp, quantidade: e.target.value })} />
-                            
-                            <Select value={insumoTemp.metodo_aplicacao || "foliar"} onValueChange={(value) => { setInsumoTemp({ ...insumoTemp, metodo_aplicacao: value }); setMostrarNovoMetodo(value === 'outro'); }}>
-                                <SelectTrigger className="w-32 rounded-xl bg-white h-9 text-xs"><SelectValue placeholder="Método" /></SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="foliar">Foliar</SelectItem>
-                                    <SelectItem value="adubacao">Adubação</SelectItem>
-                                    <SelectItem value="solo">Solo</SelectItem>
-                                    <SelectItem value="fertirrigacao">Fertirrigação</SelectItem>
-                                    <SelectItem value="outro">Outro...</SelectItem>
-                                </SelectContent>
-                            </Select>
-                            
-                            {mostrarNovoMetodo && <Input placeholder="Nome" className="w-24 rounded-xl bg-white h-9 text-xs" value={novoMetodo || ""} onChange={(e) => setNovoMetodo(e.target.value)} />}
-                            
-                            <Button type="button" onClick={addInsumo} size="sm" className="rounded-xl bg-white hover:bg-emerald-50 text-emerald-600 border border-emerald-200"><Plus className="w-4 h-4" /></Button>
-                        </div>
-                        
-                        {formData.insumos_utilizados.length > 0 && (
-                            <div className="flex flex-wrap gap-2">
-                                {formData.insumos_utilizados.map((ins, idx) => (
-                                    <Badge key={idx} variant="secondary" className="bg-white border-stone-200 text-stone-600 pr-1 py-1">
-                                        {ins.nome} ({ins.quantidade}) - <span className="capitalize ml-1 font-bold">{ins.metodo_aplicacao}</span>
-                                        <button onClick={() => removeInsumo(idx)} className="ml-1 text-red-400 hover:text-red-600"><X className="w-3 h-3"/></button>
-                                    </Badge>
-                                ))}
-                            </div>
-                        )}
-                    </div>
-
-                    <div className="flex items-center justify-between p-4 bg-emerald-50 rounded-xl border border-emerald-100">
-                        <span className="font-medium text-emerald-800">Custo Total Previsto</span>
-                        <span className="text-xl font-bold text-emerald-700">R$ {calcularCustoTotal().toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                    </div>
-
-                    <div className="space-y-2">
-                        <Label>Observações</Label>
-                        <Textarea value={formData.observacoes || ""} onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })} rows={2} className="rounded-xl" placeholder="Detalhes para o encarregado..." />
-                    </div>
-
-                    {!editingAtividade && (
-                        <Button onClick={handleAddToQueue} className="w-full rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold h-12">
-                            <ListPlus className="w-5 h-5 mr-2" /> Adicionar à Lista
-                        </Button>
-                    )}
-                </div>
-
-                {/* COLUNA 3: LISTA DE PRÉ-LANÇAMENTO */}
-                <div className="lg:col-span-1 bg-stone-50 rounded-2xl border border-stone-200 p-4 flex flex-col h-full min-h-[300px]">
-                    <h4 className="text-sm font-bold text-stone-700 mb-3 flex items-center gap-2">
-                        <ClipboardList className="w-4 h-4" /> Lista de Programação ({activityQueue.length})
-                    </h4>
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pt-2">
                     
-                    {editingAtividade ? (
-                        <div className="flex-1 flex items-center justify-center text-center text-stone-400 text-xs italic">
-                            Modo de edição individual.<br/>A lista está desabilitada.
-                        </div>
-                    ) : (
-                        <>
-                            <div className="flex-1 overflow-y-auto space-y-2 max-h-[400px] pr-1 scrollbar-thin">
-                                {activityQueue.length === 0 ? (
-                                    <div className="text-center text-stone-400 text-xs py-10 italic">
-                                        Preencha o formulário e clique em "Adicionar à Lista" para montar a programação do dia/semana.
-                                    </div>
-                                ) : (
-                                    activityQueue.map((item, idx) => (
-                                        <div key={item.tempId} className="bg-white p-3 rounded-xl border border-stone-100 shadow-sm text-sm relative group animate-in slide-in-from-left-2">
-                                            <button onClick={() => handleRemoveFromQueue(item.tempId)} className="absolute top-2 right-2 text-stone-300 hover:text-red-500 transition-colors"><X className="w-4 h-4" /></button>
-                                            
-                                            <div className="font-bold text-stone-800 text-emerald-700">{item.talhao_nome}</div>
-                                            <div className="font-medium text-stone-700">{item.tipo === 'outro' ? item.tipo_personalizado : getTipoLabel(item.tipo)}</div>
-                                            <div className="text-xs text-stone-500 mt-1 flex items-center gap-1">
-                                                <CalendarIcon className="w-3 h-3"/> {format(parseISO(item.data_programada), 'dd/MM/yyyy')}
-                                            </div>
-                                            {item.terceirizada && <div className="text-[10px] text-blue-600 font-bold mt-1">Terceirizado: R$ {parseFloat(item.valor_terceirizado || 0).toLocaleString('pt-BR')}</div>}
-                                            {item.insumos_utilizados.length > 0 && (
-                                                <div className="mt-2 pt-2 border-t border-stone-50 flex gap-1 flex-wrap">
-                                                    {item.insumos_utilizados.map((i, k) => (
-                                                        <span key={k} className="text-[10px] bg-stone-100 px-1 rounded text-stone-500">
-                                                            {i.nome} - <span className="capitalize">{i.metodo_aplicacao}</span>
-                                                        </span>
-                                                    ))}
-                                                </div>
-                                            )}
-                                        </div>
-                                    ))
-                                )}
+                    {/* COLUNA 1 e 2: FORMULÁRIO (OCUPA 2/3) */}
+                    <div className="lg:col-span-2 space-y-4 border-r border-stone-100 pr-0 lg:pr-6">
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                            <Label>Válvula</Label>
+                            <Select value={formData.talhao_id || ""} onValueChange={(value) => setFormData({ ...formData, talhao_id: value })}>
+                                <SelectTrigger className="rounded-xl"><SelectValue placeholder="Selecione" /></SelectTrigger>
+                                <SelectContent>{talhoes.map((talhao) => (<SelectItem key={talhao.id} value={talhao.id}>{talhao.nome}</SelectItem>))}</SelectContent>
+                            </Select>
                             </div>
-                            
-                            <div className="mt-4 pt-4 border-t border-stone-200">
-                                <Button onClick={handleSaveAll} disabled={activityQueue.length === 0 || createBatchMutation.isPending} className="w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-11 shadow-lg shadow-emerald-100">
-                                    {createBatchMutation.isPending ? 'Salvando...' : `Confirmar (${activityQueue.length})`}
+                            <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                                <Label>Tipo de Atividade</Label>
+                                <Button type="button" variant="ghost" size="sm" onClick={() => setOpenTipoDialog(true)} className="h-6 text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50 px-2 rounded-lg">
+                                    <Plus className="w-3 h-3 mr-1" /> Gerenciar Tipos
                                 </Button>
                             </div>
-                        </>
-                    )}
+                            <Select value={formData.tipo || ""} onValueChange={(value) => setFormData({ ...formData, tipo: value })}>
+                                <SelectTrigger className="rounded-xl"><SelectValue placeholder="Selecione" /></SelectTrigger>
+                                <SelectContent>{todosTipos.map((tipo) => (<SelectItem key={tipo.value} value={tipo.value}>{tipo.label}</SelectItem>))}</SelectContent>
+                            </Select>
+                            </div>
+                        </div>
+
+                        {formData.tipo === 'outro' && (
+                            <div className="space-y-2"><Label>Nome da Atividade</Label><Input value={formData.tipo_personalizado || ""} onChange={(e) => setFormData({ ...formData, tipo_personalizado: e.target.value })} className="rounded-xl" /></div>
+                        )}
+
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2"><Label>Data Programada</Label><Input type="date" value={formData.data_programada || ""} onChange={(e) => setFormData({ ...formData, data_programada: e.target.value })} className="rounded-xl" /></div>
+                            <div className="space-y-2"><Label>Status</Label><Select value={formData.status || ""} onValueChange={(value) => setFormData({ ...formData, status: value })}><SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="programada">Programada</SelectItem><SelectItem value="em_andamento">Em Andamento</SelectItem><SelectItem value="concluida">Concluída</SelectItem></SelectContent></Select></div>
+                        </div>
+
+                        <div className="space-y-2"><Label>Responsável</Label><Input value={formData.responsavel || ""} onChange={(e) => setFormData({ ...formData, responsavel: e.target.value })} className="rounded-xl" /></div>
+
+                        <div className="p-4 bg-stone-50 rounded-xl space-y-4 border border-stone-100">
+                            <div className="flex items-center justify-between">
+                                <Label className="text-base font-medium text-stone-700">Atividade Terceirizada</Label>
+                                <Switch checked={formData.terceirizada} onCheckedChange={(checked) => setFormData({ ...formData, terceirizada: checked })} />
+                            </div>
+                            {formData.terceirizada && (
+                                <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
+                                    <Label>Valor do Serviço</Label>
+                                    <Input type="number" step="0.01" value={formData.valor_terceirizado || ""} onChange={(e) => setFormData({ ...formData, valor_terceirizado: e.target.value })} placeholder="R$ 0,00" className="rounded-xl" />
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="p-4 bg-stone-50 rounded-xl space-y-3 border border-stone-100">
+                            <Label className="text-sm font-bold text-stone-700">Insumos (Opcional)</Label>
+                            <div className="flex gap-2">
+                                <Select value={insumoTemp.insumo_id || ""} onValueChange={(value) => setInsumoTemp({ ...insumoTemp, insumo_id: value })}>
+                                    <SelectTrigger className="w-full rounded-xl bg-white h-9 text-xs"><SelectValue placeholder="Insumo" /></SelectTrigger>
+                                    <SelectContent>{insumos.map((i) => (<SelectItem key={i.id} value={i.id}>{i.nome}</SelectItem>))}</SelectContent>
+                                </Select>
+                                <Input type="number" placeholder="Qtd" className="w-20 rounded-xl bg-white h-9 text-xs" value={insumoTemp.quantidade || ""} onChange={(e) => setInsumoTemp({ ...insumoTemp, quantidade: e.target.value })} />
+                                <Select value={insumoTemp.metodo_aplicacao || "foliar"} onValueChange={(value) => { setInsumoTemp({ ...insumoTemp, metodo_aplicacao: value }); setMostrarNovoMetodo(value === 'outro'); }}>
+                                    <SelectTrigger className="w-32 rounded-xl bg-white h-9 text-xs"><SelectValue placeholder="Método" /></SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="foliar">Foliar</SelectItem>
+                                        <SelectItem value="adubacao">Adubação</SelectItem>
+                                        <SelectItem value="solo">Solo</SelectItem>
+                                        <SelectItem value="fertirrigacao">Fertirrigação</SelectItem>
+                                        <SelectItem value="outro">Outro...</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                                {mostrarNovoMetodo && <Input placeholder="Nome" className="w-24 rounded-xl bg-white h-9 text-xs" value={novoMetodo || ""} onChange={(e) => setNovoMetodo(e.target.value)} />}
+                                <Button type="button" onClick={addInsumo} size="sm" className="rounded-xl bg-white hover:bg-emerald-50 text-emerald-600 border border-emerald-200"><Plus className="w-4 h-4" /></Button>
+                            </div>
+                            
+                            {formData.insumos_utilizados.length > 0 && (
+                                <div className="flex flex-wrap gap-2">
+                                    {formData.insumos_utilizados.map((ins, idx) => (
+                                        <Badge key={idx} variant="secondary" className="bg-white border-stone-200 text-stone-600 pr-1 py-1">
+                                            {ins.nome} ({ins.quantidade}) - <span className="capitalize ml-1 font-bold">{ins.metodo_aplicacao}</span>
+                                            <button onClick={() => removeInsumo(idx)} className="ml-1 text-red-400 hover:text-red-600"><X className="w-3 h-3"/></button>
+                                        </Badge>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="flex items-center justify-between p-4 bg-emerald-50 rounded-xl border border-emerald-100">
+                            <span className="font-medium text-emerald-800">Custo Total Previsto</span>
+                            <span className="text-xl font-bold text-emerald-700">R$ {calcularCustoTotal().toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label>Observações</Label>
+                            <Textarea value={formData.observacoes || ""} onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })} rows={2} className="rounded-xl" placeholder="Detalhes para o encarregado..." />
+                        </div>
+
+                        {!editingAtividade && (
+                            <Button onClick={handleAddToQueue} className="w-full rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold h-12">
+                                <ListPlus className="w-5 h-5 mr-2" /> Adicionar à Lista
+                            </Button>
+                        )}
+                    </div>
+
+                    {/* COLUNA 3: LISTA DE PRÉ-LANÇAMENTO */}
+                    <div className="lg:col-span-1 bg-stone-50 rounded-2xl border border-stone-200 p-4 flex flex-col h-full min-h-[300px]">
+                        <h4 className="text-sm font-bold text-stone-700 mb-3 flex items-center gap-2">
+                            <ClipboardList className="w-4 h-4" /> Lista de Programação ({activityQueue.length})
+                        </h4>
+                        
+                        {editingAtividade ? (
+                            <div className="flex-1 flex items-center justify-center text-center text-stone-400 text-xs italic">
+                                Modo de edição individual.<br/>A lista está desabilitada.
+                            </div>
+                        ) : (
+                            <>
+                                <div className="flex-1 overflow-y-auto space-y-2 max-h-[400px] pr-1 scrollbar-thin">
+                                    {activityQueue.length === 0 ? (
+                                        <div className="text-center text-stone-400 text-xs py-10 italic">
+                                            Preencha o formulário e clique em "Adicionar à Lista" para montar a programação do dia/semana.
+                                        </div>
+                                    ) : (
+                                        activityQueue.map((item, idx) => (
+                                            <div key={item.tempId} className="bg-white p-3 rounded-xl border border-stone-100 shadow-sm text-sm relative group animate-in slide-in-from-left-2">
+                                                <button onClick={() => handleRemoveFromQueue(item.tempId)} className="absolute top-2 right-2 text-stone-300 hover:text-red-500 transition-colors"><X className="w-4 h-4" /></button>
+                                                
+                                                <div className="font-bold text-stone-800 text-emerald-700">{item.talhao_nome}</div>
+                                                <div className="font-medium text-stone-700">{item.tipo === 'outro' ? item.tipo_personalizado : getTipoLabel(item.tipo)}</div>
+                                                <div className="text-xs text-stone-500 mt-1 flex items-center gap-1">
+                                                    <CalendarIcon className="w-3 h-3"/> {format(parseISO(item.data_programada), 'dd/MM/yyyy')}
+                                                </div>
+                                                {item.terceirizada && <div className="text-[10px] text-blue-600 font-bold mt-1">Terceirizado: R$ {parseFloat(item.valor_terceirizado || 0).toLocaleString('pt-BR')}</div>}
+                                                {item.insumos_utilizados.length > 0 && (
+                                                    <div className="mt-2 pt-2 border-t border-stone-50 flex gap-1 flex-wrap">
+                                                        {item.insumos_utilizados.map((i, k) => (
+                                                            <span key={k} className="text-[10px] bg-stone-100 px-1 rounded text-stone-500">
+                                                                {i.nome} - <span className="capitalize">{i.metodo_aplicacao}</span>
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+                                
+                                <div className="mt-4 pt-4 border-t border-stone-200">
+                                    <Button onClick={handleSaveAll} disabled={activityQueue.length === 0 || createBatchMutation.isPending} className="w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-11 shadow-lg shadow-emerald-100">
+                                        {createBatchMutation.isPending ? 'Salvando...' : `Confirmar (${activityQueue.length})`}
+                                    </Button>
+                                </div>
+                            </>
+                        )}
+                    </div>
                 </div>
-            </div>
 
-            {/* FOOTER APENAS PARA EDIÇÃO INDIVIDUAL */}
-            {editingAtividade && (
-                <DialogFooter className="mt-4 border-t pt-4">
-                    <Button type="button" variant="outline" onClick={resetForm} className="rounded-xl border-stone-200">Cancelar</Button>
-                    <Button onClick={handleSubmitForm} className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl px-6">
-                        Salvar Alterações
-                    </Button>
-                </DialogFooter>
-            )}
-          </DialogContent>
-        </Dialog>
+                {editingAtividade && (
+                    <DialogFooter className="mt-4 border-t pt-4">
+                        <Button type="button" variant="outline" onClick={resetForm} className="rounded-xl border-stone-200">Cancelar</Button>
+                        <Button onClick={handleSubmitForm} className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl px-6">
+                            Salvar Alterações
+                        </Button>
+                    </DialogFooter>
+                )}
+            </DialogContent>
+            </Dialog>
 
-        {/* Dialog de Tipos Customizados */}
-        <Dialog open={openTipoDialog} onOpenChange={setOpenTipoDialog}>
-          <DialogContent className="sm:max-w-md rounded-[2rem]">
-            <DialogHeader><DialogTitle>Gerenciar Tipos</DialogTitle></DialogHeader>
-            <div className="space-y-4">
-              <div className="flex gap-2">
-                <Input value={novoTipo || ""} onChange={(e) => setNovoTipo(e.target.value)} placeholder="Novo tipo..." className="rounded-xl" />
-                <Button onClick={() => createTipoMutation.mutate({ nome: novoTipo })} disabled={!novoTipo} className="rounded-xl bg-emerald-600 hover:bg-emerald-700"><Plus className="w-4 h-4" /></Button>
-              </div>
-              <div className="border rounded-xl divide-y overflow-hidden">
-                {tiposCustomizados.map((tipo) => (
-                  <div key={tipo.id} className="flex justify-between p-3 bg-stone-50 hover:bg-white transition-colors">
-                    <span className="text-sm font-medium">{tipo.nome}</span>
-                    <Button variant="ghost" size="sm" onClick={() => deleteTipoMutation.mutate(tipo.id)} className="h-6 w-6 p-0 text-red-400 hover:text-red-600"><Trash2 className="w-3 h-3" /></Button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
+            <Dialog open={openTipoDialog} onOpenChange={setOpenTipoDialog}>
+            <DialogContent className="sm:max-w-md rounded-[2rem]">
+                <DialogHeader><DialogTitle>Gerenciar Tipos</DialogTitle></DialogHeader>
+                <div className="space-y-4">
+                <div className="flex gap-2">
+                    <Input value={novoTipo || ""} onChange={(e) => setNovoTipo(e.target.value)} placeholder="Novo tipo..." className="rounded-xl" />
+                    <Button onClick={() => createTipoMutation.mutate({ nome: novoTipo })} disabled={!novoTipo} className="rounded-xl bg-emerald-600 hover:bg-emerald-700"><Plus className="w-4 h-4" /></Button>
+                </div>
+                <div className="border rounded-xl divide-y overflow-hidden">
+                    {tiposCustomizados.map((tipo) => (
+                    <div key={tipo.id} className="flex justify-between p-3 bg-stone-50 hover:bg-white transition-colors">
+                        <span className="text-sm font-medium">{tipo.nome}</span>
+                        <Button variant="ghost" size="sm" onClick={() => deleteTipoMutation.mutate(tipo.id)} className="h-6 w-6 p-0 text-red-400 hover:text-red-600"><Trash2 className="w-3 h-3" /></Button>
+                    </div>
+                    ))}
+                </div>
+                </div>
+            </DialogContent>
+            </Dialog>
+        </div>
       </div>
 
       {/* Painel de Filtros Padronizado */}
@@ -607,7 +791,7 @@ export default function Atividades() {
               <span className="text-sm font-bold uppercase tracking-wide">Filtros:</span>
             </div>
             <Select value={filtroTalhao || "todos"} onValueChange={setFiltroTalhao}>
-              <SelectTrigger className="w-48 rounded-xl bg-stone-50 border-stone-200"><SelectValue placeholder="Válvula" /></SelectTrigger> {/* ALTERADO */}
+              <SelectTrigger className="w-48 rounded-xl bg-stone-50 border-stone-200"><SelectValue placeholder="Válvula" /></SelectTrigger>
               <SelectContent>{talhoes.map((t) => (<SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>))}<SelectItem value="todos">Todos</SelectItem></SelectContent>
             </Select>
             <Select value={filtroStatus || "todos"} onValueChange={setFiltroStatus}>
@@ -629,7 +813,7 @@ export default function Atividades() {
                 <TableRow>
                   <TableHead className="pl-6 w-[120px]">Data</TableHead>
                   <TableHead>Atividade</TableHead>
-                  <TableHead>Válvula</TableHead> {/* ALTERADO AQUI */}
+                  <TableHead>Válvula</TableHead>
                   <TableHead className="text-right">Custo Total</TableHead>
                   <TableHead className="text-center w-[120px]">Status</TableHead>
                   <TableHead className="w-[180px] text-right pr-6">Ações</TableHead>
@@ -658,7 +842,7 @@ export default function Atividades() {
                                 <CheckCircle2 className="w-4 h-4" />
                             </Button>
                         )}
-                        {/* Botão Ver Texto (Resumo Individual) */}
+                        {/* Botão Ver Texto (Resumo) */}
                         <Button variant="ghost" size="icon" className="h-8 w-8 text-emerald-500 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg" onClick={() => handleViewActivityText(atividade)} title="Ver Texto"><FileText className="w-4 h-4" /></Button>
                         
                         <Button variant="ghost" size="icon" className="h-8 w-8 text-stone-400 hover:text-stone-700 hover:bg-stone-100 rounded-lg" onClick={() => handleEdit(atividade)} title="Editar"><Edit className="w-4 h-4" /></Button>
