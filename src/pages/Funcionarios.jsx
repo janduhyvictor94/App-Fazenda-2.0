@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, Edit, Trash2, Users, Phone, Calendar, Briefcase, User, Calculator, TrendingUp, CalendarRange, Printer, FileText } from 'lucide-react';
+import { Plus, Edit, Trash2, Users, Phone, Calendar, Briefcase, User, Calculator, TrendingUp, CalendarRange, Printer, FileText, Lock } from 'lucide-react';
 import EmptyState from '@/components/ui/EmptyState';
 import StatCard from '@/components/ui/StatCard';
 import { format, addMonths, startOfMonth, isWeekend, isBefore, differenceInMonths, setDate, isSameMonth, parseISO, startOfDay, endOfDay, isAfter, isValid } from 'date-fns';
@@ -145,6 +145,7 @@ export default function Funcionarios() {
 
   const [formData, setFormData] = useState({
     nome: '', cargo: '', salario: '', data_admissao: '',
+    data_inicio_contabil: '', // NOVO CAMPO
     status: 'ativo', telefone: '', talhao_principal: '', observacoes: ''
   });
 
@@ -173,16 +174,15 @@ export default function Funcionarios() {
     }
   });
 
-  // --- MUTAÇÕES CORRIGIDAS (RATEIO E ERRO 400) ---
+  // --- MUTAÇÕES ---
   const createMutation = useMutation({
     mutationFn: async (data) => {
       const payload = { ...data };
-      
-      // Lógica de Rateio: Se for vazio ou 'none', envia NULL para o banco.
       payload.talhao_id = (payload.talhao_principal && payload.talhao_principal !== 'none') ? payload.talhao_principal : null;
-      
-      // Remove o campo do formulário que não existe no banco
       delete payload.talhao_principal; 
+      
+      // Trata data contabil vazia como null
+      if (!payload.data_inicio_contabil) payload.data_inicio_contabil = null;
 
       payload.historico_salarial = [{ valor: data.salario, data_vigencia: data.data_admissao }];
       
@@ -195,12 +195,10 @@ export default function Funcionarios() {
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }) => {
       const payload = { ...data };
-      
-      // Lógica de Rateio para Atualização
       payload.talhao_id = (payload.talhao_principal && payload.talhao_principal !== 'none') ? payload.talhao_principal : null;
-      
-      // Remove o campo do formulário
       delete payload.talhao_principal; 
+
+      if (!payload.data_inicio_contabil) payload.data_inicio_contabil = null;
 
       const { error } = await supabase.from('funcionarios').update(payload).eq('id', id);
       if (error) throw error;
@@ -249,7 +247,6 @@ export default function Funcionarios() {
         categoria: 'funcionario', valor: parseFloat(evento.valor.toFixed(2)),
         data: format(evento.data_pagamento, 'yyyy-MM-dd'), status_pagamento: statusInicial, tipo_lancamento: 'despesa',
         observacoes: `Ref: ${evento.referencia}. ${evento.detalhe}`, 
-        // Rateio no Custo: Pega o ID do funcionário ou NULL se ele for geral
         talhao_id: selectedFuncionario.talhao_id || null 
       };
       const { error } = await supabase.from('custos').insert([payload]);
@@ -273,17 +270,20 @@ export default function Funcionarios() {
   });
 
   const resetForm = () => {
-    setFormData({ nome: '', cargo: '', salario: '', data_admissao: '', status: 'ativo', telefone: '', talhao_principal: '', observacoes: '' });
+    setFormData({ 
+        nome: '', cargo: '', salario: '', data_admissao: '', data_inicio_contabil: '',
+        status: 'ativo', telefone: '', talhao_principal: '', observacoes: '' 
+    });
     setEditingFuncionario(null);
     setOpen(false);
   };
 
   const handleEdit = (funcionario) => {
     setEditingFuncionario(funcionario);
-    // Recupera talhao_id do banco e põe no form
     setFormData({ 
         ...funcionario, 
-        talhao_principal: funcionario.talhao_id || "none"
+        talhao_principal: funcionario.talhao_id || "none",
+        data_inicio_contabil: funcionario.data_inicio_contabil || ''
     });
     setOpen(true);
   };
@@ -304,6 +304,9 @@ export default function Funcionarios() {
     if (!selectedFuncionario) return [];
     const calculados = calcularFolha(selectedFuncionario);
     const hoje = new Date();
+    
+    // Data de corte para contabilização
+    const dataCorte = selectedFuncionario.data_inicio_contabil ? parseISO(selectedFuncionario.data_inicio_contabil) : null;
 
     const eventosComStatus = calculados.map(evento => {
         const custo = todosCustosFuncionarios.find(c => {
@@ -314,8 +317,15 @@ export default function Funcionarios() {
         });
 
         let status = 'provisionado';
-        if (custo) status = custo.status_pagamento === 'pago' ? 'pago' : 'pendente_financeiro';
-        else if (isBefore(evento.data_pagamento, hoje)) status = 'pendente_lancamento';
+        
+        // Se a data do evento for ANTERIOR à data de contabilização, marca como ignorado
+        if (dataCorte && isBefore(evento.data_pagamento, dataCorte)) {
+            status = 'ignorado'; // Histórico antigo
+        } else if (custo) {
+            status = custo.status_pagamento === 'pago' ? 'pago' : 'pendente_financeiro';
+        } else if (isBefore(evento.data_pagamento, hoje)) {
+            status = 'pendente_lancamento';
+        }
 
         return { ...evento, status, custoId: custo?.id };
     });
@@ -336,6 +346,8 @@ export default function Funcionarios() {
     let todosEventos = [];
     funcionarios.filter(f => f.status === 'ativo').forEach(func => {
         const calculados = calcularFolha(func);
+        const dataCorte = func.data_inicio_contabil ? parseISO(func.data_inicio_contabil) : null;
+
         const filtrados = calculados.filter(evento => {
             const dataEvt = startOfDay(evento.data_pagamento);
             const inicio = filtroInicio ? startOfDay(parseISO(filtroInicio)) : null;
@@ -349,18 +361,26 @@ export default function Funcionarios() {
                 const dataCusto = parseISO(c.data);
                 return isSameMonth(dataCusto, evt.data_pagamento) && c.descricao.includes(func.nome) && c.descricao.includes(evt.tipo);
             });
-            const status = custo ? (custo.status_pagamento === 'pago' ? 'PAGO' : 'PENDENTE') : 'A PAGAR';
+            
+            // Verifica se é histórico antigo
+            const isAntigo = dataCorte && isBefore(evt.data_pagamento, dataCorte);
+            
+            const status = isAntigo ? 'HISTÓRICO' : (custo ? (custo.status_pagamento === 'pago' ? 'PAGO' : 'PENDENTE') : 'A PAGAR');
             todosEventos.push({ funcionario: func.nome, cargo: func.cargo, ...evt, status });
         });
     });
     return todosEventos.sort((a, b) => a.data_pagamento - b.data_pagamento || a.funcionario.localeCompare(b.funcionario));
   }, [funcionarios, todosCustosFuncionarios, filtroInicio, filtroFim]);
 
-  const totalGeralPeriodo = relatorioGeral.reduce((acc, curr) => acc + curr.valor, 0);
-  const custoTotalPeriodoInd = eventosFolhaIndividual.reduce((acc, e) => acc + e.valor, 0);
-  const totalSalariosInd = eventosFolhaIndividual.filter(e => e.tipo === 'Salário Mensal').reduce((acc, e) => acc + e.valor, 0);
-  const totalFeriasInd = eventosFolhaIndividual.filter(e => e.tipo.includes('Férias')).reduce((acc, e) => acc + e.valor, 0);
-  const totalDecimoInd = eventosFolhaIndividual.filter(e => e.tipo.includes('13º')).reduce((acc, e) => acc + e.valor, 0);
+  const totalGeralPeriodo = relatorioGeral.filter(e => e.status !== 'HISTÓRICO').reduce((acc, curr) => acc + curr.valor, 0);
+  const custoTotalPeriodoInd = eventosFolhaIndividual.filter(e => e.status !== 'ignorado').reduce((acc, e) => acc + e.valor, 0);
+  
+  // Totais Cards (Ignorando históricos)
+  const eventosValidosInd = eventosFolhaIndividual.filter(e => e.status !== 'ignorado');
+  const totalSalariosInd = eventosValidosInd.filter(e => e.tipo === 'Salário Mensal').reduce((acc, e) => acc + e.valor, 0);
+  const totalFeriasInd = eventosValidosInd.filter(e => e.tipo.includes('Férias')).reduce((acc, e) => acc + e.valor, 0);
+  const totalDecimoInd = eventosValidosInd.filter(e => e.tipo.includes('13º')).reduce((acc, e) => acc + e.valor, 0);
+  
   const totalFuncionarios = funcionarios.length;
   const funcionariosAtivos = funcionarios.filter(f => f.status === 'ativo').length;
   const totalFolhaBase = funcionarios.filter(f => f.status === 'ativo').reduce((acc, f) => acc + (f.salario || 0), 0);
@@ -380,7 +400,7 @@ export default function Funcionarios() {
                     <table className="print-table">
                         <thead><tr><th style={{width: '15%'}}>Vencimento</th><th style={{width: '20%'}}>Competência</th><th style={{width: '35%'}}>Evento</th><th style={{textAlign: 'right', width: '15%'}}>Valor</th><th style={{textAlign: 'center', width: '15%'}}>Status</th></tr></thead>
                         <tbody>
-                            {eventosFolhaIndividual.map((evt, idx) => (<tr key={idx}><td>{format(evt.data_pagamento, 'dd/MM/yyyy')}</td><td style={{textTransform: 'capitalize'}}>{evt.referencia}</td><td>{evt.tipo} <span style={{fontSize: '10px', color: '#666'}}>({evt.detalhe})</span></td><td style={{textAlign: 'right'}}>R$ {evt.valor.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td><td style={{textAlign: 'center'}}>{evt.status === 'pago' ? 'PAGO' : evt.status === 'pendente_financeiro' ? 'PENDENTE' : 'A PAGAR'}</td></tr>))}
+                            {eventosFolhaIndividual.map((evt, idx) => (<tr key={idx}><td>{format(evt.data_pagamento, 'dd/MM/yyyy')}</td><td style={{textTransform: 'capitalize'}}>{evt.referencia}</td><td>{evt.tipo} <span style={{fontSize: '10px', color: '#666'}}>({evt.detalhe})</span></td><td style={{textAlign: 'right'}}>R$ {evt.valor.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td><td style={{textAlign: 'center'}}>{evt.status === 'ignorado' ? 'HISTÓRICO' : (evt.status === 'pago' ? 'PAGO' : evt.status === 'pendente_financeiro' ? 'PENDENTE' : 'A PAGAR')}</td></tr>))}
                             <tr className="print-total-row"><td colSpan={3}>TOTAL DO PERÍODO</td><td style={{textAlign: 'right'}}>R$ {custoTotalPeriodoInd.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td><td></td></tr>
                         </tbody>
                     </table>
@@ -393,7 +413,7 @@ export default function Funcionarios() {
                         <thead><tr><th style={{width: '12%'}}>Data Prevista</th><th style={{width: '25%'}}>Funcionário</th><th style={{width: '25%'}}>Evento</th><th style={{width: '18%'}}>Competência</th><th style={{textAlign: 'right', width: '12%'}}>Valor</th><th style={{textAlign: 'center', width: '8%'}}>Status</th></tr></thead>
                         <tbody>
                             {relatorioGeral.length === 0 ? (<tr><td colSpan={6} style={{textAlign: 'center', padding: '20px', fontStyle: 'italic'}}>Nenhum lançamento encontrado para o período selecionado.</td></tr>) : (relatorioGeral.map((evt, idx) => (<tr key={idx}><td>{format(evt.data_pagamento, 'dd/MM/yyyy')}</td><td>{evt.funcionario}</td><td>{evt.tipo}</td><td style={{textTransform: 'capitalize'}}>{evt.referencia}</td><td style={{textAlign: 'right'}}>R$ {evt.valor.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td><td style={{textAlign: 'center', fontSize: '10px'}}>{evt.status}</td></tr>)))}
-                            <tr className="print-total-row"><td colSpan={4}>TOTAL GERAL DO PERÍODO</td><td style={{textAlign: 'right'}}>R$ {totalGeralPeriodo.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td><td></td></tr>
+                            <tr className="print-total-row"><td colSpan={4}>TOTAL GERAL DO PERÍODO (Exceto Histórico)</td><td style={{textAlign: 'right'}}>R$ {totalGeralPeriodo.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td><td></td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -415,20 +435,41 @@ export default function Funcionarios() {
                 <form onSubmit={handleSubmit} className="space-y-4 pt-4">
                 <div className="space-y-2"><Label>Nome</Label><Input value={formData.nome} onChange={(e) => setFormData({ ...formData, nome: e.target.value })} className="rounded-xl" required /></div>
                 <div className="grid grid-cols-2 gap-4"><div className="space-y-2"><Label>Cargo</Label><Input value={formData.cargo} onChange={(e) => setFormData({ ...formData, cargo: e.target.value })} className="rounded-xl" required /></div><div className="space-y-2"><Label>Salário (R$)</Label><Input type="number" step="0.01" value={formData.salario} onChange={(e) => setFormData({ ...formData, salario: e.target.value })} className="rounded-xl" required /></div></div>
-                <div className="grid grid-cols-2 gap-4"><div className="space-y-2"><Label>Admissão</Label><Input type="date" value={formData.data_admissao} onChange={(e) => setFormData({ ...formData, data_admissao: e.target.value })} className="rounded-xl" required /></div><div className="space-y-2"><Label>Status</Label><Select value={formData.status} onValueChange={(v) => setFormData({ ...formData, status: v })}><SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ativo">Ativo</SelectItem><SelectItem value="inativo">Inativo</SelectItem><SelectItem value="ferias">Férias</SelectItem></SelectContent></Select></div></div>
-                <div className="grid grid-cols-2 gap-4"><div className="space-y-2"><Label>Telefone</Label><Input value={formData.telefone} onChange={(e) => setFormData({ ...formData, telefone: e.target.value })} className="rounded-xl" /></div><div className="space-y-2"><Label>Talhão</Label><Select value={formData.talhao_principal || "none"} onValueChange={(v) => setFormData({ ...formData, talhao_principal: v === "none" ? null : v })}><SelectTrigger className="rounded-xl"><SelectValue placeholder="Selecione" /></SelectTrigger><SelectContent><SelectItem value="none">Nenhum (Rateio Geral)</SelectItem>{talhoes.map((t) => <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>)}</SelectContent></Select></div></div>
+                
+                {/* LINHA DE DATAS: ADMISSÃO E CONTABILIDADE */}
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2"><Label>Admissão</Label><Input type="date" value={formData.data_admissao} onChange={(e) => setFormData({ ...formData, data_admissao: e.target.value })} className="rounded-xl" required /></div>
+                    <div className="space-y-2">
+                        <Label className="flex items-center gap-1">Início Contabilização <span className="text-stone-400 font-normal text-xs">(Opcional)</span></Label>
+                        <Input type="date" value={formData.data_inicio_contabil} onChange={(e) => setFormData({ ...formData, data_inicio_contabil: e.target.value })} className="rounded-xl" placeholder="Para Dashboard" />
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2"><Label>Telefone</Label><Input value={formData.telefone} onChange={(e) => setFormData({ ...formData, telefone: e.target.value })} className="rounded-xl" /></div>
+                    <div className="space-y-2"><Label>Talhão</Label><Select value={formData.talhao_principal || "none"} onValueChange={(v) => setFormData({ ...formData, talhao_principal: v === "none" ? null : v })}><SelectTrigger className="rounded-xl"><SelectValue placeholder="Selecione" /></SelectTrigger><SelectContent><SelectItem value="none">Nenhum (Rateio Geral)</SelectItem>{talhoes.map((t) => <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>)}</SelectContent></Select></div>
+                </div>
+                
+                <div className="space-y-2">
+                    <Label>Status</Label>
+                    <Select value={formData.status} onValueChange={(v) => setFormData({ ...formData, status: v })}><SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ativo">Ativo</SelectItem><SelectItem value="inativo">Inativo</SelectItem><SelectItem value="ferias">Férias</SelectItem></SelectContent></Select>
+                </div>
+
                 <div className="flex justify-end gap-3 pt-4"><Button type="button" variant="outline" onClick={resetForm} className="rounded-xl">Cancelar</Button><Button type="submit" className="bg-emerald-600 hover:bg-emerald-700 rounded-xl px-8" disabled={createMutation.isPending || updateMutation.isPending}>Salvar</Button></div>
                 </form>
             </DialogContent>
             </Dialog>
         </div>
+        
+        {/* Outros Dialogs omitidos por brevidade (sem mudanças funcionais neles, apenas mantidos) */}
         <Dialog open={relatorioGeralOpen} onOpenChange={setRelatorioGeralOpen}>
             <DialogContent className="sm:max-w-md rounded-[2rem]">
                 <DialogHeader><DialogTitle>Imprimir Relatório Geral</DialogTitle><DialogDescription>Selecione o período para gerar a folha de todos os funcionários.</DialogDescription></DialogHeader>
-                <div className="space-y-4 py-4"><div className="grid grid-cols-2 gap-4"><div className="space-y-2"><Label>Data Início</Label><Input type="date" value={filtroInicio} onChange={(e) => setFiltroInicio(e.target.value)} className="rounded-xl" /></div><div className="space-y-2"><Label>Data Fim</Label><Input type="date" value={filtroFim} onChange={(e) => setFiltroFim(e.target.value)} className="rounded-xl" /></div></div><div className="bg-blue-50 p-4 rounded-xl text-xs text-blue-700">O relatório incluirá todos os eventos (Salários, Férias, 13º) previstos ou pagos dentro deste intervalo para <strong>{funcionarios.filter(f => f.status === 'ativo').length} funcionários ativos</strong>.</div></div>
+                <div className="space-y-4 py-4"><div className="grid grid-cols-2 gap-4"><div className="space-y-2"><Label>Data Início</Label><Input type="date" value={filtroInicio} onChange={(e) => setFiltroInicio(e.target.value)} className="rounded-xl" /></div><div className="space-y-2"><Label>Data Fim</Label><Input type="date" value={filtroFim} onChange={(e) => setFiltroFim(e.target.value)} className="rounded-xl" /></div></div><div className="bg-blue-50 p-4 rounded-xl text-xs text-blue-700">O relatório incluirá todos os eventos previstos ou pagos dentro deste intervalo.</div></div>
                 <DialogFooter><Button variant="outline" onClick={() => setRelatorioGeralOpen(false)} className="rounded-xl">Cancelar</Button><Button onClick={() => { handlePrint('geral'); setRelatorioGeralOpen(false); }} className="bg-stone-800 text-white rounded-xl hover:bg-stone-900"><Printer className="w-4 h-4 mr-2" /> Gerar Impressão</Button></DialogFooter>
             </DialogContent>
         </Dialog>
+
         <Dialog open={folhaOpen} onOpenChange={setFolhaOpen}>
           <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto rounded-[2rem]">
             <DialogHeader className="pb-4 border-b border-stone-100">
@@ -461,16 +502,21 @@ export default function Funcionarios() {
                           <TableCell className="text-xs text-stone-500 max-w-[200px] truncate" title={evento.detalhe}>{evento.detalhe}</TableCell>
                           <TableCell className="text-right font-bold text-stone-800">R$ {evento.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</TableCell>
                           <TableCell className="text-center">
+                            {evento.status === 'ignorado' && <Badge variant="outline" className="bg-stone-100 text-stone-400 border-stone-200">HISTÓRICO</Badge>}
                             {evento.status === 'pago' && <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 border">PAGO</Badge>}
                             {evento.status === 'pendente_financeiro' && <Badge className="bg-amber-100 text-amber-700 border-amber-200 border">PENDENTE</Badge>}
                             {evento.status === 'pendente_lancamento' && <Badge className="bg-red-50 text-red-600 border-red-200 border">A LANÇAR</Badge>}
                             {evento.status === 'provisionado' && <Badge variant="outline" className="text-stone-400 border-stone-200">FUTURO</Badge>}
                           </TableCell>
                           <TableCell className="text-right pr-6 no-print">
-                            {(evento.status === 'pago' || evento.status === 'pendente_financeiro') ? (
-                                <div className="flex justify-end"><Select defaultValue={evento.status === 'pago' ? 'pago' : 'pendente'} onValueChange={(valor) => atualizarStatusCustoMutation.mutate({ id: evento.custoId, novoStatus: valor })}><SelectTrigger className="h-8 w-[110px] text-xs font-bold border-stone-200 bg-white shadow-sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="pago" className="text-emerald-700 font-bold">Pago</SelectItem><SelectItem value="pendente" className="text-amber-700 font-bold">Pendente</SelectItem></SelectContent></Select></div>
+                            {evento.status === 'ignorado' ? (
+                                <span className="text-xs text-stone-300 italic flex justify-end items-center gap-1"><Lock className="w-3 h-3"/> Bloqueado</span>
                             ) : (
-                                <div className="flex justify-end gap-2"><Button size="sm" variant="outline" className="h-8 text-xs font-bold text-amber-600 border-amber-200 hover:bg-amber-50 rounded-lg" onClick={() => { if(confirm(`Lançar como PENDENTE?`)) lancarCustoMutation.mutate({ evento, statusInicial: 'pendente' }); }}>Pendente</Button><Button size="sm" className="h-8 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 rounded-lg" onClick={() => { if(confirm(`Lançar como PAGO?`)) lancarCustoMutation.mutate({ evento, statusInicial: 'pago' }); }}>Pago</Button></div>
+                                (evento.status === 'pago' || evento.status === 'pendente_financeiro') ? (
+                                    <div className="flex justify-end"><Select defaultValue={evento.status === 'pago' ? 'pago' : 'pendente'} onValueChange={(valor) => atualizarStatusCustoMutation.mutate({ id: evento.custoId, novoStatus: valor })}><SelectTrigger className="h-8 w-[110px] text-xs font-bold border-stone-200 bg-white shadow-sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="pago" className="text-emerald-700 font-bold">Pago</SelectItem><SelectItem value="pendente" className="text-amber-700 font-bold">Pendente</SelectItem></SelectContent></Select></div>
+                                ) : (
+                                    <div className="flex justify-end gap-2"><Button size="sm" variant="outline" className="h-8 text-xs font-bold text-amber-600 border-amber-200 hover:bg-amber-50 rounded-lg" onClick={() => { if(confirm(`Lançar como PENDENTE?`)) lancarCustoMutation.mutate({ evento, statusInicial: 'pendente' }); }}>Pendente</Button><Button size="sm" className="h-8 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 rounded-lg" onClick={() => { if(confirm(`Lançar como PAGO?`)) lancarCustoMutation.mutate({ evento, statusInicial: 'pago' }); }}>Pago</Button></div>
+                                )
                             )}
                           </TableCell>
                         </TableRow>
