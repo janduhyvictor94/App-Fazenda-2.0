@@ -7,11 +7,11 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Switch } from '@/components/ui/switch';
-import { Plus, Edit, Trash2, ClipboardList, Filter, Package, Copy, MessageCircle, CheckCircle2, Calendar as CalendarIcon, ListPlus, X, Send, FileText, LayoutGrid, ArrowRight, FileDown } from 'lucide-react';
+import { Plus, Edit, Trash2, ClipboardList, Filter, Package, Copy, MessageCircle, CheckCircle2, Calendar as CalendarIcon, ListPlus, X, Send, FileText, LayoutGrid, ArrowRight, FileDown, ArrowLeft, Map } from 'lucide-react';
 import EmptyState from '@/components/ui/EmptyState';
 import { format, parseISO, subDays, isWithinInterval, startOfDay, endOfDay } from 'date-fns';
 // IMPORTAÇÕES DO PDF
@@ -37,6 +37,8 @@ const statusLabels = {
 };
 
 export default function Atividades() {
+  const [viewMode, setViewMode] = useState('selecao'); // 'selecao' ou 'lista'
+  
   const [open, setOpen] = useState(false);
   const [summaryOpen, setSummaryOpen] = useState(false);
   const [summaryText, setSummaryText] = useState('');
@@ -114,7 +116,7 @@ export default function Atividades() {
     });
   }, [talhoes, atividades]);
 
-  // --- FUNÇÃO DE GERAÇÃO DE PDF (ATUALIZADA COM VALORES) ---
+  // --- FUNÇÃO DE GERAÇÃO DE PDF ---
   const generatePDF = () => {
     const doc = new jsPDF();
 
@@ -129,7 +131,6 @@ export default function Atividades() {
         return inDateRange && inTalhao;
     }).sort((a, b) => new Date(a.data_programada) - new Date(b.data_programada));
 
-    // CALCULAR TOTAL GERAL
     const totalGeral = filteredActivities.reduce((acc, curr) => acc + (curr.custo_total || 0), 0);
 
     const nomeFiltro = reportTalhao === 'todos' ? 'Todas as Válvulas' : talhoes.find(t => t.id === reportTalhao)?.nome;
@@ -141,7 +142,6 @@ export default function Atividades() {
     doc.text(`Filtro: ${nomeFiltro}`, 14, 28);
     doc.text(`Período: ${format(parseISO(reportStartDate), 'dd/MM/yyyy')} a ${format(parseISO(reportEndDate), 'dd/MM/yyyy')}`, 14, 34);
 
-    // ADICIONADA COLUNA "VALOR"
     const tableColumn = ["Data", "Válvula", "Atividade", "Detalhes / Insumos", "Status", "Resp.", "Valor"];
     const tableRows = [];
 
@@ -159,36 +159,21 @@ export default function Atividades() {
         if (ativ.observacoes) detalhes += `\nObs: ${ativ.observacoes}`;
 
         const status = statusLabels[ativ.status]?.label || ativ.status;
-        
-        // FORMATAR VALOR
         const valorFormatado = (ativ.custo_total || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
-        tableRows.push([
-            dataFormatada,
-            nomeValvula,
-            tipo,
-            detalhes,
-            status,
-            ativ.responsavel || '-',
-            valorFormatado // Coluna de valor
-        ]);
+        tableRows.push([dataFormatada, nomeValvula, tipo, detalhes, status, ativ.responsavel || '-', valorFormatado]);
     });
 
     autoTable(doc, {
         head: [tableColumn],
         body: tableRows,
-        // ADICIONADO RODAPÉ COM TOTAL
-        foot: [
-            ["", "", "", "", "", "TOTAL GERAL:", totalGeral.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })]
-        ],
+        foot: [["", "", "", "", "", "TOTAL GERAL:", totalGeral.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })]],
         startY: 40,
         theme: 'grid',
         styles: { fontSize: 8, cellPadding: 2 },
-        headStyles: { fillColor: [16, 185, 129] }, // Emerald Green
-        footStyles: { fillColor: [240, 240, 240], textColor: [0,0,0], fontStyle: 'bold', halign: 'right' }, // Estilo do rodapé
-        columnStyles: {
-            6: { halign: 'right' } // Alinha a coluna de valor à direita
-        }
+        headStyles: { fillColor: [16, 185, 129] },
+        footStyles: { fillColor: [240, 240, 240], textColor: [0,0,0], fontStyle: 'bold', halign: 'right' },
+        columnStyles: { 6: { halign: 'right' } }
     });
 
     doc.save(`relatorio_campo_${format(new Date(), 'yyyyMMdd')}.pdf`);
@@ -261,24 +246,12 @@ export default function Atividades() {
 
       setActivityQueue([...activityQueue, newItem]);
       setFormData(prev => ({ 
-          ...prev, 
-          talhao_id: '', 
-          observacoes: '', 
-          insumos_utilizados: [], 
-          custo_total: 0, 
-          terceirizada: false, 
-          valor_terceirizado: '' 
+          ...prev, talhao_id: '', observacoes: '', insumos_utilizados: [], custo_total: 0, terceirizada: false, valor_terceirizado: '' 
       }));
   };
 
-  const handleRemoveFromQueue = (tempId) => {
-      setActivityQueue(activityQueue.filter(item => item.tempId !== tempId));
-  };
-
-  const handleSaveAll = () => {
-      if (activityQueue.length === 0) return;
-      createBatchMutation.mutate(activityQueue);
-  };
+  const handleRemoveFromQueue = (tempId) => setActivityQueue(activityQueue.filter(item => item.tempId !== tempId));
+  const handleSaveAll = () => { if (activityQueue.length > 0) createBatchMutation.mutate(activityQueue); };
 
   const generateSummaryText = (items) => {
       const grouped = items.reduce((acc, curr) => {
@@ -317,129 +290,57 @@ export default function Atividades() {
     const tipoNome = atividade.tipo === 'outro' ? atividade.tipo_personalizado : getTipoLabel(atividade.tipo);
     const data = format(new Date(atividade.data_programada + 'T12:00:00'), 'dd/MM/yyyy');
     
-    let text = `📋 *DETALHES DA ATIVIDADE*\n\n`;
-    text += `📍 *Válvula:* ${talhaoNome}\n`;
-    text += `🚜 *Atividade:* ${tipoNome}\n`;
-    text += `📅 *Data:* ${data}\n`;
-    
+    let text = `📋 *DETALHES DA ATIVIDADE*\n\n📍 *Válvula:* ${talhaoNome}\n🚜 *Atividade:* ${tipoNome}\n📅 *Data:* ${data}\n`;
     if (atividade.terceirizada) text += `👷 *Serviço:* Terceirizado\n`;
-    
     if (atividade.insumos_utilizados && atividade.insumos_utilizados.length > 0) {
         text += `\n📦 *Insumos:*`;
-        atividade.insumos_utilizados.forEach(i => {
-            text += `\n   ▪ ${i.nome}: ${i.quantidade} ${i.unidade}`;
-            if(i.metodo_aplicacao) text += ` (${i.metodo_aplicacao})`;
-        });
+        atividade.insumos_utilizados.forEach(i => { text += `\n   ▪ ${i.nome}: ${i.quantidade} ${i.unidade}` + (i.metodo_aplicacao ? ` (${i.metodo_aplicacao})` : ''); });
         text += `\n`;
     }
-
     if (atividade.observacoes) text += `\n📝 *Observações:*\n${atividade.observacoes}`;
-
     setSummaryText(text);
     setSummaryOpen(true);
   };
 
-  const copyToClipboard = () => {
-      navigator.clipboard.writeText(summaryText);
-      alert("Texto copiado! Agora cole no WhatsApp do encarregado.");
-  };
+  const copyToClipboard = () => { navigator.clipboard.writeText(summaryText); alert("Texto copiado! Agora cole no WhatsApp."); };
 
   const resetForm = () => {
-    setFormData({
-      talhao_id: '', tipo: '', tipo_personalizado: '',
-      data_programada: format(new Date(), 'yyyy-MM-dd'), data_realizada: '',
-      status: 'programada', terceirizada: false, valor_terceirizado: '',
-      insumos_utilizados: [], custo_total: 0, responsavel: '', observacoes: ''
-    });
+    setFormData({ talhao_id: '', tipo: '', tipo_personalizado: '', data_programada: format(new Date(), 'yyyy-MM-dd'), data_realizada: '', status: 'programada', terceirizada: false, valor_terceirizado: '', insumos_utilizados: [], custo_total: 0, responsavel: '', observacoes: '' });
     setInsumoTemp({ insumo_id: '', quantidade: '', metodo_aplicacao: 'foliar' });
-    setNovoMetodo('');
-    setMostrarNovoMetodo(false);
-    setActivityQueue([]); 
-    setEditingAtividade(null);
-    setOpen(false);
+    setNovoMetodo(''); setMostrarNovoMetodo(false); setActivityQueue([]); setEditingAtividade(null); setOpen(false);
   };
 
-  const handleEdit = (atividade) => {
-    setEditingAtividade(atividade);
-    setFormData({ ...atividade }); 
-    setActivityQueue([]); 
-    setOpen(true);
-  };
-
-  const handleDuplicate = (atividade) => {
-    setEditingAtividade(null);
-    setFormData({ ...atividade, id: undefined, status: 'programada', data_realizada: '' }); 
-    setActivityQueue([]); 
-    setOpen(true);
-  };
+  const handleEdit = (atividade) => { setEditingAtividade(atividade); setFormData({ ...atividade }); setActivityQueue([]); setOpen(true); };
+  const handleDuplicate = (atividade) => { setEditingAtividade(null); setFormData({ ...atividade, id: undefined, status: 'programada', data_realizada: '' }); setActivityQueue([]); setOpen(true); };
 
   const addInsumo = () => {
     if (!insumoTemp.insumo_id || !insumoTemp.quantidade) return;
     const insumoSelecionado = insumos.find(i => i.id === insumoTemp.insumo_id);
     if (!insumoSelecionado) return;
-
     const quantidade = parseFloat(insumoTemp.quantidade);
-    const valorUnitario = insumoSelecionado.preco_unitario || 0;
-    const valorTotal = quantidade * valorUnitario;
-    
+    const valorTotal = quantidade * (insumoSelecionado.preco_unitario || 0);
     const metodoFinal = (insumoTemp.metodo_aplicacao === 'outro' ? novoMetodo : insumoTemp.metodo_aplicacao) || 'foliar';
 
-    const novoInsumo = {
-      insumo_id: insumoSelecionado.id, nome: insumoSelecionado.nome,
-      quantidade, unidade: insumoSelecionado.unidade,
-      valor_unitario: valorUnitario, valor_total: valorTotal,
-      metodo_aplicacao: metodoFinal
-    };
-
-    const novosInsumos = [...formData.insumos_utilizados, novoInsumo];
-    setFormData({ 
-        ...formData, 
-        insumos_utilizados: novosInsumos,
-        custo_total: novosInsumos.reduce((acc, i) => acc + (i.valor_total || 0), 0) + (formData.terceirizada ? parseFloat(formData.valor_terceirizado || 0) : 0)
-    });
-    setInsumoTemp({ insumo_id: '', quantidade: '', metodo_aplicacao: 'foliar' });
-    setNovoMetodo('');
-    setMostrarNovoMetodo(false);
+    const novosInsumos = [...formData.insumos_utilizados, { insumo_id: insumoSelecionado.id, nome: insumoSelecionado.nome, quantidade, unidade: insumoSelecionado.unidade, valor_unitario: insumoSelecionado.preco_unitario || 0, valor_total: valorTotal, metodo_aplicacao: metodoFinal }];
+    setFormData({ ...formData, insumos_utilizados: novosInsumos, custo_total: novosInsumos.reduce((acc, i) => acc + (i.valor_total || 0), 0) + (formData.terceirizada ? parseFloat(formData.valor_terceirizado || 0) : 0) });
+    setInsumoTemp({ insumo_id: '', quantidade: '', metodo_aplicacao: 'foliar' }); setNovoMetodo(''); setMostrarNovoMetodo(false);
   };
 
   const removeInsumo = (index) => {
     const novosInsumos = formData.insumos_utilizados.filter((_, i) => i !== index);
-    setFormData({ 
-        ...formData, 
-        insumos_utilizados: novosInsumos,
-        custo_total: novosInsumos.reduce((acc, i) => acc + (i.valor_total || 0), 0) + (formData.terceirizada ? parseFloat(formData.valor_terceirizado || 0) : 0)
-    });
+    setFormData({ ...formData, insumos_utilizados: novosInsumos, custo_total: novosInsumos.reduce((acc, i) => acc + (i.valor_total || 0), 0) + (formData.terceirizada ? parseFloat(formData.valor_terceirizado || 0) : 0) });
   };
 
-  const calcularCustoTotal = () => {
-    const custoInsumos = formData.insumos_utilizados.reduce((acc, i) => acc + (i.valor_total || 0), 0);
-    const custoTerceirizado = formData.terceirizada ? parseFloat(formData.valor_terceirizado || 0) : 0; 
-    return custoInsumos + custoTerceirizado;
-  };
+  const calcularCustoTotal = () => formData.insumos_utilizados.reduce((acc, i) => acc + (i.valor_total || 0), 0) + (formData.terceirizada ? parseFloat(formData.valor_terceirizado || 0) : 0);
 
   const handleSubmitForm = (e) => {
       e.preventDefault();
-      const payload = {
-          ...formData,
-          valor_terceirizado: formData.valor_terceirizado ? parseFloat(formData.valor_terceirizado) : null,
-          custo_total: calcularCustoTotal(),
-          data_realizada: formData.status === 'concluida' ? (formData.data_realizada || format(new Date(), 'yyyy-MM-dd')) : null
-      };
-
-      if (editingAtividade) {
-          updateMutation.mutate({ id: editingAtividade.id, data: payload });
-      } else {
-          createMutation.mutate(payload);
-      }
+      const payload = { ...formData, valor_terceirizado: formData.valor_terceirizado ? parseFloat(formData.valor_terceirizado) : null, custo_total: calcularCustoTotal(), data_realizada: formData.status === 'concluida' ? (formData.data_realizada || format(new Date(), 'yyyy-MM-dd')) : null };
+      if (editingAtividade) updateMutation.mutate({ id: editingAtividade.id, data: payload });
+      else createMutation.mutate(payload);
   };
   
-  const createMutation = useMutation({
-    mutationFn: async (data) => {
-      const { data: result, error } = await supabase.from('atividades').insert(data).select();
-      if (error) throw error; return result;
-    },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['atividades'] }); resetForm(); }
-  });
+  const createMutation = useMutation({ mutationFn: async (data) => { const { data: result, error } = await supabase.from('atividades').insert(data).select(); if (error) throw error; return result; }, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['atividades'] }); resetForm(); }});
 
   const atividadesFiltradas = atividades.filter(a => {
     if (filtroTalhao !== 'todos' && a.talhao_id !== filtroTalhao) return false;
@@ -448,19 +349,59 @@ export default function Atividades() {
   });
 
   const getTalhaoNome = (id) => talhoes.find(t => t.id === id)?.nome || '-';
-  const getTipoLabel = (tipo) => {
-    const padrao = tiposAtividadePadrao.find(t => t.value === tipo);
-    if (padrao) return padrao.label;
-    const customizado = tiposCustomizados.find(t => t.nome === tipo);
-    return customizado ? customizado.nome : tipo;
-  };
-
+  const getTipoLabel = (tipo) => { const padrao = tiposAtividadePadrao.find(t => t.value === tipo); if (padrao) return padrao.label; const customizado = tiposCustomizados.find(t => t.nome === tipo); return customizado ? customizado.nome : tipo; };
   const todosTipos = [ ...tiposAtividadePadrao, ...tiposCustomizados.map(t => ({ value: t.nome, label: t.nome })) ];
 
+  const handleSelecionarTalhao = (id) => {
+      setFiltroTalhao(id);
+      setViewMode('lista');
+  };
+
+  // --- RENDERIZAÇÃO DA TELA DE SELEÇÃO ---
+  if (viewMode === 'selecao') {
+      return (
+        <div className="space-y-6 animate-in fade-in duration-500">
+            <div className="flex flex-col bg-white p-6 rounded-[1.5rem] border border-stone-100 shadow-sm">
+                <h1 className="text-2xl font-bold text-stone-900 tracking-tight">Selecione o Talhão</h1>
+                <p className="text-stone-500 font-medium">Qual área você gostaria de visualizar ou gerenciar as atividades?</p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                {/* Cartão de Todos */}
+                <Card 
+                    onClick={() => handleSelecionarTalhao('todos')}
+                    className="cursor-pointer hover:border-emerald-500 hover:shadow-md transition-all border-stone-200 bg-stone-50 group"
+                >
+                    <CardHeader className="text-center py-8">
+                        <LayoutGrid className="w-10 h-10 mx-auto mb-3 text-stone-400 group-hover:text-emerald-500 transition-colors" />
+                        <CardTitle className="text-lg text-stone-700 group-hover:text-emerald-700">Todos os Talhões</CardTitle>
+                    </CardHeader>
+                </Card>
+
+                {/* Cartões Individuais */}
+                {talhoes.map(talhao => (
+                    <Card 
+                        key={talhao.id} 
+                        onClick={() => handleSelecionarTalhao(talhao.id)}
+                        className="cursor-pointer hover:border-emerald-500 hover:shadow-md transition-all border-stone-200 bg-white group"
+                    >
+                        <CardHeader className="text-center py-8">
+                            <Map className="w-10 h-10 mx-auto mb-3 text-emerald-600/50 group-hover:text-emerald-500 transition-colors" />
+                            <CardTitle className="text-lg text-stone-800 group-hover:text-emerald-700">{talhao.nome}</CardTitle>
+                            <Badge variant="outline" className="mx-auto mt-2 bg-stone-50 text-stone-500">{talhao.cultura}</Badge>
+                        </CardHeader>
+                    </Card>
+                ))}
+            </div>
+        </div>
+      );
+  }
+
+  // --- RENDERIZAÇÃO DA TELA DE LISTA ---
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
       
-      {/* DIALOG DE RELATÓRIO PDF (REINSERIDO) */}
+      {/* DIALOG DE RELATÓRIO PDF */}
       <Dialog open={reportOpen} onOpenChange={setReportOpen}>
         <DialogContent className="sm:max-w-md rounded-[2rem]">
             <DialogHeader>
@@ -479,18 +420,10 @@ export default function Atividades() {
                     </Select>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                        <Label>Data Início</Label>
-                        <Input type="date" value={reportStartDate} onChange={(e) => setReportStartDate(e.target.value)} className="rounded-xl" />
-                    </div>
-                    <div className="space-y-2">
-                        <Label>Data Fim</Label>
-                        <Input type="date" value={reportEndDate} onChange={(e) => setReportEndDate(e.target.value)} className="rounded-xl" />
-                    </div>
+                    <div className="space-y-2"><Label>Data Início</Label><Input type="date" value={reportStartDate} onChange={(e) => setReportStartDate(e.target.value)} className="rounded-xl" /></div>
+                    <div className="space-y-2"><Label>Data Fim</Label><Input type="date" value={reportEndDate} onChange={(e) => setReportEndDate(e.target.value)} className="rounded-xl" /></div>
                 </div>
-                <Button onClick={generatePDF} className="w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 font-bold text-white h-11">
-                    <FileDown className="w-4 h-4 mr-2" /> Baixar PDF
-                </Button>
+                <Button onClick={generatePDF} className="w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 font-bold text-white h-11"><FileDown className="w-4 h-4 mr-2" /> Baixar PDF</Button>
             </div>
         </DialogContent>
       </Dialog>
@@ -499,46 +432,25 @@ export default function Atividades() {
       <Dialog open={areaViewOpen} onOpenChange={setAreaViewOpen}>
         <DialogContent className="sm:max-w-5xl max-h-[90vh] overflow-y-auto rounded-[2rem] bg-stone-50">
             <DialogHeader className="mb-4">
-                <DialogTitle className="flex items-center gap-2 text-xl text-stone-800">
-                    <LayoutGrid className="w-6 h-6 text-blue-600" /> Visão Geral por Válvula
-                </DialogTitle>
+                <DialogTitle className="flex items-center gap-2 text-xl text-stone-800"><LayoutGrid className="w-6 h-6 text-blue-600" /> Visão Geral por Válvula</DialogTitle>
                 <DialogDescription>Resumo do preenchimento e atividades por área.</DialogDescription>
             </DialogHeader>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {areasResumo.map((area) => (
                     <Card key={area.id} className="border-stone-200 shadow-sm hover:shadow-md transition-shadow bg-white overflow-hidden">
-                        <div className="p-4 border-b border-stone-100 flex justify-between items-center bg-stone-50/50">
-                            <h3 className="font-bold text-stone-800 text-lg">{area.nome}</h3>
-                            <div className="text-xs font-semibold text-stone-500 bg-white px-2 py-1 rounded-lg border border-stone-200">{area.cultura || 'Diversos'}</div>
-                        </div>
+                        <div className="p-4 border-b border-stone-100 flex justify-between items-center bg-stone-50/50"><h3 className="font-bold text-stone-800 text-lg">{area.nome}</h3><div className="text-xs font-semibold text-stone-500 bg-white px-2 py-1 rounded-lg border border-stone-200">{area.cultura || 'Diversos'}</div></div>
                         <div className="p-4 space-y-4">
                             <div className="grid grid-cols-2 gap-2 text-center">
-                                <div className="bg-amber-50 rounded-lg p-2 border border-amber-100">
-                                    <div className="text-xl font-bold text-amber-600">{area.qtdPendentes}</div>
-                                    <div className="text-[10px] uppercase font-bold text-amber-700/60">Programadas</div>
-                                </div>
-                                <div className="bg-emerald-50 rounded-lg p-2 border border-emerald-100">
-                                    <div className="text-xl font-bold text-emerald-600">{area.qtdConcluidas}</div>
-                                    <div className="text-[10px] uppercase font-bold text-emerald-700/60">Concluídas</div>
-                                </div>
+                                <div className="bg-amber-50 rounded-lg p-2 border border-amber-100"><div className="text-xl font-bold text-amber-600">{area.qtdPendentes}</div><div className="text-[10px] uppercase font-bold text-amber-700/60">Programadas</div></div>
+                                <div className="bg-emerald-50 rounded-lg p-2 border border-emerald-100"><div className="text-xl font-bold text-emerald-600">{area.qtdConcluidas}</div><div className="text-[10px] uppercase font-bold text-emerald-700/60">Concluídas</div></div>
                             </div>
                             <div>
                                 <p className="text-xs font-bold text-stone-400 mb-2 uppercase tracking-wide">Próximas Atividades</p>
                                 {area.proximas.length > 0 ? (
-                                    <div className="space-y-1">
-                                        {area.proximas.map(a => (
-                                            <div key={a.id} className="flex justify-between items-center text-xs p-2 bg-stone-50 rounded-lg">
-                                                <span className="font-medium text-stone-700">{getTipoLabel(a.tipo)}</span>
-                                                <span className="text-stone-400">{format(parseISO(a.data_programada), 'dd/MM')}</span>
-                                            </div>
-                                        ))}
-                                    </div>
+                                    <div className="space-y-1">{area.proximas.map(a => (<div key={a.id} className="flex justify-between items-center text-xs p-2 bg-stone-50 rounded-lg"><span className="font-medium text-stone-700">{getTipoLabel(a.tipo)}</span><span className="text-stone-400">{format(parseISO(a.data_programada), 'dd/MM')}</span></div>))}</div>
                                 ) : (<div className="text-xs text-stone-300 italic text-center py-2 bg-stone-50 rounded-lg">Nenhuma atividade programada</div>)}
                             </div>
-                            <div className="pt-2 border-t border-stone-100 flex justify-between items-center">
-                                <span className="text-xs font-medium text-stone-500">Custo Total Acumulado</span>
-                                <span className="font-bold text-stone-800">R$ {area.totalCusto.toLocaleString('pt-BR', {minimumFractionDigits: 0})}</span>
-                            </div>
+                            <div className="pt-2 border-t border-stone-100 flex justify-between items-center"><span className="text-xs font-medium text-stone-500">Custo Total Acumulado</span><span className="font-bold text-stone-800">R$ {area.totalCusto.toLocaleString('pt-BR', {minimumFractionDigits: 0})}</span></div>
                         </div>
                     </Card>
                 ))}
@@ -549,82 +461,41 @@ export default function Atividades() {
       {/* Modal de Resumo para Texto/WhatsApp */}
       <Dialog open={summaryOpen} onOpenChange={setSummaryOpen}>
         <DialogContent className="sm:max-w-md rounded-[2rem]">
-            <DialogHeader>
-                <DialogTitle className="flex items-center gap-2"><Send className="w-5 h-5 text-emerald-600" /> Resumo da Recomendação</DialogTitle>
-                <DialogDescription>Abaixo está o texto gerado. Copie para enviar ao encarregado.</DialogDescription>
-            </DialogHeader>
-            <div className="bg-stone-100 p-4 rounded-xl border border-stone-200 max-h-[300px] overflow-y-auto">
-                <pre className="whitespace-pre-wrap text-sm font-mono text-stone-800">{summaryText}</pre>
-            </div>
-            <DialogFooter>
-                <Button onClick={copyToClipboard} className="w-full rounded-xl bg-emerald-600 hover:bg-emerald-700">
-                    <Copy className="w-4 h-4 mr-2" /> Copiar Texto
-                </Button>
-            </DialogFooter>
+            <DialogHeader><DialogTitle className="flex items-center gap-2"><Send className="w-5 h-5 text-emerald-600" /> Resumo da Recomendação</DialogTitle><DialogDescription>Copie para enviar ao encarregado.</DialogDescription></DialogHeader>
+            <div className="bg-stone-100 p-4 rounded-xl border border-stone-200 max-h-[300px] overflow-y-auto"><pre className="whitespace-pre-wrap text-sm font-mono text-stone-800">{summaryText}</pre></div>
+            <DialogFooter><Button onClick={copyToClipboard} className="w-full rounded-xl bg-emerald-600 hover:bg-emerald-700"><Copy className="w-4 h-4 mr-2" /> Copiar Texto</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* Header Padronizado */}
       <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 bg-white p-4 rounded-[1.5rem] border border-stone-100 shadow-sm">
-        <div>
-          <h1 className="text-2xl font-bold text-stone-900 tracking-tight">Atividades</h1>
-          <p className="text-stone-500 font-medium">Gerenciamento de tarefas e manejo</p>
+        <div className="flex items-center gap-4">
+          <Button onClick={() => setViewMode('selecao')} variant="ghost" size="icon" className="rounded-xl bg-stone-50 hover:bg-stone-100 text-stone-600">
+             <ArrowLeft className="w-5 h-5" />
+          </Button>
+          <div>
+            <h1 className="text-2xl font-bold text-stone-900 tracking-tight">Atividades: {filtroTalhao === 'todos' ? 'Todos os Talhões' : getTalhaoNome(filtroTalhao)}</h1>
+            <p className="text-stone-500 font-medium">Gerenciamento de tarefas e manejo</p>
+          </div>
         </div>
         
-        <div className="flex gap-2">
-            {/* BOTÃO RELATÓRIO PDF (REINSERIDO) */}
-            <Button onClick={() => setReportOpen(true)} className="bg-white border border-stone-200 text-stone-700 hover:bg-stone-50 rounded-xl h-10 px-4 shadow-sm">
-                <FileDown className="w-4 h-4 mr-2" /> Relatório PDF
-            </Button>
-
-            <Button onClick={() => setAreaViewOpen(true)} className="bg-white border border-stone-200 text-stone-700 hover:bg-stone-50 rounded-xl h-10 px-4 shadow-sm">
-                <LayoutGrid className="w-4 h-4 mr-2" /> Visão por Válvula
-            </Button>
+        <div className="flex gap-2 flex-wrap">
+            <Button onClick={() => setReportOpen(true)} className="bg-white border border-stone-200 text-stone-700 hover:bg-stone-50 rounded-xl h-10 px-4 shadow-sm"><FileDown className="w-4 h-4 mr-2" /> PDF</Button>
+            <Button onClick={() => setAreaViewOpen(true)} className="bg-white border border-stone-200 text-stone-700 hover:bg-stone-50 rounded-xl h-10 px-4 shadow-sm"><LayoutGrid className="w-4 h-4 mr-2" /> Visão Geral</Button>
 
             <Dialog open={open} onOpenChange={(v) => { if(!v) resetForm(); setOpen(v); }}>
-            <DialogTrigger asChild>
-                <Button className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl h-10 px-5 shadow-lg shadow-emerald-100 transition-all active:scale-95 ml-2">
-                <Plus className="w-4 h-4 mr-2" /> Nova Programação
-                </Button>
-            </DialogTrigger>
-            
+            <DialogTrigger asChild><Button className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl h-10 px-5 shadow-lg shadow-emerald-100 transition-all active:scale-95 ml-2"><Plus className="w-4 h-4 mr-2" /> Nova Programação</Button></DialogTrigger>
             <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto rounded-[2rem]">
-                <DialogHeader>
-                <DialogTitle>{editingAtividade ? 'Editar Atividade' : 'Planejamento de Atividades'}</DialogTitle>
-                <DialogDescription>
-                    {editingAtividade ? 'Edite os detalhes desta atividade.' : 'Adicione várias atividades à lista e salve tudo de uma vez.'}
-                </DialogDescription>
-                </DialogHeader>
+                <DialogHeader><DialogTitle>{editingAtividade ? 'Editar Atividade' : 'Planejamento de Atividades'}</DialogTitle><DialogDescription>{editingAtividade ? 'Edite os detalhes desta atividade.' : 'Adicione várias atividades à lista e salve tudo de uma vez.'}</DialogDescription></DialogHeader>
                 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pt-2">
-                    
-                    {/* COLUNA 1 e 2: FORMULÁRIO (OCUPA 2/3) */}
                     <div className="lg:col-span-2 space-y-4 border-r border-stone-100 pr-0 lg:pr-6">
                         <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                            <Label>Válvula</Label>
-                            <Select value={formData.talhao_id || ""} onValueChange={(value) => setFormData({ ...formData, talhao_id: value })}>
-                                <SelectTrigger className="rounded-xl"><SelectValue placeholder="Selecione" /></SelectTrigger>
-                                <SelectContent>{talhoes.map((talhao) => (<SelectItem key={talhao.id} value={talhao.id}>{talhao.nome}</SelectItem>))}</SelectContent>
-                            </Select>
-                            </div>
-                            <div className="space-y-2">
-                            <div className="flex items-center justify-between">
-                                <Label>Tipo de Atividade</Label>
-                                <Button type="button" variant="ghost" size="sm" onClick={() => setOpenTipoDialog(true)} className="h-6 text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50 px-2 rounded-lg">
-                                    <Plus className="w-3 h-3 mr-1" /> Gerenciar Tipos
-                                </Button>
-                            </div>
-                            <Select value={formData.tipo || ""} onValueChange={(value) => setFormData({ ...formData, tipo: value })}>
-                                <SelectTrigger className="rounded-xl"><SelectValue placeholder="Selecione" /></SelectTrigger>
-                                <SelectContent>{todosTipos.map((tipo) => (<SelectItem key={tipo.value} value={tipo.value}>{tipo.label}</SelectItem>))}</SelectContent>
-                            </Select>
-                            </div>
+                            <div className="space-y-2"><Label>Válvula</Label><Select value={formData.talhao_id || ""} onValueChange={(value) => setFormData({ ...formData, talhao_id: value })}><SelectTrigger className="rounded-xl"><SelectValue placeholder="Selecione" /></SelectTrigger><SelectContent>{talhoes.map((talhao) => (<SelectItem key={talhao.id} value={talhao.id}>{talhao.nome}</SelectItem>))}</SelectContent></Select></div>
+                            <div className="space-y-2"><div className="flex items-center justify-between"><Label>Tipo de Atividade</Label><Button type="button" variant="ghost" size="sm" onClick={() => setOpenTipoDialog(true)} className="h-6 text-xs text-blue-600 px-2 rounded-lg"><Plus className="w-3 h-3 mr-1" /> Gerenciar</Button></div><Select value={formData.tipo || ""} onValueChange={(value) => setFormData({ ...formData, tipo: value })}><SelectTrigger className="rounded-xl"><SelectValue placeholder="Selecione" /></SelectTrigger><SelectContent>{todosTipos.map((tipo) => (<SelectItem key={tipo.value} value={tipo.value}>{tipo.label}</SelectItem>))}</SelectContent></Select></div>
                         </div>
 
-                        {formData.tipo === 'outro' && (
-                            <div className="space-y-2"><Label>Nome da Atividade</Label><Input value={formData.tipo_personalizado || ""} onChange={(e) => setFormData({ ...formData, tipo_personalizado: e.target.value })} className="rounded-xl" /></div>
-                        )}
+                        {formData.tipo === 'outro' && (<div className="space-y-2"><Label>Nome da Atividade</Label><Input value={formData.tipo_personalizado || ""} onChange={(e) => setFormData({ ...formData, tipo_personalizado: e.target.value })} className="rounded-xl" /></div>)}
 
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2"><Label>Data Programada</Label><Input type="date" value={formData.data_programada || ""} onChange={(e) => setFormData({ ...formData, data_programada: e.target.value })} className="rounded-xl" /></div>
@@ -634,36 +505,16 @@ export default function Atividades() {
                         <div className="space-y-2"><Label>Responsável</Label><Input value={formData.responsavel || ""} onChange={(e) => setFormData({ ...formData, responsavel: e.target.value })} className="rounded-xl" /></div>
 
                         <div className="p-4 bg-stone-50 rounded-xl space-y-4 border border-stone-100">
-                            <div className="flex items-center justify-between">
-                                <Label className="text-base font-medium text-stone-700">Atividade Terceirizada</Label>
-                                <Switch checked={formData.terceirizada} onCheckedChange={(checked) => setFormData({ ...formData, terceirizada: checked })} />
-                            </div>
-                            {formData.terceirizada && (
-                                <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
-                                    <Label>Valor do Serviço</Label>
-                                    <Input type="number" step="0.01" value={formData.valor_terceirizado || ""} onChange={(e) => setFormData({ ...formData, valor_terceirizado: e.target.value })} placeholder="R$ 0,00" className="rounded-xl" />
-                                </div>
-                            )}
+                            <div className="flex items-center justify-between"><Label className="text-base font-medium text-stone-700">Atividade Terceirizada</Label><Switch checked={formData.terceirizada} onCheckedChange={(checked) => setFormData({ ...formData, terceirizada: checked })} /></div>
+                            {formData.terceirizada && (<div className="space-y-2 animate-in fade-in slide-in-from-top-2"><Label>Valor do Serviço</Label><Input type="number" step="0.01" value={formData.valor_terceirizado || ""} onChange={(e) => setFormData({ ...formData, valor_terceirizado: e.target.value })} placeholder="R$ 0,00" className="rounded-xl" /></div>)}
                         </div>
 
                         <div className="p-4 bg-stone-50 rounded-xl space-y-3 border border-stone-100">
                             <Label className="text-sm font-bold text-stone-700">Insumos (Opcional)</Label>
                             <div className="flex gap-2">
-                                <Select value={insumoTemp.insumo_id || ""} onValueChange={(value) => setInsumoTemp({ ...insumoTemp, insumo_id: value })}>
-                                    <SelectTrigger className="w-full rounded-xl bg-white h-9 text-xs"><SelectValue placeholder="Insumo" /></SelectTrigger>
-                                    <SelectContent>{insumos.map((i) => (<SelectItem key={i.id} value={i.id}>{i.nome}</SelectItem>))}</SelectContent>
-                                </Select>
+                                <Select value={insumoTemp.insumo_id || ""} onValueChange={(value) => setInsumoTemp({ ...insumoTemp, insumo_id: value })}><SelectTrigger className="w-full rounded-xl bg-white h-9 text-xs"><SelectValue placeholder="Insumo" /></SelectTrigger><SelectContent>{insumos.map((i) => (<SelectItem key={i.id} value={i.id}>{i.nome}</SelectItem>))}</SelectContent></Select>
                                 <Input type="number" placeholder="Qtd" className="w-20 rounded-xl bg-white h-9 text-xs" value={insumoTemp.quantidade || ""} onChange={(e) => setInsumoTemp({ ...insumoTemp, quantidade: e.target.value })} />
-                                <Select value={insumoTemp.metodo_aplicacao || "foliar"} onValueChange={(value) => { setInsumoTemp({ ...insumoTemp, metodo_aplicacao: value }); setMostrarNovoMetodo(value === 'outro'); }}>
-                                    <SelectTrigger className="w-32 rounded-xl bg-white h-9 text-xs"><SelectValue placeholder="Método" /></SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="foliar">Foliar</SelectItem>
-                                        <SelectItem value="adubacao">Adubação</SelectItem>
-                                        <SelectItem value="solo">Solo</SelectItem>
-                                        <SelectItem value="fertirrigacao">Fertirrigação</SelectItem>
-                                        <SelectItem value="outro">Outro...</SelectItem>
-                                    </SelectContent>
-                                </Select>
+                                <Select value={insumoTemp.metodo_aplicacao || "foliar"} onValueChange={(value) => { setInsumoTemp({ ...insumoTemp, metodo_aplicacao: value }); setMostrarNovoMetodo(value === 'outro'); }}><SelectTrigger className="w-32 rounded-xl bg-white h-9 text-xs"><SelectValue placeholder="Método" /></SelectTrigger><SelectContent><SelectItem value="foliar">Foliar</SelectItem><SelectItem value="adubacao">Adubação</SelectItem><SelectItem value="solo">Solo</SelectItem><SelectItem value="fertirrigacao">Fertirrigação</SelectItem><SelectItem value="outro">Outro...</SelectItem></SelectContent></Select>
                                 {mostrarNovoMetodo && <Input placeholder="Nome" className="w-24 rounded-xl bg-white h-9 text-xs" value={novoMetodo || ""} onChange={(e) => setNovoMetodo(e.target.value)} />}
                                 <Button type="button" onClick={addInsumo} size="sm" className="rounded-xl bg-white hover:bg-emerald-50 text-emerald-600 border border-emerald-200"><Plus className="w-4 h-4" /></Button>
                             </div>
@@ -680,69 +531,36 @@ export default function Atividades() {
                             )}
                         </div>
 
-                        <div className="flex items-center justify-between p-4 bg-emerald-50 rounded-xl border border-emerald-100">
-                            <span className="font-medium text-emerald-800">Custo Total Previsto</span>
-                            <span className="text-xl font-bold text-emerald-700">R$ {calcularCustoTotal().toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                        </div>
+                        <div className="flex items-center justify-between p-4 bg-emerald-50 rounded-xl border border-emerald-100"><span className="font-medium text-emerald-800">Custo Total Previsto</span><span className="text-xl font-bold text-emerald-700">R$ {calcularCustoTotal().toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span></div>
+                        <div className="space-y-2"><Label>Observações</Label><Textarea value={formData.observacoes || ""} onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })} rows={2} className="rounded-xl" placeholder="Detalhes para o encarregado..." /></div>
 
-                        <div className="space-y-2">
-                            <Label>Observações</Label>
-                            <Textarea value={formData.observacoes || ""} onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })} rows={2} className="rounded-xl" placeholder="Detalhes para o encarregado..." />
-                        </div>
-
-                        {!editingAtividade && (
-                            <Button onClick={handleAddToQueue} className="w-full rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold h-12">
-                                <ListPlus className="w-5 h-5 mr-2" /> Adicionar à Lista
-                            </Button>
-                        )}
+                        {!editingAtividade && (<Button onClick={handleAddToQueue} className="w-full rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold h-12"><ListPlus className="w-5 h-5 mr-2" /> Adicionar à Lista</Button>)}
                     </div>
 
-                    {/* COLUNA 3: LISTA DE PRÉ-LANÇAMENTO */}
                     <div className="lg:col-span-1 bg-stone-50 rounded-2xl border border-stone-200 p-4 flex flex-col h-full min-h-[300px]">
-                        <h4 className="text-sm font-bold text-stone-700 mb-3 flex items-center gap-2">
-                            <ClipboardList className="w-4 h-4" /> Lista de Programação ({activityQueue.length})
-                        </h4>
-                        
+                        <h4 className="text-sm font-bold text-stone-700 mb-3 flex items-center gap-2"><ClipboardList className="w-4 h-4" /> Lista de Programação ({activityQueue.length})</h4>
                         {editingAtividade ? (
-                            <div className="flex-1 flex items-center justify-center text-center text-stone-400 text-xs italic">
-                                Modo de edição individual.<br/>A lista está desabilitada.
-                            </div>
+                            <div className="flex-1 flex items-center justify-center text-center text-stone-400 text-xs italic">Modo de edição individual.<br/>A lista está desabilitada.</div>
                         ) : (
                             <>
                                 <div className="flex-1 overflow-y-auto space-y-2 max-h-[400px] pr-1 scrollbar-thin">
                                     {activityQueue.length === 0 ? (
-                                        <div className="text-center text-stone-400 text-xs py-10 italic">
-                                            Preencha o formulário e clique em "Adicionar à Lista" para montar a programação do dia/semana.
-                                        </div>
+                                        <div className="text-center text-stone-400 text-xs py-10 italic">Preencha o formulário e clique em "Adicionar à Lista".</div>
                                     ) : (
-                                        activityQueue.map((item, idx) => (
+                                        activityQueue.map((item) => (
                                             <div key={item.tempId} className="bg-white p-3 rounded-xl border border-stone-100 shadow-sm text-sm relative group animate-in slide-in-from-left-2">
                                                 <button onClick={() => handleRemoveFromQueue(item.tempId)} className="absolute top-2 right-2 text-stone-300 hover:text-red-500 transition-colors"><X className="w-4 h-4" /></button>
-                                                
-                                                <div className="font-bold text-stone-800 text-emerald-700">{item.talhao_nome}</div>
+                                                <div className="font-bold text-emerald-700">{item.talhao_nome}</div>
                                                 <div className="font-medium text-stone-700">{item.tipo === 'outro' ? item.tipo_personalizado : getTipoLabel(item.tipo)}</div>
-                                                <div className="text-xs text-stone-500 mt-1 flex items-center gap-1">
-                                                    <CalendarIcon className="w-3 h-3"/> {format(parseISO(item.data_programada), 'dd/MM/yyyy')}
-                                                </div>
+                                                <div className="text-xs text-stone-500 mt-1 flex items-center gap-1"><CalendarIcon className="w-3 h-3"/> {format(parseISO(item.data_programada), 'dd/MM/yyyy')}</div>
                                                 {item.terceirizada && <div className="text-[10px] text-blue-600 font-bold mt-1">Terceirizado: R$ {parseFloat(item.valor_terceirizado || 0).toLocaleString('pt-BR')}</div>}
-                                                {item.insumos_utilizados.length > 0 && (
-                                                    <div className="mt-2 pt-2 border-t border-stone-50 flex gap-1 flex-wrap">
-                                                        {item.insumos_utilizados.map((i, k) => (
-                                                            <span key={k} className="text-[10px] bg-stone-100 px-1 rounded text-stone-500">
-                                                                {i.nome} - <span className="capitalize">{i.metodo_aplicacao}</span>
-                                                            </span>
-                                                        ))}
-                                                    </div>
-                                                )}
+                                                {item.insumos_utilizados.length > 0 && (<div className="mt-2 pt-2 border-t border-stone-50 flex gap-1 flex-wrap">{item.insumos_utilizados.map((i, k) => (<span key={k} className="text-[10px] bg-stone-100 px-1 rounded text-stone-500">{i.nome} - <span className="capitalize">{i.metodo_aplicacao}</span></span>))}</div>)}
                                             </div>
                                         ))
                                     )}
                                 </div>
-                                
                                 <div className="mt-4 pt-4 border-t border-stone-200">
-                                    <Button onClick={handleSaveAll} disabled={activityQueue.length === 0 || createBatchMutation.isPending} className="w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-11 shadow-lg shadow-emerald-100">
-                                        {createBatchMutation.isPending ? 'Salvando...' : `Confirmar (${activityQueue.length})`}
-                                    </Button>
+                                    <Button onClick={handleSaveAll} disabled={activityQueue.length === 0 || createBatchMutation.isPending} className="w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-11 shadow-lg shadow-emerald-100">{createBatchMutation.isPending ? 'Salvando...' : `Confirmar (${activityQueue.length})`}</Button>
                                 </div>
                             </>
                         )}
@@ -752,9 +570,7 @@ export default function Atividades() {
                 {editingAtividade && (
                     <DialogFooter className="mt-4 border-t pt-4">
                         <Button type="button" variant="outline" onClick={resetForm} className="rounded-xl border-stone-200">Cancelar</Button>
-                        <Button onClick={handleSubmitForm} className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl px-6">
-                            Salvar Alterações
-                        </Button>
+                        <Button onClick={handleSubmitForm} className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl px-6">Salvar Alterações</Button>
                     </DialogFooter>
                 )}
             </DialogContent>
@@ -790,6 +606,7 @@ export default function Atividades() {
               <Filter className="w-4 h-4" />
               <span className="text-sm font-bold uppercase tracking-wide">Filtros:</span>
             </div>
+            {/* O select de Talhão foi mantido caso o usuário queira trocar por aqui também, mas está sincronizado */}
             <Select value={filtroTalhao || "todos"} onValueChange={setFiltroTalhao}>
               <SelectTrigger className="w-48 rounded-xl bg-stone-50 border-stone-200"><SelectValue placeholder="Válvula" /></SelectTrigger>
               <SelectContent>{talhoes.map((t) => (<SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>))}<SelectItem value="todos">Todos</SelectItem></SelectContent>
@@ -842,9 +659,7 @@ export default function Atividades() {
                                 <CheckCircle2 className="w-4 h-4" />
                             </Button>
                         )}
-                        {/* Botão Ver Texto (Resumo) */}
                         <Button variant="ghost" size="icon" className="h-8 w-8 text-emerald-500 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg" onClick={() => handleViewActivityText(atividade)} title="Ver Texto"><FileText className="w-4 h-4" /></Button>
-                        
                         <Button variant="ghost" size="icon" className="h-8 w-8 text-stone-400 hover:text-stone-700 hover:bg-stone-100 rounded-lg" onClick={() => handleEdit(atividade)} title="Editar"><Edit className="w-4 h-4" /></Button>
                         <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg" onClick={() => handleDuplicate(atividade)} title="Duplicar"><Copy className="w-4 h-4" /></Button>
                         <Button variant="ghost" size="icon" className="h-8 w-8 text-red-300 hover:text-red-500 hover:bg-red-50 rounded-lg" onClick={() => { if(confirm("Excluir?")) deleteMutation.mutate(atividade.id) }} title="Excluir"><Trash2 className="w-4 h-4" /></Button>
