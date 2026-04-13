@@ -11,10 +11,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Switch } from '@/components/ui/switch';
-import { Plus, Edit, Trash2, ClipboardList, Filter, Package, Copy, MessageCircle, CheckCircle2, Calendar as CalendarIcon, ListPlus, X, Send, FileText, LayoutGrid, ArrowRight, FileDown, ArrowLeft, Map } from 'lucide-react';
+import { Plus, Edit, Trash2, ClipboardList, Filter, Package, Copy, MessageCircle, CheckCircle2, Calendar as CalendarIcon, ListPlus, X, Send, FileText, LayoutGrid, ArrowRight, FileDown, ArrowLeft, Map, Archive } from 'lucide-react';
 import EmptyState from '@/components/ui/EmptyState';
 import { format, parseISO, subDays, isWithinInterval, startOfDay, endOfDay } from 'date-fns';
-// IMPORTAÇÕES DO PDF
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -37,16 +36,13 @@ const statusLabels = {
 };
 
 export default function Atividades() {
-  const [viewMode, setViewMode] = useState('selecao'); // 'selecao' ou 'lista'
+  const [viewMode, setViewMode] = useState('selecao'); 
   
   const [open, setOpen] = useState(false);
   const [summaryOpen, setSummaryOpen] = useState(false);
   const [summaryText, setSummaryText] = useState('');
   
-  // ESTADO PARA VISÃO GERAL POR VÁLVULA
   const [areaViewOpen, setAreaViewOpen] = useState(false);
-
-  // ESTADOS PARA O RELATÓRIO PDF
   const [reportOpen, setReportOpen] = useState(false);
   const [reportTalhao, setReportTalhao] = useState('todos');
   const [reportStartDate, setReportStartDate] = useState(format(subDays(new Date(), 30), 'yyyy-MM-dd'));
@@ -57,6 +53,7 @@ export default function Atividades() {
 
   const [filtroTalhao, setFiltroTalhao] = useState('todos');
   const [filtroStatus, setFiltroStatus] = useState('todos');
+  const [filtroSafra, setFiltroSafra] = useState('todas'); 
   
   const [openTipoDialog, setOpenTipoDialog] = useState(false);
   const [novoTipo, setNovoTipo] = useState('');
@@ -83,28 +80,12 @@ export default function Atividades() {
 
   const queryClient = useQueryClient();
 
-  // --- QUERIES ---
-  const { data: talhoes = [] } = useQuery({
-    queryKey: ['talhoes'],
-    queryFn: async () => { const { data } = await supabase.from('talhoes').select('*'); return data || []; }
-  });
+  const { data: talhoes = [] } = useQuery({ queryKey: ['talhoes'], queryFn: async () => { const { data } = await supabase.from('talhoes').select('*'); return data || []; } });
+  const { data: atividades = [] } = useQuery({ queryKey: ['atividades'], queryFn: async () => { const { data } = await supabase.from('atividades').select('*').order('data_programada', { ascending: false }); return data || []; } });
+  const { data: insumos = [] } = useQuery({ queryKey: ['insumos'], queryFn: async () => { const { data } = await supabase.from('insumos').select('*'); return data || []; } });
+  const { data: tiposCustomizados = [] } = useQuery({ queryKey: ['tipos-atividade'], queryFn: async () => { const { data } = await supabase.from('tipos_atividade').select('*'); return data || []; } });
+  const { data: safras = [] } = useQuery({ queryKey: ['safras'], queryFn: async () => { const { data } = await supabase.from('safras').select('*').order('data_inicio', { ascending: false }); return data || []; } });
 
-  const { data: atividades = [] } = useQuery({
-    queryKey: ['atividades'],
-    queryFn: async () => { const { data } = await supabase.from('atividades').select('*').order('data_programada', { ascending: false }); return data || []; }
-  });
-
-  const { data: insumos = [] } = useQuery({
-    queryKey: ['insumos'],
-    queryFn: async () => { const { data } = await supabase.from('insumos').select('*'); return data || []; }
-  });
-
-  const { data: tiposCustomizados = [] } = useQuery({
-    queryKey: ['tipos-atividade'],
-    queryFn: async () => { const { data } = await supabase.from('tipos_atividade').select('*'); return data || []; }
-  });
-
-  // --- DADOS PARA VISÃO GERAL ---
   const areasResumo = useMemo(() => {
     return talhoes.map(talhao => {
         const atividadesArea = atividades.filter(a => a.talhao_id === talhao.id);
@@ -116,31 +97,20 @@ export default function Atividades() {
     });
   }, [talhoes, atividades]);
 
-  // --- FUNÇÃO DE GERAÇÃO DE PDF ---
   const generatePDF = () => {
     const doc = new jsPDF();
-
     const filteredActivities = atividades.filter(a => {
         const date = parseISO(a.data_programada);
         const start = startOfDay(parseISO(reportStartDate));
         const end = endOfDay(parseISO(reportEndDate));
-        
-        const inDateRange = isWithinInterval(date, { start, end });
-        const inTalhao = reportTalhao === 'todos' || a.talhao_id === reportTalhao;
-        
-        return inDateRange && inTalhao;
+        return isWithinInterval(date, { start, end }) && (reportTalhao === 'todos' || String(a.talhao_id) === String(reportTalhao));
     }).sort((a, b) => new Date(a.data_programada) - new Date(b.data_programada));
 
     const totalGeral = filteredActivities.reduce((acc, curr) => acc + (curr.custo_total || 0), 0);
+    const nomeFiltro = reportTalhao === 'todos' ? 'Todas as Válvulas' : talhoes.find(t => String(t.id) === String(reportTalhao))?.nome;
 
-    const nomeFiltro = reportTalhao === 'todos' ? 'Todas as Válvulas' : talhoes.find(t => t.id === reportTalhao)?.nome;
-
-    doc.setFontSize(18);
-    doc.text("Caderno de Campo - Fazenda Cassiano's", 14, 20);
-    
-    doc.setFontSize(10);
-    doc.text(`Filtro: ${nomeFiltro}`, 14, 28);
-    doc.text(`Período: ${format(parseISO(reportStartDate), 'dd/MM/yyyy')} a ${format(parseISO(reportEndDate), 'dd/MM/yyyy')}`, 14, 34);
+    doc.setFontSize(18); doc.text("Caderno de Campo - Fazenda Cassiano's", 14, 20);
+    doc.setFontSize(10); doc.text(`Filtro: ${nomeFiltro}`, 14, 28); doc.text(`Período: ${format(parseISO(reportStartDate), 'dd/MM/yyyy')} a ${format(parseISO(reportEndDate), 'dd/MM/yyyy')}`, 14, 34);
 
     const tableColumn = ["Data", "Válvula", "Atividade", "Detalhes / Insumos", "Status", "Resp.", "Valor"];
     const tableRows = [];
@@ -149,178 +119,106 @@ export default function Atividades() {
         const dataFormatada = format(parseISO(ativ.data_programada), 'dd/MM/yy');
         const nomeValvula = getTalhaoNome(ativ.talhao_id);
         const tipo = ativ.tipo === 'outro' ? ativ.tipo_personalizado : getTipoLabel(ativ.tipo);
-        
         let detalhes = "";
-        if (ativ.insumos_utilizados && ativ.insumos_utilizados.length > 0) {
-            detalhes = ativ.insumos_utilizados.map(i => `${i.nome} (${i.quantidade}${i.unidade})`).join(', ');
-        } else if (ativ.terceirizada) {
-            detalhes = "Serviço Terceirizado";
-        }
+        if (ativ.insumos_utilizados && ativ.insumos_utilizados.length > 0) detalhes = ativ.insumos_utilizados.map(i => `${i.nome} (${i.quantidade}${i.unidade})`).join(', ');
+        else if (ativ.terceirizada) detalhes = "Serviço Terceirizado";
         if (ativ.observacoes) detalhes += `\nObs: ${ativ.observacoes}`;
-
         const status = statusLabels[ativ.status]?.label || ativ.status;
         const valorFormatado = (ativ.custo_total || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-
         tableRows.push([dataFormatada, nomeValvula, tipo, detalhes, status, ativ.responsavel || '-', valorFormatado]);
     });
 
     autoTable(doc, {
-        head: [tableColumn],
-        body: tableRows,
-        foot: [["", "", "", "", "", "TOTAL GERAL:", totalGeral.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })]],
-        startY: 40,
-        theme: 'grid',
-        styles: { fontSize: 8, cellPadding: 2 },
-        headStyles: { fillColor: [16, 185, 129] },
-        footStyles: { fillColor: [240, 240, 240], textColor: [0,0,0], fontStyle: 'bold', halign: 'right' },
-        columnStyles: { 6: { halign: 'right' } }
+        head: [tableColumn], body: tableRows, foot: [["", "", "", "", "", "TOTAL GERAL:", totalGeral.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })]],
+        startY: 40, theme: 'grid', styles: { fontSize: 8, cellPadding: 2 }, headStyles: { fillColor: [16, 185, 129] },
+        footStyles: { fillColor: [240, 240, 240], textColor: [0,0,0], fontStyle: 'bold', halign: 'right' }, columnStyles: { 6: { halign: 'right' } }
     });
-
     doc.save(`relatorio_campo_${format(new Date(), 'yyyyMMdd')}.pdf`);
     setReportOpen(false);
   };
 
-  // --- MUTAÇÕES ---
   const createBatchMutation = useMutation({
     mutationFn: async (activities) => {
-      const payload = activities.map(a => {
-          const { talhao_nome, tempId, ...rest } = a;
-          if (rest.valor_terceirizado === '') rest.valor_terceirizado = null;
-          return rest;
-      });
-      const { error } = await supabase.from('atividades').insert(payload);
-      if (error) throw error;
+      const payload = activities.map(a => { const { talhao_nome, tempId, ...rest } = a; if (rest.valor_terceirizado === '') rest.valor_terceirizado = null; return rest; });
+      const { error } = await supabase.from('atividades').insert(payload); if (error) throw error;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['atividades'] });
-      generateSummaryText(activityQueue);
-      setActivityQueue([]);
-      setOpen(false);
-      setSummaryOpen(true);
-    }
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['atividades'] }); generateSummaryText(activityQueue); setActivityQueue([]); setOpen(false); setSummaryOpen(true); }
   });
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }) => {
-      const payload = { ...data };
-      if (payload.valor_terceirizado === '') payload.valor_terceirizado = null;
-      const { data: result, error } = await supabase.from('atividades').update(payload).eq('id', id).select();
-      if (error) throw error; return result;
-    },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['atividades'] }); resetForm(); }
+      const payload = { ...data }; if (payload.valor_terceirizado === '') payload.valor_terceirizado = null;
+      const { data: result, error } = await supabase.from('atividades').update(payload).eq('id', id).select(); if (error) throw error; return result;
+    }, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['atividades'] }); resetForm(); }
   });
 
-  const deleteMutation = useMutation({
-    mutationFn: async (id) => { const { error } = await supabase.from('atividades').delete().eq('id', id); if (error) throw error; },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['atividades'] }); }
-  });
+  const deleteMutation = useMutation({ mutationFn: async (id) => { const { error } = await supabase.from('atividades').delete().eq('id', id); if (error) throw error; }, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['atividades'] }); } });
+  const createTipoMutation = useMutation({ mutationFn: async (data) => { const { data: result, error } = await supabase.from('tipos_atividade').insert(data).select(); if (error) throw error; return result; }, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['tipos-atividade'] }); setNovoTipo(''); } });
+  const deleteTipoMutation = useMutation({ mutationFn: async (id) => { const { error } = await supabase.from('tipos_atividade').delete().eq('id', id); if (error) throw error; }, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['tipos-atividade'] }); } });
 
-  const createTipoMutation = useMutation({
-    mutationFn: async (data) => { const { data: result, error } = await supabase.from('tipos_atividade').insert(data).select(); if (error) throw error; return result; },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['tipos-atividade'] }); setNovoTipo(''); }
-  });
-
-  const deleteTipoMutation = useMutation({
-    mutationFn: async (id) => { const { error } = await supabase.from('tipos_atividade').delete().eq('id', id); if (error) throw error; },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['tipos-atividade'] }); }
-  });
-
-  // --- LÓGICA DE FILA E RESUMO ---
   const handleAddToQueue = (e) => {
       e.preventDefault();
-      if (!formData.talhao_id || !formData.tipo || !formData.data_programada) {
-          alert("Preencha Válvula, Tipo e Data para adicionar.");
-          return;
-      }
-      const talhaoNome = talhoes.find(t => t.id === formData.talhao_id)?.nome || 'Válvula';
+      if (!formData.talhao_id || !formData.tipo || !formData.data_programada) return alert("Preencha Válvula, Tipo e Data para adicionar.");
+      const talhaoNome = talhoes.find(t => String(t.id) === String(formData.talhao_id))?.nome || 'Válvula';
       const custoCalc = calcularCustoTotal();
-      
-      const newItem = {
-          ...formData,
-          valor_terceirizado: formData.valor_terceirizado ? parseFloat(formData.valor_terceirizado) : null,
-          custo_total: custoCalc,
-          data_realizada: formData.status === 'concluida' ? (formData.data_realizada || format(new Date(), 'yyyy-MM-dd')) : null,
-          talhao_nome: talhaoNome,
-          tempId: Date.now()
-      };
-
+      const newItem = { ...formData, valor_terceirizado: formData.valor_terceirizado ? parseFloat(formData.valor_terceirizado) : null, custo_total: custoCalc, data_realizada: formData.status === 'concluida' ? (formData.data_realizada || format(new Date(), 'yyyy-MM-dd')) : null, talhao_nome: talhaoNome, tempId: Date.now() };
       setActivityQueue([...activityQueue, newItem]);
-      setFormData(prev => ({ 
-          ...prev, talhao_id: '', observacoes: '', insumos_utilizados: [], custo_total: 0, terceirizada: false, valor_terceirizado: '' 
-      }));
+      setFormData(prev => ({ ...prev, talhao_id: formData.talhao_id, observacoes: '', insumos_utilizados: [], custo_total: 0, terceirizada: false, valor_terceirizado: '' }));
   };
 
   const handleRemoveFromQueue = (tempId) => setActivityQueue(activityQueue.filter(item => item.tempId !== tempId));
   const handleSaveAll = () => { if (activityQueue.length > 0) createBatchMutation.mutate(activityQueue); };
 
   const generateSummaryText = (items) => {
-      const grouped = items.reduce((acc, curr) => {
-          const key = curr.talhao_nome;
-          if (!acc[key]) acc[key] = [];
-          acc[key].push(curr);
-          return acc;
-      }, {});
-
+      const grouped = items.reduce((acc, curr) => { const key = curr.talhao_nome; if (!acc[key]) acc[key] = []; acc[key].push(curr); return acc; }, {});
       let text = "*📋 PROGRAMAÇÃO DE ATIVIDADES*\n\n";
       Object.keys(grouped).forEach(talhao => {
           text += `*📍 ${talhao.toUpperCase()}*\n`;
           grouped[talhao].sort((a, b) => new Date(a.data_programada) - new Date(b.data_programada)).forEach(ativ => {
-              const date = format(parseISO(ativ.data_programada), 'dd/MM');
-              const tipoLabel = ativ.tipo === 'outro' ? ativ.tipo_personalizado : getTipoLabel(ativ.tipo);
+              const date = format(parseISO(ativ.data_programada), 'dd/MM'); const tipoLabel = ativ.tipo === 'outro' ? ativ.tipo_personalizado : getTipoLabel(ativ.tipo);
               text += `🔹 ${date}: ${tipoLabel}`;
               if (ativ.terceirizada) text += ` (Terceirizado)`;
-              if (ativ.insumos_utilizados?.length > 0) {
-                  const insumosText = ativ.insumos_utilizados.map(i => {
-                      const metodo = i.metodo_aplicacao ? `[${i.metodo_aplicacao}]` : '';
-                      return `${i.nome} (${i.quantidade}${i.unidade}) ${metodo}`;
-                  }).join(', ');
-                  text += `\n   📦 Insumos: ${insumosText}`;
-              }
+              if (ativ.insumos_utilizados?.length > 0) { const insumosText = ativ.insumos_utilizados.map(i => `${i.nome} (${i.quantidade}${i.unidade}) ${i.metodo_aplicacao ? `[${i.metodo_aplicacao}]` : ''}`).join(', '); text += `\n   📦 Insumos: ${insumosText}`; }
               if (ativ.observacoes) text += `\n   📝 _Obs: ${ativ.observacoes}_`;
               text += `\n`;
-          });
-          text += `\n`;
-      });
-      text += `_Gerado pelo Sistema Fazenda Cassiano's_`;
-      setSummaryText(text);
+          }); text += `\n`;
+      }); text += `_Gerado pelo Sistema Fazenda Cassiano's_`; setSummaryText(text);
   };
 
   const handleViewActivityText = (atividade) => {
-    const talhaoNome = getTalhaoNome(atividade.talhao_id);
-    const tipoNome = atividade.tipo === 'outro' ? atividade.tipo_personalizado : getTipoLabel(atividade.tipo);
-    const data = format(new Date(atividade.data_programada + 'T12:00:00'), 'dd/MM/yyyy');
-    
+    const talhaoNome = getTalhaoNome(atividade.talhao_id); const tipoNome = atividade.tipo === 'outro' ? atividade.tipo_personalizado : getTipoLabel(atividade.tipo); const data = format(new Date(atividade.data_programada + 'T12:00:00'), 'dd/MM/yyyy');
     let text = `📋 *DETALHES DA ATIVIDADE*\n\n📍 *Válvula:* ${talhaoNome}\n🚜 *Atividade:* ${tipoNome}\n📅 *Data:* ${data}\n`;
     if (atividade.terceirizada) text += `👷 *Serviço:* Terceirizado\n`;
-    if (atividade.insumos_utilizados && atividade.insumos_utilizados.length > 0) {
-        text += `\n📦 *Insumos:*`;
-        atividade.insumos_utilizados.forEach(i => { text += `\n   ▪ ${i.nome}: ${i.quantidade} ${i.unidade}` + (i.metodo_aplicacao ? ` (${i.metodo_aplicacao})` : ''); });
-        text += `\n`;
-    }
+    if (atividade.insumos_utilizados && atividade.insumos_utilizados.length > 0) { text += `\n📦 *Insumos:*`; atividade.insumos_utilizados.forEach(i => { text += `\n   ▪ ${i.nome}: ${i.quantidade} ${i.unidade}` + (i.metodo_aplicacao ? ` (${i.metodo_aplicacao})` : ''); }); text += `\n`; }
     if (atividade.observacoes) text += `\n📝 *Observações:*\n${atividade.observacoes}`;
-    setSummaryText(text);
-    setSummaryOpen(true);
+    setSummaryText(text); setSummaryOpen(true);
   };
 
   const copyToClipboard = () => { navigator.clipboard.writeText(summaryText); alert("Texto copiado! Agora cole no WhatsApp."); };
 
   const resetForm = () => {
     setFormData({ talhao_id: '', tipo: '', tipo_personalizado: '', data_programada: format(new Date(), 'yyyy-MM-dd'), data_realizada: '', status: 'programada', terceirizada: false, valor_terceirizado: '', insumos_utilizados: [], custo_total: 0, responsavel: '', observacoes: '' });
-    setInsumoTemp({ insumo_id: '', quantidade: '', metodo_aplicacao: 'foliar' });
-    setNovoMetodo(''); setMostrarNovoMetodo(false); setActivityQueue([]); setEditingAtividade(null); setOpen(false);
+    setInsumoTemp({ insumo_id: '', quantidade: '', metodo_aplicacao: 'foliar' }); setNovoMetodo(''); setMostrarNovoMetodo(false); setActivityQueue([]); setEditingAtividade(null); setOpen(false);
   };
 
-  const handleEdit = (atividade) => { setEditingAtividade(atividade); setFormData({ ...atividade }); setActivityQueue([]); setOpen(true); };
-  const handleDuplicate = (atividade) => { setEditingAtividade(null); setFormData({ ...atividade, id: undefined, status: 'programada', data_realizada: '' }); setActivityQueue([]); setOpen(true); };
+  const handleNovaProgramacao = () => {
+      let initialTalhao = '';
+      if (filtroSafra !== 'todas') {
+          const s = safras.find(x => x.id === filtroSafra);
+          if (s) initialTalhao = String(s.talhao_id);
+      } else if (filtroTalhao !== 'todos') {
+          initialTalhao = String(filtroTalhao);
+      }
+      setFormData(prev => ({ ...prev, talhao_id: initialTalhao }));
+      setOpen(true);
+  };
+
+  const handleEdit = (atividade) => { setEditingAtividade(atividade); setFormData({ ...atividade, talhao_id: String(atividade.talhao_id) }); setActivityQueue([]); setOpen(true); };
+  const handleDuplicate = (atividade) => { setEditingAtividade(null); setFormData({ ...atividade, id: undefined, status: 'programada', data_realizada: '', talhao_id: String(atividade.talhao_id) }); setActivityQueue([]); setOpen(true); };
 
   const addInsumo = () => {
-    if (!insumoTemp.insumo_id || !insumoTemp.quantidade) return;
-    const insumoSelecionado = insumos.find(i => i.id === insumoTemp.insumo_id);
-    if (!insumoSelecionado) return;
-    const quantidade = parseFloat(insumoTemp.quantidade);
-    const valorTotal = quantidade * (insumoSelecionado.preco_unitario || 0);
-    const metodoFinal = (insumoTemp.metodo_aplicacao === 'outro' ? novoMetodo : insumoTemp.metodo_aplicacao) || 'foliar';
-
+    if (!insumoTemp.insumo_id || !insumoTemp.quantidade) return; const insumoSelecionado = insumos.find(i => i.id === insumoTemp.insumo_id); if (!insumoSelecionado) return;
+    const quantidade = parseFloat(insumoTemp.quantidade); const valorTotal = quantidade * (insumoSelecionado.preco_unitario || 0); const metodoFinal = (insumoTemp.metodo_aplicacao === 'outro' ? novoMetodo : insumoTemp.metodo_aplicacao) || 'foliar';
     const novosInsumos = [...formData.insumos_utilizados, { insumo_id: insumoSelecionado.id, nome: insumoSelecionado.nome, quantidade, unidade: insumoSelecionado.unidade, valor_unitario: insumoSelecionado.preco_unitario || 0, valor_total: valorTotal, metodo_aplicacao: metodoFinal }];
     setFormData({ ...formData, insumos_utilizados: novosInsumos, custo_total: novosInsumos.reduce((acc, i) => acc + (i.valor_total || 0), 0) + (formData.terceirizada ? parseFloat(formData.valor_terceirizado || 0) : 0) });
     setInsumoTemp({ insumo_id: '', quantidade: '', metodo_aplicacao: 'foliar' }); setNovoMetodo(''); setMostrarNovoMetodo(false);
@@ -336,72 +234,139 @@ export default function Atividades() {
   const handleSubmitForm = (e) => {
       e.preventDefault();
       const payload = { ...formData, valor_terceirizado: formData.valor_terceirizado ? parseFloat(formData.valor_terceirizado) : null, custo_total: calcularCustoTotal(), data_realizada: formData.status === 'concluida' ? (formData.data_realizada || format(new Date(), 'yyyy-MM-dd')) : null };
-      if (editingAtividade) updateMutation.mutate({ id: editingAtividade.id, data: payload });
-      else createMutation.mutate(payload);
+      if (editingAtividade) updateMutation.mutate({ id: editingAtividade.id, data: payload }); else createMutation.mutate(payload);
   };
-  
-  const createMutation = useMutation({ mutationFn: async (data) => { const { data: result, error } = await supabase.from('atividades').insert(data).select(); if (error) throw error; return result; }, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['atividades'] }); resetForm(); }});
 
   const atividadesFiltradas = atividades.filter(a => {
-    if (filtroTalhao !== 'todos' && a.talhao_id !== filtroTalhao) return false;
+    if (filtroTalhao !== 'todos' && String(a.talhao_id) !== String(filtroTalhao)) return false;
     if (filtroStatus !== 'todos' && a.status !== filtroStatus) return false;
+    if (filtroSafra !== 'todas') {
+        const safraSelecionada = safras.find(s => s.id === filtroSafra);
+        if (safraSelecionada) {
+            if (String(a.talhao_id) !== String(safraSelecionada.talhao_id)) return false;
+            const dataAtiv = a.data_programada || '1900-01-01';
+            const start = safraSelecionada.data_inicio || '2000-01-01';
+            const end = safraSelecionada.data_fim || '2099-12-31';
+            if (dataAtiv < start || dataAtiv > end) return false;
+        }
+    }
     return true;
   });
 
-  const getTalhaoNome = (id) => talhoes.find(t => t.id === id)?.nome || '-';
+  const getTalhaoNome = (id) => talhoes.find(t => String(t.id) === String(id))?.nome || '-';
   const getTipoLabel = (tipo) => { const padrao = tiposAtividadePadrao.find(t => t.value === tipo); if (padrao) return padrao.label; const customizado = tiposCustomizados.find(t => t.nome === tipo); return customizado ? customizado.nome : tipo; };
   const todosTipos = [ ...tiposAtividadePadrao, ...tiposCustomizados.map(t => ({ value: t.nome, label: t.nome })) ];
 
-  const handleSelecionarTalhao = (id) => {
-      setFiltroTalhao(id);
+  const handleSelecionarSafra = (id) => {
+      setFiltroSafra(id);
+      setFiltroTalhao('todos'); 
       setViewMode('lista');
   };
 
-  // --- RENDERIZAÇÃO DA TELA DE SELEÇÃO ---
+  // --- RENDERIZAÇÃO DA TELA DE SELEÇÃO (AGORA POR SAFRAS) ---
   if (viewMode === 'selecao') {
       return (
         <div className="space-y-6 animate-in fade-in duration-500">
             <div className="flex flex-col bg-white p-6 rounded-[1.5rem] border border-stone-100 shadow-sm">
-                <h1 className="text-2xl font-bold text-stone-900 tracking-tight">Selecione o Talhão</h1>
-                <p className="text-stone-500 font-medium">Qual área você gostaria de visualizar ou gerenciar as atividades?</p>
+                <h1 className="text-2xl font-black text-stone-900 tracking-tight">Painel de Safras</h1>
+                <p className="text-stone-500 font-medium">Escolha uma janela de safra para gerenciar as atividades daquele período sem acumular registros antigos.</p>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                {/* Cartão de Todos */}
                 <Card 
-                    onClick={() => handleSelecionarTalhao('todos')}
-                    className="cursor-pointer hover:border-emerald-500 hover:shadow-md transition-all border-stone-200 bg-stone-50 group"
+                    onClick={() => handleSelecionarSafra('todas')}
+                    className="cursor-pointer hover:border-emerald-500 hover:shadow-md transition-all border border-stone-200 bg-stone-50 group"
                 >
                     <CardHeader className="text-center py-8">
                         <LayoutGrid className="w-10 h-10 mx-auto mb-3 text-stone-400 group-hover:text-emerald-500 transition-colors" />
-                        <CardTitle className="text-lg text-stone-700 group-hover:text-emerald-700">Todos os Talhões</CardTitle>
+                        <CardTitle className="text-lg text-stone-700 group-hover:text-emerald-700">Todas as Atividades</CardTitle>
+                        <Badge variant="outline" className="mx-auto mt-2 bg-white text-stone-500">Histórico Completo</Badge>
                     </CardHeader>
                 </Card>
 
-                {/* Cartões Individuais */}
-                {talhoes.map(talhao => (
-                    <Card 
-                        key={talhao.id} 
-                        onClick={() => handleSelecionarTalhao(talhao.id)}
-                        className="cursor-pointer hover:border-emerald-500 hover:shadow-md transition-all border-stone-200 bg-white group"
-                    >
-                        <CardHeader className="text-center py-8">
-                            <Map className="w-10 h-10 mx-auto mb-3 text-emerald-600/50 group-hover:text-emerald-500 transition-colors" />
-                            <CardTitle className="text-lg text-stone-800 group-hover:text-emerald-700">{talhao.nome}</CardTitle>
-                            <Badge variant="outline" className="mx-auto mt-2 bg-stone-50 text-stone-500">{talhao.cultura}</Badge>
-                        </CardHeader>
-                    </Card>
-                ))}
+                {safras.map(safra => {
+                    const talhao = talhoes.find(t => String(t.id) === String(safra.talhao_id));
+                    
+                    // NOVA LÓGICA DE BLINDAGEM MAIS FORTE:
+                    const statusText = String(safra.status || '').toLowerCase();
+                    const nomeText = String(safra.nome || '').toLowerCase();
+                    const hojeStr = new Date().toISOString().split('T')[0]; // Data de hoje no formato YYYY-MM-DD
+                    
+                    // A safra é finalizada se o status/nome disser, se "ativa" for falso, ou se a data de término já tiver passado de hoje
+                    const isFinalizada = 
+                        statusText === 'concluida' || 
+                        statusText === 'finalizada' || 
+                        statusText === 'encerrada' || 
+                        statusText === 'arquivada' || 
+                        safra.ativa === false ||
+                        safra.arquivada === true ||
+                        nomeText.includes('arquivada') || 
+                        nomeText.includes('arqui') || 
+                        nomeText.includes('finalizada') ||
+                        (safra.data_fim && safra.data_fim < hojeStr);
+
+                    return (
+                        <Card 
+                            key={safra.id} 
+                            onClick={() => handleSelecionarSafra(safra.id)}
+                            className={`cursor-pointer transition-all border group flex flex-col justify-center relative overflow-hidden ${
+                                isFinalizada 
+                                ? "bg-stone-100 border-stone-300 border-dashed hover:border-stone-400 hover:bg-stone-200/50 opacity-80" 
+                                : "bg-white border-stone-200 hover:border-emerald-500 hover:shadow-md"
+                            }`}
+                        >
+                            {/* Etiqueta Visual de Finalizada */}
+                            {isFinalizada && (
+                                <div className="absolute top-3 right-3">
+                                    <Badge className="bg-stone-300 text-stone-700 hover:bg-stone-400 border-none shadow-none text-[9px] uppercase tracking-wider font-bold">Finalizada</Badge>
+                                </div>
+                            )}
+
+                            <CardHeader className="text-center py-8">
+                                {isFinalizada ? (
+                                    <Archive className="w-10 h-10 mx-auto mb-3 text-stone-400 group-hover:text-stone-500 transition-colors" />
+                                ) : (
+                                    <CalendarIcon className="w-10 h-10 mx-auto mb-3 text-emerald-600/50 group-hover:text-emerald-500 transition-colors" />
+                                )}
+                                
+                                <CardTitle className={`text-lg font-bold truncate px-2 ${
+                                    isFinalizada ? "text-stone-500 group-hover:text-stone-700" : "text-stone-800 group-hover:text-emerald-700"
+                                }`} title={safra.nome}>
+                                    {safra.nome}
+                                </CardTitle>
+                                
+                                <Badge variant="outline" className={`mx-auto mt-2 font-bold ${
+                                    isFinalizada ? "bg-stone-200 border-stone-300 text-stone-600" : "bg-emerald-50 border-emerald-200 text-emerald-700"
+                                }`}>
+                                    {talhao ? talhao.nome : 'Sem Válvula'}
+                                </Badge>
+                            </CardHeader>
+                        </Card>
+                    );
+                })}
             </div>
         </div>
       );
+  }
+
+  let tituloHeader = "Todas as Atividades";
+  let subtituloHeader = "Histórico completo da fazenda";
+  if (filtroSafra !== 'todas') {
+      const s = safras.find(x => x.id === filtroSafra);
+      if (s) {
+          tituloHeader = s.nome;
+          const t = talhoes.find(x => String(x.id) === String(s.talhao_id));
+          subtituloHeader = t ? `Válvula Atrelada: ${t.nome}` : 'Safra selecionada';
+      }
+  } else if (filtroTalhao !== 'todos') {
+      tituloHeader = getTalhaoNome(filtroTalhao);
+      subtituloHeader = "Filtrado por Válvula";
   }
 
   // --- RENDERIZAÇÃO DA TELA DE LISTA ---
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
       
-      {/* DIALOG DE RELATÓRIO PDF */}
       <Dialog open={reportOpen} onOpenChange={setReportOpen}>
         <DialogContent className="sm:max-w-md rounded-[2rem]">
             <DialogHeader>
@@ -428,7 +393,6 @@ export default function Atividades() {
         </DialogContent>
       </Dialog>
 
-      {/* MODAL: VISÃO GERAL POR VÁLVULA */}
       <Dialog open={areaViewOpen} onOpenChange={setAreaViewOpen}>
         <DialogContent className="sm:max-w-5xl max-h-[90vh] overflow-y-auto rounded-[2rem] bg-stone-50">
             <DialogHeader className="mb-4">
@@ -458,7 +422,6 @@ export default function Atividades() {
         </DialogContent>
       </Dialog>
 
-      {/* Modal de Resumo para Texto/WhatsApp */}
       <Dialog open={summaryOpen} onOpenChange={setSummaryOpen}>
         <DialogContent className="sm:max-w-md rounded-[2rem]">
             <DialogHeader><DialogTitle className="flex items-center gap-2"><Send className="w-5 h-5 text-emerald-600" /> Resumo da Recomendação</DialogTitle><DialogDescription>Copie para enviar ao encarregado.</DialogDescription></DialogHeader>
@@ -467,15 +430,14 @@ export default function Atividades() {
         </DialogContent>
       </Dialog>
 
-      {/* Header Padronizado */}
       <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 bg-white p-4 rounded-[1.5rem] border border-stone-100 shadow-sm">
         <div className="flex items-center gap-4">
           <Button onClick={() => setViewMode('selecao')} variant="ghost" size="icon" className="rounded-xl bg-stone-50 hover:bg-stone-100 text-stone-600">
              <ArrowLeft className="w-5 h-5" />
           </Button>
           <div>
-            <h1 className="text-2xl font-bold text-stone-900 tracking-tight">Atividades: {filtroTalhao === 'todos' ? 'Todos os Talhões' : getTalhaoNome(filtroTalhao)}</h1>
-            <p className="text-stone-500 font-medium">Gerenciamento de tarefas e manejo</p>
+            <h1 className="text-2xl font-black text-stone-900 tracking-tight">{tituloHeader}</h1>
+            <p className="text-stone-500 font-medium">{subtituloHeader}</p>
           </div>
         </div>
         
@@ -484,14 +446,18 @@ export default function Atividades() {
             <Button onClick={() => setAreaViewOpen(true)} className="bg-white border border-stone-200 text-stone-700 hover:bg-stone-50 rounded-xl h-10 px-4 shadow-sm"><LayoutGrid className="w-4 h-4 mr-2" /> Visão Geral</Button>
 
             <Dialog open={open} onOpenChange={(v) => { if(!v) resetForm(); setOpen(v); }}>
-            <DialogTrigger asChild><Button className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl h-10 px-5 shadow-lg shadow-emerald-100 transition-all active:scale-95 ml-2"><Plus className="w-4 h-4 mr-2" /> Nova Programação</Button></DialogTrigger>
+            <DialogTrigger asChild>
+                <Button onClick={handleNovaProgramacao} className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl h-10 px-5 shadow-lg shadow-emerald-100 transition-all active:scale-95 ml-2">
+                    <Plus className="w-4 h-4 mr-2" /> Nova Programação
+                </Button>
+            </DialogTrigger>
             <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto rounded-[2rem]">
                 <DialogHeader><DialogTitle>{editingAtividade ? 'Editar Atividade' : 'Planejamento de Atividades'}</DialogTitle><DialogDescription>{editingAtividade ? 'Edite os detalhes desta atividade.' : 'Adicione várias atividades à lista e salve tudo de uma vez.'}</DialogDescription></DialogHeader>
                 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pt-2">
                     <div className="lg:col-span-2 space-y-4 border-r border-stone-100 pr-0 lg:pr-6">
                         <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-2"><Label>Válvula</Label><Select value={formData.talhao_id || ""} onValueChange={(value) => setFormData({ ...formData, talhao_id: value })}><SelectTrigger className="rounded-xl"><SelectValue placeholder="Selecione" /></SelectTrigger><SelectContent>{talhoes.map((talhao) => (<SelectItem key={talhao.id} value={talhao.id}>{talhao.nome}</SelectItem>))}</SelectContent></Select></div>
+                            <div className="space-y-2"><Label>Válvula</Label><Select value={formData.talhao_id || ""} onValueChange={(value) => setFormData({ ...formData, talhao_id: value })}><SelectTrigger className="rounded-xl"><SelectValue placeholder="Selecione" /></SelectTrigger><SelectContent>{talhoes.map((talhao) => (<SelectItem key={talhao.id} value={String(talhao.id)}>{talhao.nome}</SelectItem>))}</SelectContent></Select></div>
                             <div className="space-y-2"><div className="flex items-center justify-between"><Label>Tipo de Atividade</Label><Button type="button" variant="ghost" size="sm" onClick={() => setOpenTipoDialog(true)} className="h-6 text-xs text-blue-600 px-2 rounded-lg"><Plus className="w-3 h-3 mr-1" /> Gerenciar</Button></div><Select value={formData.tipo || ""} onValueChange={(value) => setFormData({ ...formData, tipo: value })}><SelectTrigger className="rounded-xl"><SelectValue placeholder="Selecione" /></SelectTrigger><SelectContent>{todosTipos.map((tipo) => (<SelectItem key={tipo.value} value={tipo.value}>{tipo.label}</SelectItem>))}</SelectContent></Select></div>
                         </div>
 
@@ -598,19 +564,29 @@ export default function Atividades() {
         </div>
       </div>
 
-      {/* Painel de Filtros Padronizado */}
       <Card className="border-stone-100 rounded-[2rem] shadow-sm">
         <CardContent className="pt-6 pb-6">
           <div className="flex flex-wrap items-center gap-4">
             <div className="flex items-center gap-2 text-stone-500">
               <Filter className="w-4 h-4" />
-              <span className="text-sm font-bold uppercase tracking-wide">Filtros:</span>
+              <span className="text-sm font-bold uppercase tracking-wide">Filtros Ativos:</span>
             </div>
-            {/* O select de Talhão foi mantido caso o usuário queira trocar por aqui também, mas está sincronizado */}
-            <Select value={filtroTalhao || "todos"} onValueChange={setFiltroTalhao}>
-              <SelectTrigger className="w-48 rounded-xl bg-stone-50 border-stone-200"><SelectValue placeholder="Válvula" /></SelectTrigger>
-              <SelectContent>{talhoes.map((t) => (<SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>))}<SelectItem value="todos">Todos</SelectItem></SelectContent>
+            
+            <Select value={filtroSafra || "todas"} onValueChange={setFiltroSafra}>
+              <SelectTrigger className="w-64 rounded-xl bg-emerald-50 border-emerald-200 font-bold text-emerald-800"><SelectValue placeholder="Filtrar por Safra" /></SelectTrigger>
+              <SelectContent>
+                  <SelectItem value="todas">Todas as Atividades</SelectItem>
+                  {safras.map((s) => (<SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>))}
+              </SelectContent>
             </Select>
+
+            {filtroSafra === 'todas' && (
+                <Select value={filtroTalhao || "todos"} onValueChange={setFiltroTalhao}>
+                <SelectTrigger className="w-48 rounded-xl bg-stone-50 border-stone-200"><SelectValue placeholder="Válvula" /></SelectTrigger>
+                <SelectContent>{talhoes.map((t) => (<SelectItem key={t.id} value={String(t.id)}>{t.nome}</SelectItem>))}<SelectItem value="todos">Todos</SelectItem></SelectContent>
+                </Select>
+            )}
+
             <Select value={filtroStatus || "todos"} onValueChange={setFiltroStatus}>
               <SelectTrigger className="w-40 rounded-xl bg-stone-50 border-stone-200"><SelectValue placeholder="Status" /></SelectTrigger>
               <SelectContent><SelectItem value="todos">Todos</SelectItem><SelectItem value="programada">Programada</SelectItem><SelectItem value="concluida">Concluída</SelectItem></SelectContent>
@@ -619,9 +595,8 @@ export default function Atividades() {
         </CardContent>
       </Card>
 
-      {/* Tabela Padronizada */}
       {atividadesFiltradas.length === 0 ? (
-        <EmptyState icon={ClipboardList} title="Nenhuma atividade encontrada" description="Ajuste os filtros ou cadastre uma nova." actionLabel="Nova Atividade" onAction={() => setOpen(true)} />
+        <EmptyState icon={ClipboardList} title="Nenhuma atividade encontrada" description="Ajuste os filtros ou cadastre uma nova." actionLabel="Nova Programação" onAction={handleNovaProgramacao} />
       ) : (
         <Card className="border-stone-100 rounded-[2rem] shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
