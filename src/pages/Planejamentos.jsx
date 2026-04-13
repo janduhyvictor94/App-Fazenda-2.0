@@ -5,29 +5,31 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
 import { 
   Plus, Save, Trash2, Calendar, Droplets, Leaf, 
-  ShoppingCart, Calculator, CircleDot, ArrowDown, Settings, Trees,
-  FileText, Table as TableIcon, Copy, Edit2
+  ShoppingCart, Calculator, CircleDot, Settings, Trees,
+  FileText, Table as TableIcon, Copy, Edit2, PlayCircle, Send, Briefcase
 } from 'lucide-react';
 import EmptyState from '@/components/ui/EmptyState';
-import { format } from 'date-fns';
+import { format, parseISO, addDays, addMonths } from 'date-fns'; 
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
-// Labels amigáveis para os tipos de ciclo e métodos
 const cicloLabels = {
   dia: 'Dia',
   semana: 'Semana',
-  mes: 'Mês'
+  mes: 'Mês',
+  livre: 'Etapa'
 };
 
 const metodoConfig = {
   foliar: { label: 'Foliar', icon: Droplets, color: 'text-blue-500', bg: 'bg-blue-50 border-blue-200' },
-  adubacao: { label: 'Adubação', icon: Leaf, color: 'text-emerald-500', bg: 'bg-emerald-50 border-emerald-200' }
+  adubacao: { label: 'Adubação', icon: Leaf, color: 'text-emerald-500', bg: 'bg-emerald-50 border-emerald-200' },
+  terceirizado: { label: 'Terceirizado', icon: Briefcase, color: 'text-amber-600', bg: 'bg-amber-50 border-amber-200' }
 };
 
 export default function Planejamentos() {
@@ -35,58 +37,37 @@ export default function Planejamentos() {
   const [activePlanId, setActivePlanId] = useState('novo');
   const [openNovaPlanilha, setOpenNovaPlanilha] = useState(false);
   
-  // Estado para criar um novo planejamento
   const [novoPlan, setNovoPlan] = useState({ nome: '', cultura: 'goiaba', tipo_ciclo: 'dia', quantidade_plantas: '' });
   
-  // Estado local da planilha que está sendo editada
   const [planNome, setPlanNome] = useState('');
   const [planCultura, setPlanCultura] = useState('goiaba');
   const [planTipoCiclo, setPlanTipoCiclo] = useState('dia');
   const [planPlantas, setPlanPlantas] = useState('');
   const [planFases, setPlanFases] = useState([]);
 
-  // Estado para o Dialog de Nova Fase
   const [openNovaFase, setOpenNovaFase] = useState(false);
   const [novaFaseMomento, setNovaFaseMomento] = useState('');
 
-  // --- QUERIES ---
-  const { data: insumos = [] } = useQuery({
-    queryKey: ['insumos'],
-    queryFn: async () => {
-      const { data, error } = await supabase.from('insumos').select('*').order('nome');
-      if (error) throw error; return data;
-    }
-  });
+  const [openApplyModal, setOpenApplyModal] = useState(false);
+  const [applySafraId, setApplySafraId] = useState('');
+  const [applyStartDate, setApplyStartDate] = useState(format(new Date(), 'yyyy-MM-dd'));
 
-  const { data: planejamentos = [] } = useQuery({
-    queryKey: ['planejamentos'],
-    queryFn: async () => {
-      const { data, error } = await supabase.from('planejamentos').select('*').order('created_at', { ascending: false });
-      if (error) throw error; return data;
-    }
-  });
+  const { data: insumos = [] } = useQuery({ queryKey: ['insumos'], queryFn: async () => { const { data } = await supabase.from('insumos').select('*').order('nome'); return data || []; } });
+  const { data: planejamentos = [] } = useQuery({ queryKey: ['planejamentos'], queryFn: async () => { const { data } = await supabase.from('planejamentos').select('*').order('created_at', { ascending: false }); return data || []; } });
+  const { data: safras = [] } = useQuery({ queryKey: ['safras'], queryFn: async () => { const { data } = await supabase.from('safras').select('*, talhoes(nome)').eq('status', 'ativo').order('data_inicio', { ascending: false }); return data || []; } });
 
-  // --- EFFECT: Carregar dados quando seleciona um plano ---
   useEffect(() => {
     if (activePlanId && activePlanId !== 'novo') {
       const plan = planejamentos.find(p => p.id === activePlanId);
       if (plan) {
-        setPlanNome(plan.nome);
-        setPlanCultura(plan.cultura);
-        setPlanTipoCiclo(plan.dados?.tipo_ciclo || 'dia');
-        setPlanPlantas(plan.dados?.quantidade_plantas || '');
-        setPlanFases(plan.dados?.fases || []);
+        setPlanNome(plan.nome); setPlanCultura(plan.cultura); setPlanTipoCiclo(plan.dados?.tipo_ciclo || 'dia');
+        setPlanPlantas(plan.dados?.quantidade_plantas || ''); setPlanFases(plan.dados?.fases || []);
       }
     } else {
-      setPlanNome('');
-      setPlanCultura('goiaba');
-      setPlanTipoCiclo('dia');
-      setPlanPlantas('');
-      setPlanFases([]);
+      setPlanNome(''); setPlanCultura('goiaba'); setPlanTipoCiclo('dia'); setPlanPlantas(''); setPlanFases([]);
     }
   }, [activePlanId, planejamentos]);
 
-  // --- MUTATIONS ---
   const saveMutation = useMutation({
     mutationFn: async (payload) => {
       if (activePlanId === 'novo') {
@@ -97,350 +78,310 @@ export default function Planejamentos() {
         if (error) throw error; return data;
       }
     },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['planejamentos'] });
-      setActivePlanId(data.id);
-      setOpenNovaPlanilha(false);
-      alert('Planejamento salvo com sucesso!');
-    }
+    onSuccess: (data) => { queryClient.invalidateQueries({ queryKey: ['planejamentos'] }); setActivePlanId(data.id); setOpenNovaPlanilha(false); alert('Salvo com sucesso!'); }
   });
 
   const duplicateMutation = useMutation({
     mutationFn: async () => {
-      const payload = {
-        nome: `${planNome} (Cópia)`,
-        cultura: planCultura,
-        dados: { 
-          tipo_ciclo: planTipoCiclo, 
-          quantidade_plantas: planPlantas,
-          fases: planFases 
-        }
-      };
+      const payload = { nome: `${planNome} (Cópia)`, cultura: planCultura, dados: { tipo_ciclo: planTipoCiclo, quantidade_plantas: planPlantas, fases: planFases } };
       const { data, error } = await supabase.from('planejamentos').insert([payload]).select().single();
       if (error) throw error; return data;
     },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['planejamentos'] });
-      setActivePlanId(data.id); // Muda automaticamente para a cópia criada
-    }
+    onSuccess: (data) => { queryClient.invalidateQueries({ queryKey: ['planejamentos'] }); setActivePlanId(data.id); }
   });
 
-  const deleteMutation = useMutation({
-    mutationFn: async (id) => {
-      const { error } = await supabase.from('planejamentos').delete().eq('id', id);
-      if (error) throw error;
+  const deleteMutation = useMutation({ mutationFn: async (id) => { const { error } = await supabase.from('planejamentos').delete().eq('id', id); if (error) throw error; }, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['planejamentos'] }); setActivePlanId('novo'); } });
+
+  // AQUI FICA A CORREÇÃO: MATEMÁTICA REAL FRACIONADA PARA ATIVIDADES
+  const applyToSafraMutation = useMutation({
+    mutationFn: async () => {
+        if (!applySafraId || !applyStartDate) throw new Error("Preencha a safra e a data de início.");
+        const safraSelecionada = safras.find(s => s.id === applySafraId);
+        if (!safraSelecionada) throw new Error("Safra não encontrada.");
+
+        const baseDate = parseISO(applyStartDate);
+        const atividadesParaInserir = [];
+
+        planFases.forEach(fase => {
+            let dataCalculada;
+            if (planTipoCiclo === 'semana') {
+                dataCalculada = addDays(baseDate, fase.momento * 7);
+            } else if (planTipoCiclo === 'mes') {
+                dataCalculada = addMonths(baseDate, fase.momento);
+            } else if (planTipoCiclo === 'livre') {
+                dataCalculada = addDays(baseDate, fase.momento);
+            } else {
+                dataCalculada = addDays(baseDate, fase.momento); 
+            }
+            
+            const dataProgStr = format(dataCalculada, 'yyyy-MM-dd');
+
+            const terceirizados = fase.aplicacoes.filter(app => app.metodo === 'terceirizado');
+            const isTerceirizada = terceirizados.length > 0;
+            const valorTerceirizadoTotaL = terceirizados.reduce((acc, curr) => acc + (parseFloat(curr.valor_estimado) || 0), 0);
+            const descricoesTerc = terceirizados.map(t => t.descricao_servico).filter(Boolean).join(', ');
+
+            // Calcula a fração exata para a tabela de Atividades
+            const insumosConvertidos = fase.aplicacoes.filter(app => app.metodo !== 'terceirizado').map(app => {
+                const insumo = insumos.find(i => i.id === app.insumo_id);
+                if (!insumo) return null;
+                
+                const qtdInput = parseFloat(app.quantidade) || 0;
+                const plantas = parseInt(planPlantas) || 0;
+                
+                let qtdTotalBase = 0; 
+                if (app.modo_aplicacao === 'g/planta') qtdTotalBase = (qtdInput * plantas) / 1000;
+                else if (app.modo_aplicacao === 'ml/area') qtdTotalBase = qtdInput / 1000;
+                else qtdTotalBase = qtdInput; 
+
+                const tamanhoEmb = parseFloat(insumo.tamanho_embalagem) || 1;
+                const fracaoUso = qtdTotalBase / tamanhoEmb;
+                const valorTotal = fracaoUso * (insumo.preco_unitario || 0);
+
+                return {
+                    insumo_id: insumo.id,
+                    nome: insumo.nome,
+                    quantidade: parseFloat(fracaoUso.toFixed(4)), 
+                    unidade: 'un.', 
+                    valor_unitario: insumo.preco_unitario || 0,
+                    valor_total: valorTotal,
+                    metodo_aplicacao: app.metodo
+                };
+            }).filter(Boolean);
+
+            let custoDaAtividade = insumosConvertidos.reduce((acc, curr) => acc + curr.valor_total, 0);
+            if (isTerceirizada) custoDaAtividade += valorTerceirizadoTotaL;
+
+            let obs = `Gerado via Planejamento: ${planNome}`;
+            if (planTipoCiclo === 'livre') obs += `\n*Etapa Livre (Executar conforme a planta responder)*`;
+            if (descricoesTerc) obs += `\nServiços terceirizados previstos: ${descricoesTerc}`;
+
+            atividadesParaInserir.push({
+                talhao_id: safraSelecionada.talhao_id,
+                tipo: 'outro',
+                tipo_personalizado: fase.nome_etapa || `Aplicação Etapa ${fase.momento}`,
+                data_programada: dataProgStr,
+                status: 'programada',
+                terceirizada: isTerceirizada,
+                valor_terceirizado: isTerceirizada && valorTerceirizadoTotaL > 0 ? valorTerceirizadoTotaL : null,
+                insumos_utilizados: insumosConvertidos,
+                custo_total: custoDaAtividade,
+                observacoes: obs
+            });
+        });
+
+        const { error } = await supabase.from('atividades').insert(atividadesParaInserir);
+        if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['planejamentos'] });
-      setActivePlanId('novo');
+        setOpenApplyModal(false);
+        alert(`Sucesso! ${planFases.length} atividades foram agendadas na tela de Atividades com os custos proporcionais exatos.`);
+    },
+    onError: (err) => {
+        alert("Erro ao gerar: " + err.message);
     }
   });
 
-  // --- FUNÇÕES DE CONTROLE ---
-  const handleCreateNew = () => {
-    if (!novoPlan.nome) return alert('Dê um nome ao planejamento.');
-    const payload = {
-      nome: novoPlan.nome,
-      cultura: novoPlan.cultura,
-      dados: { 
-        tipo_ciclo: novoPlan.tipo_ciclo, 
-        quantidade_plantas: novoPlan.quantidade_plantas,
-        fases: [] 
-      }
-    };
-    saveMutation.mutate(payload);
-  };
-
-  const handleSaveCurrent = () => {
-    if (activePlanId === 'novo') return;
-    const payload = { 
-      nome: planNome, 
-      cultura: planCultura, 
-      dados: { 
-        tipo_ciclo: planTipoCiclo, 
-        quantidade_plantas: planPlantas,
-        fases: planFases 
-      } 
-    };
-    saveMutation.mutate(payload);
-  };
+  const handleCreateNew = () => { if (!novoPlan.nome) return alert('Dê um nome.'); saveMutation.mutate({ nome: novoPlan.nome, cultura: novoPlan.cultura, dados: { tipo_ciclo: novoPlan.tipo_ciclo, quantidade_plantas: novoPlan.quantidade_plantas, fases: [] } }); };
+  const handleSaveCurrent = () => { if (activePlanId === 'novo') return; saveMutation.mutate({ nome: planNome, cultura: planCultura, dados: { tipo_ciclo: planTipoCiclo, quantidade_plantas: planPlantas, fases: planFases } }); };
 
   const handleAddFase = () => {
-    const momento = parseInt(novaFaseMomento);
-    if (isNaN(momento)) return;
+    const momento = parseInt(novaFaseMomento); if (isNaN(momento)) return;
+    if (planFases.some(f => f.momento === momento)) return alert(`Esta etapa já existe!`);
     
-    if (planFases.some(f => f.momento === momento)) {
-        alert(`${cicloLabels[planTipoCiclo]} ${momento} já existe!`);
-        return;
-    }
-
-    const novaFase = {
-        id: Date.now().toString(),
-        momento: momento,
+    setPlanFases([...planFases, { 
+        id: Date.now().toString(), 
+        momento: momento, 
         nome_etapa: '', 
-        aplicacoes: []
-    };
-
-    const novasFases = [...planFases, novaFase].sort((a, b) => a.momento - b.momento);
-    setPlanFases(novasFases);
-    setNovaFaseMomento('');
-    setOpenNovaFase(false);
+        aplicacoes: [] 
+    }].sort((a, b) => a.momento - b.momento));
+    
+    setNovaFaseMomento(''); setOpenNovaFase(false);
   };
+  
+  const handleRemoveFase = (idFase) => { if(confirm('Remover etapa?')) setPlanFases(prev => prev.filter(f => f.id !== idFase)); };
+  const handleUpdateFase = (idFase, campo, valor) => setPlanFases(prev => prev.map(f => f.id === idFase ? { ...f, [campo]: valor } : f));
+  
+  const handleAddAplicacao = (idFase) => setPlanFases(prev => prev.map(f => f.id === idFase ? { ...f, aplicacoes: [...f.aplicacoes, { id: Date.now().toString(), metodo: 'foliar', insumo_id: '', quantidade: '', modo_aplicacao: 'ml/area', descricao_servico: '', valor_estimado: '' }] } : f));
+  const handleUpdateAplicacao = (idFase, idApp, campo, valor) => setPlanFases(prev => prev.map(f => f.id === idFase ? { ...f, aplicacoes: f.aplicacoes.map(a => a.id === idApp ? { ...a, [campo]: valor } : a) } : f));
+  const handleRemoveAplicacao = (idFase, idApp) => setPlanFases(prev => prev.map(f => f.id === idFase ? { ...f, aplicacoes: f.aplicacoes.filter(a => a.id !== idApp) } : f));
 
-  const handleRemoveFase = (idFase) => {
-    if(confirm('Remover esta fase inteira e seus produtos?')) {
-        setPlanFases(prev => prev.filter(f => f.id !== idFase));
-    }
-  };
-
-  const handleUpdateFase = (idFase, campo, valor) => {
-    setPlanFases(prev => prev.map(fase => {
-        if (fase.id === idFase) {
-            return { ...fase, [campo]: valor };
-        }
-        return fase;
-    }));
-  };
-
-  const handleAddAplicacao = (idFase) => {
-    setPlanFases(prev => prev.map(fase => {
-        if (fase.id === idFase) {
-            return {
-                ...fase,
-                aplicacoes: [
-                    ...fase.aplicacoes, 
-                    { id: Date.now().toString(), metodo: 'foliar', insumo_id: '', quantidade: '', modo_aplicacao: 'ml/area' }
-                ]
-            };
-        }
-        return fase;
-    }));
-  };
-
-  const handleUpdateAplicacao = (idFase, idAplicacao, campo, valor) => {
-    setPlanFases(prev => prev.map(fase => {
-        if (fase.id === idFase) {
-            return {
-                ...fase,
-                aplicacoes: fase.aplicacoes.map(app => {
-                    if (app.id === idAplicacao) {
-                        return { ...app, [campo]: valor };
-                    }
-                    return app;
-                })
-            };
-        }
-        return fase;
-    }));
-  };
-
-  const handleRemoveAplicacao = (idFase, idAplicacao) => {
-    setPlanFases(prev => prev.map(fase => {
-        if (fase.id === idFase) {
-            return {
-                ...fase,
-                aplicacoes: fase.aplicacoes.filter(app => app.id !== idAplicacao)
-            };
-        }
-        return fase;
-    }));
-  };
-
-  // --- CÁLCULOS TOTAIS PARA COMPRAS ---
   const getInsumoDetalhes = (id) => insumos.find(i => i.id === id) || null;
 
+  // AQUI FICA A LÓGICA DO PLANEJAMENTO (Restaurada para exibir compra inteira)
   const resumoCompras = React.useMemo(() => {
-    const map = new Map();
-    const plantas = parseInt(planPlantas) || 0;
+    const map = new Map(); const plantas = parseInt(planPlantas) || 0;
+    let custoTerceirizadoEstimado = 0;
 
     planFases.forEach(fase => {
         fase.aplicacoes.forEach(app => {
-            if (app.insumo_id && app.quantidade && app.modo_aplicacao) {
-                const qtd = parseFloat(app.quantidade) || 0;
-                let qtdConvertida = 0;
-                let isLitro = false;
-
-                if (app.modo_aplicacao === 'g/planta') {
-                    qtdConvertida = (qtd * plantas) / 1000; 
-                } else if (app.modo_aplicacao === 'kg/area') {
-                    qtdConvertida = qtd; 
-                } else if (app.modo_aplicacao === 'ml/area') {
-                    qtdConvertida = qtd / 1000; 
-                    isLitro = true;
-                } else if (app.modo_aplicacao === 'l/area') {
-                    qtdConvertida = qtd; 
-                    isLitro = true;
-                }
-
+            if (app.metodo === 'terceirizado') {
+                custoTerceirizadoEstimado += parseFloat(app.valor_estimado) || 0;
+            } else if (app.insumo_id && app.quantidade && app.modo_aplicacao) {
+                const qtd = parseFloat(app.quantidade) || 0; let qtdConvertida = 0; let isLitro = false;
+                if (app.modo_aplicacao === 'g/planta') qtdConvertida = (qtd * plantas) / 1000; 
+                else if (app.modo_aplicacao === 'kg/area') qtdConvertida = qtd; 
+                else if (app.modo_aplicacao === 'ml/area') { qtdConvertida = qtd / 1000; isLitro = true; } 
+                else if (app.modo_aplicacao === 'l/area') { qtdConvertida = qtd; isLitro = true; }
                 if (qtdConvertida > 0) {
                     const existente = map.get(app.insumo_id) || { total_kg_L: 0, isLitro };
-                    map.set(app.insumo_id, {
-                        total_kg_L: existente.total_kg_L + qtdConvertida,
-                        isLitro: isLitro || existente.isLitro
-                    });
+                    map.set(app.insumo_id, { total_kg_L: existente.total_kg_L + qtdConvertida, isLitro: isLitro || existente.isLitro });
                 }
             }
         });
     });
-
-    const resumo = [];
-    let custoTotal = 0;
-
+    
+    const resumo = []; let custoTotalInsumos = 0;
     map.forEach((data, insumo_id) => {
         const insumo = getInsumoDetalhes(insumo_id);
         if (insumo) {
             const tamanhoEmb = parseFloat(insumo.tamanho_embalagem) || 1; 
             const qtdEmbalagensNecessarias = data.total_kg_L / tamanhoEmb;
             const custoEstimado = Math.ceil(qtdEmbalagensNecessarias) * (insumo.preco_unitario || 0); 
-            
-            custoTotal += custoEstimado;
-
+            custoTotalInsumos += custoEstimado;
             resumo.push({ 
                 ...insumo, 
                 quantidadeTotalBase: data.total_kg_L, 
-                qtdEmbalagens: qtdEmbalagensNecessarias,
-                tamanhoEmb: tamanhoEmb,
-                unidadeCalculada: data.isLitro ? 'L' : 'kg',
+                qtdEmbalagens: qtdEmbalagensNecessarias, 
+                tamanhoEmb: tamanhoEmb, 
+                unidadeCalculada: data.isLitro ? 'L' : 'kg', 
                 custoEstimado 
             });
         }
     });
-
     resumo.sort((a, b) => a.nome.localeCompare(b.nome));
-
-    return { itens: resumo, custoTotal };
+    
+    return { 
+        itens: resumo, 
+        custoTotalInsumos, 
+        custoTerceirizadoEstimado, 
+        custoGeralEstimado: custoTotalInsumos + custoTerceirizadoEstimado 
+    };
   }, [planFases, insumos, planPlantas]);
 
-  // --- FUNÇÕES DE EXPORTAÇÃO ---
   const generatePDF = () => {
     const doc = new jsPDF();
-    
-    doc.setFontSize(18);
-    doc.text(`Planejamento: ${planNome}`, 14, 20);
-    
-    doc.setFontSize(11);
-    doc.setTextColor(100);
-    doc.text(`Cultura: ${planCultura.toUpperCase()} | Ciclo por: ${cicloLabels[planTipoCiclo]}s | Plantas: ${planPlantas || 0}`, 14, 28);
-    
-    doc.setFontSize(14);
-    doc.setTextColor(0);
-    doc.text('Cronograma de Aplicações', 14, 40);
+    doc.setFontSize(18); doc.text(`Planejamento: ${planNome}`, 14, 20);
+    doc.setFontSize(11); doc.setTextColor(100); doc.text(`Cultura: ${planCultura.toUpperCase()} | Ciclo por: ${cicloLabels[planTipoCiclo]}s | Plantas: ${planPlantas || 0}`, 14, 28);
+    doc.setFontSize(14); doc.setTextColor(0); doc.text('Cronograma de Aplicações e Serviços', 14, 40);
     
     const cronogramaRows = [];
-    
+    const prefixoEtapa = planTipoCiclo === 'livre' ? 'Etapa' : cicloLabels[planTipoCiclo];
+
     planFases.forEach(f => {
         const phaseName = f.nome_etapa ? ` - ${f.nome_etapa.toUpperCase()}` : '';
-        cronogramaRows.push([
-            { 
-                content: `${cicloLabels[planTipoCiclo]} ${f.momento}${phaseName}`, 
-                colSpan: 4, 
-                styles: { fillColor: [230, 245, 240], textColor: [6, 78, 59], fontStyle: 'bold', halign: 'left' } 
-            }
-        ]);
-
+        cronogramaRows.push([{ content: `${prefixoEtapa} ${f.momento}${phaseName}`, colSpan: 4, styles: { fillColor: [230, 245, 240], textColor: [6, 78, 59], fontStyle: 'bold', halign: 'left' } }]);
+        
         if (f.aplicacoes.length === 0) {
-            cronogramaRows.push([{ content: 'Nenhum produto cadastrado.', colSpan: 4, styles: { fontStyle: 'italic', halign: 'center', textColor: [150, 150, 150] } }]);
+            cronogramaRows.push([{ content: 'Nenhum item cadastrado.', colSpan: 4, styles: { fontStyle: 'italic', halign: 'center', textColor: [150, 150, 150] } }]);
         } else {
             f.aplicacoes.forEach(app => {
-                const insumo = getInsumoDetalhes(app.insumo_id);
-                cronogramaRows.push([
-                    f.momento.toString(), 
-                    app.metodo === 'foliar' ? 'Foliar' : 'Adubação',
-                    insumo ? insumo.nome : '-',
-                    `${app.quantidade} ${app.modo_aplicacao}`
-                ]);
+                if (app.metodo === 'terceirizado') {
+                    cronogramaRows.push([ f.momento.toString(), 'Terceirizado', app.descricao_servico || 'Serviço', `R$ ${parseFloat(app.valor_estimado || 0).toLocaleString('pt-BR')}` ]);
+                } else {
+                    const insumo = getInsumoDetalhes(app.insumo_id);
+                    cronogramaRows.push([ f.momento.toString(), app.metodo === 'foliar' ? 'Foliar' : 'Adubação', insumo ? insumo.nome : '-', `${app.quantidade} ${app.modo_aplicacao}` ]);
+                }
             });
         }
     });
     
-    autoTable(doc, {
-        startY: 45,
-        head: [['Etapa', 'Método', 'Produto', 'Dosagem']],
-        body: cronogramaRows,
-        theme: 'grid',
-        headStyles: { fillColor: [16, 185, 129] }, 
-        styles: { fontSize: 9 }
-    });
-    
+    autoTable(doc, { startY: 45, head: [['Etapa', 'Método', 'Insumo/Serviço', 'Dosagem/Valor']], body: cronogramaRows, theme: 'grid', headStyles: { fillColor: [16, 185, 129] }, styles: { fontSize: 9 } });
     const finalY = doc.lastAutoTable.finalY || 45;
     
-    doc.setFontSize(14);
-    doc.text('Resumo de Compras Necessárias', 14, finalY + 15);
-    
+    doc.setFontSize(14); doc.text('Resumo de Compras e Estimativas', 14, finalY + 15);
     const resumoRows = [];
     resumoCompras.itens.forEach(item => {
-        resumoRows.push([
-            item.nome,
-            `R$ ${(item.preco_unitario || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2})}`,
-            `${item.quantidadeTotalBase.toLocaleString('pt-BR', {maximumFractionDigits: 2})} ${item.unidadeCalculada}`,
-            `${Math.ceil(item.qtdEmbalagens)} un.`, 
-            `R$ ${item.custoEstimado.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`
-        ]);
+        resumoRows.push([ item.nome, `R$ ${(item.preco_unitario || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2})}`, `${item.quantidadeTotalBase.toLocaleString('pt-BR', {maximumFractionDigits: 2})} ${item.unidadeCalculada}`, `${Math.ceil(item.qtdEmbalagens)} un.`, `R$ ${item.custoEstimado.toLocaleString('pt-BR', {minimumFractionDigits: 2})}` ]);
     });
     
-    autoTable(doc, {
-        startY: finalY + 20,
-        head: [['Produto', 'Preço Ref. (Emb)', 'Necessidade', 'Comprar', 'Custo Est.']],
-        body: resumoRows,
-        foot: [['', '', '', 'TOTAL GERAL:', `R$ ${resumoCompras.custoTotal.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`]],
-        theme: 'grid',
-        headStyles: { fillColor: [59, 130, 246] }, 
-        footStyles: { fillColor: [240, 240, 240], textColor: [0,0,0], fontStyle: 'bold' },
-        styles: { fontSize: 9 }
+    autoTable(doc, { 
+        startY: finalY + 20, 
+        head: [['Produto', 'Preço Ref. (Emb)', 'Necessidade', 'Comprar', 'Custo Est.']], 
+        body: resumoRows, 
+        foot: [
+            ['', '', '', 'Insumos Estimados:', `R$ ${resumoCompras.custoTotalInsumos.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`],
+            ['', '', '', 'Serviços Estimados:', `R$ ${resumoCompras.custoTerceirizadoEstimado.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`],
+            ['', '', '', 'TOTAL GERAL ESTIMADO:', `R$ ${resumoCompras.custoGeralEstimado.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`]
+        ], 
+        theme: 'grid', headStyles: { fillColor: [59, 130, 246] }, footStyles: { fillColor: [240, 240, 240], textColor: [0,0,0], fontStyle: 'bold' }, styles: { fontSize: 9 } 
     });
-    
     doc.save(`Planejamento_${planNome.replace(/\s+/g, '_')}.pdf`);
   };
 
   const generateExcel = () => {
     let csv = '\uFEFF'; 
-    
-    csv += `Planejamento:;${planNome}\n`;
-    csv += `Cultura:;${planCultura}\n`;
-    csv += `Ciclo por:;${cicloLabels[planTipoCiclo]}s\n`;
-    csv += `Qtd de Plantas:;${planPlantas || 0}\n\n`;
-
-    csv += 'CRONOGRAMA DE APLICACOES\n';
-    csv += 'Etapa;Nome da Etapa;Metodo;Produto;Quantidade;Modo de Aplicacao\n';
+    const prefixoEtapa = planTipoCiclo === 'livre' ? 'Etapa' : cicloLabels[planTipoCiclo];
+    csv += `Planejamento:;${planNome}\n`; csv += `Cultura:;${planCultura}\n`; csv += `Ciclo por:;${prefixoEtapa}s\n`; csv += `Qtd de Plantas:;${planPlantas || 0}\n\n`;
+    csv += 'CRONOGRAMA DE APLICACOES\n'; csv += 'Etapa;Nome da Etapa;Metodo;Produto_ou_Servico;Quantidade_ou_Estimativa;Modo_Aplicacao\n';
     planFases.forEach(f => {
-        if (f.aplicacoes.length === 0) {
-            csv += `${cicloLabels[planTipoCiclo]} ${f.momento};${f.nome_etapa || '-'};-;-;-;-\n`;
-        } else {
+        if (f.aplicacoes.length === 0) { csv += `${prefixoEtapa} ${f.momento};${f.nome_etapa || '-'};-;-;-;-\n`; } 
+        else {
             f.aplicacoes.forEach(app => {
-                const insumo = getInsumoDetalhes(app.insumo_id);
-                const nomeInsumo = insumo ? insumo.nome : '-';
-                const metodo = app.metodo === 'foliar' ? 'Foliar' : 'Adubacao';
-                csv += `${cicloLabels[planTipoCiclo]} ${f.momento};${f.nome_etapa || '-'};${metodo};${nomeInsumo};${app.quantidade};${app.modo_aplicacao}\n`;
+                if (app.metodo === 'terceirizado') {
+                    csv += `${prefixoEtapa} ${f.momento};${f.nome_etapa || '-'};Terceirizado;${app.descricao_servico || 'Servico'};R$ ${app.valor_estimado || 0};Valor Estimado\n`;
+                } else {
+                    const insumo = getInsumoDetalhes(app.insumo_id); const nomeInsumo = insumo ? insumo.nome : '-'; const metodo = app.metodo === 'foliar' ? 'Foliar' : 'Adubacao';
+                    csv += `${prefixoEtapa} ${f.momento};${f.nome_etapa || '-'};${metodo};${nomeInsumo};${app.quantidade};${app.modo_aplicacao}\n`;
+                }
             });
         }
     });
-
-    csv += '\nRESUMO DE COMPRAS\n';
-    csv += 'Produto;Preco Ref. da Embalagem;Necessidade Total;Unidade de Medida;Comprar (Embalagens);Custo Estimado\n';
+    csv += '\nRESUMO DE COMPRAS (INSUMOS)\n'; csv += 'Produto;Preco Ref. da Embalagem;Necessidade Total;Unidade de Medida;Comprar (Embalagens);Custo Estimado\n';
     resumoCompras.itens.forEach(item => {
-        const preco = (item.preco_unitario || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2});
-        const totalBase = item.quantidadeTotalBase.toLocaleString('pt-BR', {maximumFractionDigits: 2});
-        const emb = Math.ceil(item.qtdEmbalagens).toString();
-        const custo = item.custoEstimado.toLocaleString('pt-BR', {minimumFractionDigits: 2});
-        
+        const preco = (item.preco_unitario || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2}); const totalBase = item.quantidadeTotalBase.toLocaleString('pt-BR', {maximumFractionDigits: 2}); const emb = Math.ceil(item.qtdEmbalagens).toString(); const custo = item.custoEstimado.toLocaleString('pt-BR', {minimumFractionDigits: 2});
         csv += `${item.nome};R$ ${preco};${totalBase};${item.unidadeCalculada};${emb};R$ ${custo}\n`;
     });
+    csv += `\nCusto Estimado Insumos;;;;;R$ ${resumoCompras.custoTotalInsumos.toLocaleString('pt-BR', {minimumFractionDigits: 2})}\n`;
+    csv += `Custo Estimado Terceirizados;;;;;R$ ${resumoCompras.custoTerceirizadoEstimado.toLocaleString('pt-BR', {minimumFractionDigits: 2})}\n`;
+    csv += `CUSTO TOTAL ESTIMADO;;;;;R$ ${resumoCompras.custoGeralEstimado.toLocaleString('pt-BR', {minimumFractionDigits: 2})}\n`;
     
-    csv += `\nCUSTO TOTAL ESTIMADO;;;;;R$ ${resumoCompras.custoTotal.toLocaleString('pt-BR', {minimumFractionDigits: 2})}\n`;
-
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.setAttribute('download', `Planejamento_${planNome.replace(/\s+/g, '_')}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' }); const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.setAttribute('download', `Planejamento_${planNome.replace(/\s+/g, '_')}.csv`); document.body.appendChild(link); link.click(); document.body.removeChild(link);
   };
-
 
   return (
     <div className="space-y-6">
-      {/* HEADER */}
+      
+      <Dialog open={openApplyModal} onOpenChange={setOpenApplyModal}>
+        <DialogContent className="sm:max-w-md rounded-[2rem]">
+            <DialogHeader>
+                <DialogTitle className="flex items-center gap-2 text-emerald-700">
+                    <Send className="w-5 h-5" /> Aplicar Planejamento
+                </DialogTitle>
+                <DialogDescription>
+                    Gerar atividades no calendário da Safra selecionada.
+                </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 pt-4">
+                <div className="space-y-2">
+                    <Label>Safra Destino (Ativa)</Label>
+                    <Select value={applySafraId} onValueChange={setApplySafraId}>
+                        <SelectTrigger className="rounded-xl"><SelectValue placeholder="Selecione a safra..." /></SelectTrigger>
+                        <SelectContent>
+                            {safras.length === 0 && <SelectItem value="none" disabled>Nenhuma safra ativa.</SelectItem>}
+                            {safras.map(s => <SelectItem key={s.id} value={s.id}>{s.nome} ({s.talhoes?.nome})</SelectItem>)}
+                        </SelectContent>
+                    </Select>
+                </div>
+                <div className="space-y-2">
+                    <Label>Data Base de Início</Label>
+                    <Input type="date" value={applyStartDate} onChange={e => setApplyStartDate(e.target.value)} className="rounded-xl" />
+                    {planTipoCiclo === 'livre' ? (
+                        <p className="text-[10px] text-stone-500">Como é um ciclo flexível, as atividades nascerão em ordem a partir desta data, podendo ser ajustadas depois.</p>
+                    ) : (
+                        <p className="text-[10px] text-stone-500">As {cicloLabels[planTipoCiclo]}s serão calculadas a partir desta data.</p>
+                    )}
+                </div>
+            </div>
+            <DialogFooter className="mt-4">
+                <Button variant="outline" onClick={() => setOpenApplyModal(false)} className="rounded-xl">Cancelar</Button>
+                <Button onClick={() => applyToSafraMutation.mutate()} disabled={applyToSafraMutation.isPending || !applySafraId} className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl">
+                    {applyToSafraMutation.isPending ? 'Agendando...' : 'Gerar Atividades'}
+                </Button>
+            </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 bg-white p-4 rounded-[1.5rem] border border-stone-100 shadow-sm">
         <div>
           <h1 className="text-2xl font-bold text-stone-900 tracking-tight">Planejamento de Ciclos</h1>
@@ -468,11 +409,11 @@ export default function Planejamentos() {
                         </Button>
                     </DialogTrigger>
                     <DialogContent className="sm:max-w-md rounded-[2rem]">
-                        <DialogHeader><DialogTitle>Novo Ciclo de Planejamento</DialogTitle></DialogHeader>
+                        <DialogHeader><DialogTitle>Novo Ciclo de Planejamento</DialogTitle><DialogDescription>Crie o esqueleto base de aplicações.</DialogDescription></DialogHeader>
                         <div className="space-y-4 pt-4">
                             <div className="space-y-2">
                                 <Label>Nome do Planejamento</Label>
-                                <Input value={novoPlan.nome} onChange={e => setNovoPlan({...novoPlan, nome: e.target.value})} className="rounded-xl" placeholder="Ex: Goiaba 1º Ano" />
+                                <Input value={novoPlan.nome} onChange={e => setNovoPlan({...novoPlan, nome: e.target.value})} className="rounded-xl" placeholder="Ex: Manga Palmer - Sem Data Fixa" />
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-2">
@@ -490,6 +431,7 @@ export default function Planejamentos() {
                                             <SelectItem value="dia">Por Dia</SelectItem>
                                             <SelectItem value="semana">Por Semana</SelectItem>
                                             <SelectItem value="mes">Por Mês</SelectItem>
+                                            <SelectItem value="livre">Livre / Etapas</SelectItem>
                                         </SelectContent>
                                     </Select>
                                 </div>
@@ -506,24 +448,18 @@ export default function Planejamentos() {
                 </Dialog>
             ) : (
                 <div className="flex flex-wrap gap-2 w-full sm:w-auto">
-                    {/* BOTÕES DE EXPORTAÇÃO */}
-                    <Button onClick={generatePDF} className="bg-white border border-stone-200 text-stone-700 hover:bg-stone-50 rounded-xl px-3 shadow-sm" disabled={saveMutation.isPending || planFases.length === 0} title="Exportar PDF">
-                        <FileText className="w-4 h-4 text-red-500" />
-                    </Button>
-                    <Button onClick={generateExcel} className="bg-white border border-stone-200 text-stone-700 hover:bg-stone-50 rounded-xl px-3 shadow-sm" disabled={saveMutation.isPending || planFases.length === 0} title="Exportar Excel">
-                        <TableIcon className="w-4 h-4 text-emerald-600" />
-                    </Button>
-                    
-                    {/* BOTÃO NOVO: DUPLICAR */}
-                    <Button onClick={() => duplicateMutation.mutate()} className="bg-white border border-stone-200 text-stone-700 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-200 rounded-xl px-4 shadow-sm transition-all" disabled={duplicateMutation.isPending} title="Criar uma cópia deste planejamento">
-                        <Copy className="w-4 h-4 mr-2 text-blue-500" /> {duplicateMutation.isPending ? 'Copiando...' : 'Duplicar'}
+                    <Button onClick={() => setOpenApplyModal(true)} className="bg-emerald-100 hover:bg-emerald-200 border border-emerald-200 text-emerald-800 font-bold rounded-xl px-4 shadow-sm transition-all" disabled={planFases.length === 0} title="Aplicar isso no calendário real">
+                        <PlayCircle className="w-4 h-4 mr-2" /> Aplicar na Safra
                     </Button>
 
-                    {/* BOTÕES DE AÇÃO */}
-                    <Button onClick={handleSaveCurrent} className="flex-1 sm:flex-none bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-6 shadow-lg shadow-blue-100" disabled={saveMutation.isPending}>
-                        <Save className="w-4 h-4 mr-2" /> {saveMutation.isPending ? 'Salvando...' : 'Salvar'}
+                    <Button onClick={() => duplicateMutation.mutate()} className="bg-white border border-stone-200 text-stone-700 hover:bg-blue-50 hover:text-blue-700 rounded-xl px-4 shadow-sm transition-all" disabled={duplicateMutation.isPending} title="Duplicar Planejamento">
+                        <Copy className="w-4 h-4 mr-2 text-blue-500" /> Duplicar
                     </Button>
-                    <Button variant="outline" className="text-red-500 hover:bg-red-50 border-red-200 rounded-xl px-4" onClick={() => { if(confirm("Tem certeza que deseja apagar todo este planejamento?")) deleteMutation.mutate(activePlanId) }}>
+
+                    <Button onClick={handleSaveCurrent} className="flex-1 sm:flex-none bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-6 shadow-lg shadow-blue-100" disabled={saveMutation.isPending}>
+                        <Save className="w-4 h-4 mr-2" /> Salvar
+                    </Button>
+                    <Button variant="outline" className="text-red-500 hover:bg-red-50 border-red-200 rounded-xl px-4" onClick={() => { if(confirm("Excluir planejamento?")) deleteMutation.mutate(activePlanId) }}>
                         <Trash2 className="w-4 h-4" />
                     </Button>
                 </div>
@@ -531,17 +467,13 @@ export default function Planejamentos() {
         </div>
       </div>
 
-      {/* ÁREA DE CONSTRUÇÃO DO CICLO */}
       {activePlanId !== 'novo' ? (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
               
-              {/* COLUNA ESQUERDA: LINHA DO TEMPO / FASES */}
               <div className="lg:col-span-2 space-y-6">
-                  {/* Cabeçalho de Controle */}
                   <div className="bg-stone-50 rounded-[2rem] p-6 border border-stone-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
                       <div>
                           <div className="flex items-center gap-3">
-                              {/* NOVO: CAMPO DE TEXTO EDITÁVEL PARA O NOME DO PLANEJAMENTO */}
                               <div className="relative group flex items-center">
                                   <Input 
                                       value={planNome}
@@ -555,7 +487,7 @@ export default function Planejamentos() {
                           </div>
                           <div className="flex items-center gap-4 mt-3 px-2">
                               <p className="text-sm text-stone-500 flex items-center gap-1">
-                                  <Settings className="w-4 h-4"/> Ciclo por <b>{cicloLabels[planTipoCiclo]}s</b>
+                                  <Settings className="w-4 h-4"/> Formato: <b>{planTipoCiclo === 'livre' ? 'Livre (Sem Data)' : `${cicloLabels[planTipoCiclo]}s`}</b>
                               </p>
                               <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl border border-stone-200 shadow-sm">
                                   <Trees className="w-4 h-4 text-emerald-600" />
@@ -578,10 +510,10 @@ export default function Planejamentos() {
                               </Button>
                           </DialogTrigger>
                           <DialogContent className="sm:max-w-xs rounded-[2rem]">
-                              <DialogHeader><DialogTitle>Adicionar Etapa</DialogTitle></DialogHeader>
+                              <DialogHeader><DialogTitle>Adicionar Etapa</DialogTitle><DialogDescription>Digite o número da etapa no ciclo.</DialogDescription></DialogHeader>
                               <div className="space-y-4 pt-2">
                                   <div className="space-y-2">
-                                      <Label>Número do {cicloLabels[planTipoCiclo]} (Ex: -7, 0, 14)</Label>
+                                      <Label>{planTipoCiclo === 'livre' ? 'Ordem da Etapa (Ex: 1, 2, 3...)' : `Número do ${cicloLabels[planTipoCiclo]} (Ex: -7, 0, 14)`}</Label>
                                       <Input type="number" value={novaFaseMomento} onChange={e => setNovaFaseMomento(e.target.value)} className="rounded-xl" placeholder="Digite o número..." />
                                   </div>
                                   <Button onClick={handleAddFase} className="w-full bg-emerald-600 hover:bg-emerald-700 rounded-xl" disabled={!novaFaseMomento}>
@@ -592,7 +524,6 @@ export default function Planejamentos() {
                       </Dialog>
                   </div>
 
-                  {/* Renderização das Fases */}
                   <div className="space-y-6 relative before:absolute before:inset-0 before:ml-6 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-stone-200 before:via-emerald-200 before:to-stone-100">
                       {planFases.length === 0 ? (
                           <div className="relative z-10 text-center py-10">
@@ -600,15 +531,16 @@ export default function Planejamentos() {
                                   <Calendar className="w-5 h-5 text-stone-400" />
                               </div>
                               <p className="text-stone-500 font-medium text-sm">Nenhuma etapa programada.</p>
-                              <p className="text-stone-400 text-xs mt-1">Clique em "Adicionar {cicloLabels[planTipoCiclo]}" para começar o ciclo.</p>
+                              <p className="text-stone-400 text-xs mt-1">Clique em "Adicionar {cicloLabels[planTipoCiclo]}" para começar.</p>
                           </div>
                       ) : (
                           planFases.map((fase) => (
                               <div key={fase.id} className="relative z-10 flex items-start flex-col md:flex-row gap-4 group">
-                                  {/* Marcador Central */}
                                   <div className="flex items-center md:justify-end w-12 md:w-32 pt-3 shrink-0">
                                       <div className="hidden md:block mr-4 text-right">
-                                          <div className="text-[10px] font-bold uppercase text-stone-400 tracking-wider">{cicloLabels[planTipoCiclo]}</div>
+                                          <div className="text-[10px] font-bold uppercase text-stone-400 tracking-wider">
+                                              {planTipoCiclo === 'livre' ? 'Etapa' : cicloLabels[planTipoCiclo]}
+                                          </div>
                                           <div className="text-xl font-black text-emerald-600">{fase.momento}</div>
                                           {fase.nome_etapa && <div className="text-xs font-bold text-stone-500 mt-1 max-w-[80px] truncate ml-auto" title={fase.nome_etapa}>{fase.nome_etapa}</div>}
                                       </div>
@@ -616,26 +548,25 @@ export default function Planejamentos() {
                                           <CircleDot className="w-5 h-5 text-emerald-500" />
                                       </div>
                                       <div className="md:hidden ml-4 flex flex-col">
-                                          <span className="font-bold text-stone-700">{cicloLabels[planTipoCiclo]} {fase.momento}</span>
+                                          <span className="font-bold text-stone-700">{planTipoCiclo === 'livre' ? 'Etapa' : cicloLabels[planTipoCiclo]} {fase.momento}</span>
                                           {fase.nome_etapa && <span className="text-xs text-stone-500 font-medium">{fase.nome_etapa}</span>}
                                       </div>
                                   </div>
 
-                                  {/* Card da Fase */}
                                   <Card className="flex-1 w-full border-stone-200/60 shadow-sm hover:shadow-md transition-shadow rounded-2xl ml-12 md:ml-0 overflow-hidden bg-white/80 backdrop-blur-sm">
-                                      <div className="bg-stone-50/80 px-4 py-3 border-b border-stone-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                      <div className="bg-stone-50/80 px-4 py-3 border-b border-stone-100 flex flex-col xl:flex-row xl:items-center justify-between gap-3">
                                           <div className="flex items-center gap-2 flex-1">
-                                              <Label className="sr-only">Nome da Etapa</Label>
                                               <Input
-                                                  placeholder="Nome da etapa (Ex: Indução, Maturação...)"
+                                                  placeholder="Nome da etapa (Ex: Indução...)"
                                                   value={fase.nome_etapa || ''}
                                                   onChange={(e) => handleUpdateFase(fase.id, 'nome_etapa', e.target.value)}
                                                   className="h-8 text-sm font-bold bg-white/60 border-stone-200 focus-visible:ring-emerald-500 w-full max-w-[250px] shadow-sm"
                                               />
                                           </div>
-                                          <div className="flex gap-2">
+
+                                          <div className="flex gap-2 mt-2 xl:mt-0">
                                               <Button variant="outline" size="sm" onClick={() => handleAddAplicacao(fase.id)} className="h-8 text-xs bg-white text-emerald-600 border-emerald-200 hover:bg-emerald-50 shadow-sm">
-                                                  <Plus className="w-3 h-3 mr-1"/> Adicionar Produto
+                                                  <Plus className="w-3 h-3 mr-1"/> Adicionar Item
                                               </Button>
                                               <Button variant="ghost" size="sm" onClick={() => handleRemoveFase(fase.id)} className="h-8 w-8 p-0 text-stone-400 hover:text-red-500 hover:bg-red-50 rounded-lg">
                                                   <Trash2 className="w-4 h-4"/>
@@ -645,75 +576,81 @@ export default function Planejamentos() {
                                       
                                       <div className="p-4">
                                           {fase.aplicacoes.length === 0 ? (
-                                              <p className="text-xs text-stone-400 italic text-center py-2">Nenhum produto para esta etapa.</p>
+                                              <p className="text-xs text-stone-400 italic text-center py-2">
+                                                  Nenhum item adicionado nesta etapa.
+                                              </p>
                                           ) : (
                                               <div className="space-y-3">
                                                   {fase.aplicacoes.map((app) => {
-                                                      const config = metodoConfig[app.metodo];
+                                                      const config = metodoConfig[app.metodo] || metodoConfig.foliar;
                                                       const Icon = config.icon;
                                                       return (
                                                           <div key={app.id} className="flex flex-col sm:flex-row gap-2 sm:items-center p-2 rounded-xl bg-stone-50/50 border border-stone-100 hover:border-stone-200 transition-colors">
-                                                              {/* Seleção do Método (Foliar/Adubação) */}
                                                               <Select value={app.metodo} onValueChange={(v) => {
                                                                   handleUpdateAplicacao(fase.id, app.id, 'metodo', v);
-                                                                  handleUpdateAplicacao(fase.id, app.id, 'modo_aplicacao', v === 'foliar' ? 'ml/area' : 'g/planta');
+                                                                  if (v !== 'terceirizado') {
+                                                                      handleUpdateAplicacao(fase.id, app.id, 'modo_aplicacao', v === 'foliar' ? 'ml/area' : 'g/planta');
+                                                                  }
                                                               }}>
-                                                                  <SelectTrigger className={`w-full sm:w-[120px] h-9 text-xs font-bold rounded-lg ${config.bg} ${config.color}`}>
-                                                                      <div className="flex items-center gap-2">
-                                                                          <Icon className="w-3 h-3" />
-                                                                          <span>{config.label}</span>
-                                                                      </div>
+                                                                  <SelectTrigger className={`w-full sm:w-[130px] h-9 text-xs font-bold rounded-lg ${config.bg} ${config.color}`}>
+                                                                      <div className="flex items-center gap-2"><Icon className="w-3 h-3" /><span>{config.label}</span></div>
                                                                   </SelectTrigger>
                                                                   <SelectContent>
                                                                       <SelectItem value="foliar"><div className="flex items-center gap-2"><Droplets className="w-3 h-3 text-blue-500"/> Foliar</div></SelectItem>
                                                                       <SelectItem value="adubacao"><div className="flex items-center gap-2"><Leaf className="w-3 h-3 text-emerald-500"/> Adubação</div></SelectItem>
+                                                                      <SelectItem value="terceirizado"><div className="flex items-center gap-2"><Briefcase className="w-3 h-3 text-amber-600"/> Terceirizado</div></SelectItem>
                                                                   </SelectContent>
                                                               </Select>
 
-                                                              {/* Seleção do Insumo */}
-                                                              <Select value={app.insumo_id} onValueChange={(v) => handleUpdateAplicacao(fase.id, app.id, 'insumo_id', v)}>
-                                                                  <SelectTrigger className="flex-1 h-9 text-xs rounded-lg bg-white border-stone-200">
-                                                                      <SelectValue placeholder="Selecione o produto..." />
-                                                                  </SelectTrigger>
-                                                                  <SelectContent>
-                                                                      {insumos.map(ins => (
-                                                                          <SelectItem key={ins.id} value={ins.id}>{ins.nome}</SelectItem>
-                                                                      ))}
-                                                                  </SelectContent>
-                                                              </Select>
+                                                              {app.metodo === 'terceirizado' ? (
+                                                                  <>
+                                                                      <Input 
+                                                                          placeholder="Descrição do serviço (ex: Poda, Roçada)" 
+                                                                          value={app.descricao_servico || ''} 
+                                                                          onChange={(e) => handleUpdateAplicacao(fase.id, app.id, 'descricao_servico', e.target.value)}
+                                                                          className="flex-1 h-9 text-xs rounded-lg bg-white border-stone-200"
+                                                                      />
+                                                                      <div className="flex items-center gap-2 w-full sm:w-[180px]">
+                                                                          <Label className="text-[10px] text-stone-500 font-bold whitespace-nowrap">R$ Est.</Label>
+                                                                          <Input 
+                                                                              type="number" 
+                                                                              placeholder="Opcional" 
+                                                                              value={app.valor_estimado || ''} 
+                                                                              onChange={(e) => handleUpdateAplicacao(fase.id, app.id, 'valor_estimado', e.target.value)}
+                                                                              className="flex-1 h-9 text-xs rounded-lg bg-white text-center font-bold"
+                                                                          />
+                                                                          <Button variant="ghost" size="sm" onClick={() => handleRemoveAplicacao(fase.id, app.id)} className="h-8 w-8 p-0 text-stone-300 hover:text-red-500 hover:bg-white shrink-0"><Trash2 className="w-3 h-3"/></Button>
+                                                                      </div>
+                                                                  </>
+                                                              ) : (
+                                                                  <>
+                                                                      <Select value={app.insumo_id} onValueChange={(v) => handleUpdateAplicacao(fase.id, app.id, 'insumo_id', v)}>
+                                                                          <SelectTrigger className="flex-1 h-9 text-xs rounded-lg bg-white border-stone-200">
+                                                                              <SelectValue placeholder="Selecione o produto..." />
+                                                                          </SelectTrigger>
+                                                                          <SelectContent>
+                                                                              {insumos.map(ins => (
+                                                                                  <SelectItem key={ins.id} value={ins.id}>{ins.nome}</SelectItem>
+                                                                              ))}
+                                                                          </SelectContent>
+                                                                      </Select>
 
-                                                              {/* Quantidade e Medida */}
-                                                              <div className="flex items-center gap-2 w-full sm:w-[220px]">
-                                                                  <Input 
-                                                                      type="number" 
-                                                                      placeholder="Qtd" 
-                                                                      value={app.quantidade} 
-                                                                      onChange={(e) => handleUpdateAplicacao(fase.id, app.id, 'quantidade', e.target.value)}
-                                                                      className="w-20 h-9 text-xs rounded-lg bg-white text-center font-bold"
-                                                                  />
-                                                                  <Select value={app.modo_aplicacao || (app.metodo === 'foliar' ? 'ml/area' : 'g/planta')} onValueChange={(v) => handleUpdateAplicacao(fase.id, app.id, 'modo_aplicacao', v)}>
-                                                                      <SelectTrigger className="flex-1 h-9 text-xs rounded-lg bg-white border-stone-200 font-medium">
-                                                                          <SelectValue />
-                                                                      </SelectTrigger>
-                                                                      <SelectContent>
-                                                                          {app.metodo === 'foliar' ? (
-                                                                              <>
-                                                                                  <SelectItem value="ml/area">ml / área</SelectItem>
-                                                                                  <SelectItem value="l/area">L / área</SelectItem>
-                                                                              </>
-                                                                          ) : (
-                                                                              <>
-                                                                                  <SelectItem value="g/planta">g / planta</SelectItem>
-                                                                                  <SelectItem value="kg/area">kg / área</SelectItem>
-                                                                              </>
-                                                                          )}
-                                                                      </SelectContent>
-                                                                  </Select>
-                                                                  
-                                                                  <Button variant="ghost" size="sm" onClick={() => handleRemoveAplicacao(fase.id, app.id)} className="h-8 w-8 p-0 text-stone-300 hover:text-red-500 hover:bg-white shrink-0">
-                                                                      <Trash2 className="w-3 h-3"/>
-                                                                  </Button>
-                                                              </div>
+                                                                      <div className="flex items-center gap-2 w-full sm:w-[220px]">
+                                                                          <Input type="number" placeholder="Qtd" value={app.quantidade} onChange={(e) => handleUpdateAplicacao(fase.id, app.id, 'quantidade', e.target.value)} className="w-20 h-9 text-xs rounded-lg bg-white text-center font-bold" />
+                                                                          <Select value={app.modo_aplicacao || (app.metodo === 'foliar' ? 'ml/area' : 'g/planta')} onValueChange={(v) => handleUpdateAplicacao(fase.id, app.id, 'modo_aplicacao', v)}>
+                                                                              <SelectTrigger className="flex-1 h-9 text-xs rounded-lg bg-white border-stone-200 font-medium"><SelectValue /></SelectTrigger>
+                                                                              <SelectContent>
+                                                                                  {app.metodo === 'foliar' ? (
+                                                                                      <><SelectItem value="ml/area">ml / área</SelectItem><SelectItem value="l/area">L / área</SelectItem></>
+                                                                                  ) : (
+                                                                                      <><SelectItem value="g/planta">g / planta</SelectItem><SelectItem value="kg/area">kg / área</SelectItem></>
+                                                                                  )}
+                                                                              </SelectContent>
+                                                                          </Select>
+                                                                          <Button variant="ghost" size="sm" onClick={() => handleRemoveAplicacao(fase.id, app.id)} className="h-8 w-8 p-0 text-stone-300 hover:text-red-500 hover:bg-white shrink-0"><Trash2 className="w-3 h-3"/></Button>
+                                                                      </div>
+                                                                  </>
+                                                              )}
                                                           </div>
                                                       );
                                                   })}
@@ -727,7 +664,6 @@ export default function Planejamentos() {
                   </div>
               </div>
 
-              {/* COLUNA DIREITA: RESUMO FINANCEIRO E DE COMPRAS */}
               <div className="lg:col-span-1">
                   <div className="sticky top-24">
                       <Card className="border-emerald-100 rounded-[2rem] shadow-md shadow-emerald-100/50 bg-gradient-to-br from-emerald-600 to-teal-700 overflow-hidden">
@@ -740,7 +676,11 @@ export default function Planejamentos() {
                               <div className="p-6 text-center text-white">
                                   <p className="text-emerald-100/80 text-xs uppercase font-bold tracking-widest mb-1">Custo Total Estimado</p>
                                   <div className="text-3xl font-black tracking-tight">
-                                      R$ {resumoCompras.custoTotal.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
+                                      R$ {resumoCompras.custoGeralEstimado.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
+                                  </div>
+                                  <div className="flex justify-center gap-4 mt-2 text-[10px] text-emerald-100/70 font-medium">
+                                      <span>Insumos: R$ {resumoCompras.custoTotalInsumos.toLocaleString('pt-BR')}</span>
+                                      <span>Mão de Obra: R$ {resumoCompras.custoTerceirizadoEstimado.toLocaleString('pt-BR')}</span>
                                   </div>
                                   {(!planPlantas || planPlantas === '0') && planFases.some(f => f.aplicacoes.some(a => a.modo_aplicacao === 'g/planta')) && (
                                       <div className="mt-3 bg-red-500/20 border border-red-500/30 text-red-100 text-xs py-1.5 px-3 rounded-lg inline-block">
