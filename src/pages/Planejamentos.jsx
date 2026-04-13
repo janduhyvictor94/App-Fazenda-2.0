@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { 
   Plus, Save, Trash2, Calendar, Droplets, Leaf, 
   ShoppingCart, Calculator, CircleDot, ArrowDown, Settings, Trees,
-  FileText, Table as TableIcon
+  FileText, Table as TableIcon, Copy, Edit2
 } from 'lucide-react';
 import EmptyState from '@/components/ui/EmptyState';
 import { format } from 'date-fns';
@@ -105,6 +105,26 @@ export default function Planejamentos() {
     }
   });
 
+  const duplicateMutation = useMutation({
+    mutationFn: async () => {
+      const payload = {
+        nome: `${planNome} (Cópia)`,
+        cultura: planCultura,
+        dados: { 
+          tipo_ciclo: planTipoCiclo, 
+          quantidade_plantas: planPlantas,
+          fases: planFases 
+        }
+      };
+      const { data, error } = await supabase.from('planejamentos').insert([payload]).select().single();
+      if (error) throw error; return data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['planejamentos'] });
+      setActivePlanId(data.id); // Muda automaticamente para a cópia criada
+    }
+  });
+
   const deleteMutation = useMutation({
     mutationFn: async (id) => {
       const { error } = await supabase.from('planejamentos').delete().eq('id', id);
@@ -157,7 +177,7 @@ export default function Planejamentos() {
     const novaFase = {
         id: Date.now().toString(),
         momento: momento,
-        nome_etapa: '', // Novo campo para legenda
+        nome_etapa: '', 
         aplicacoes: []
     };
 
@@ -271,7 +291,7 @@ export default function Planejamentos() {
         if (insumo) {
             const tamanhoEmb = parseFloat(insumo.tamanho_embalagem) || 1; 
             const qtdEmbalagensNecessarias = data.total_kg_L / tamanhoEmb;
-            const custoEstimado = Math.ceil(qtdEmbalagensNecessarias) * (insumo.preco_unitario || 0); // Arredonda pacote pra cima no custo
+            const custoEstimado = Math.ceil(qtdEmbalagensNecessarias) * (insumo.preco_unitario || 0); 
             
             custoTotal += custoEstimado;
 
@@ -295,7 +315,6 @@ export default function Planejamentos() {
   const generatePDF = () => {
     const doc = new jsPDF();
     
-    // Título e Cabeçalho
     doc.setFontSize(18);
     doc.text(`Planejamento: ${planNome}`, 14, 20);
     
@@ -303,7 +322,6 @@ export default function Planejamentos() {
     doc.setTextColor(100);
     doc.text(`Cultura: ${planCultura.toUpperCase()} | Ciclo por: ${cicloLabels[planTipoCiclo]}s | Plantas: ${planPlantas || 0}`, 14, 28);
     
-    // Tabela 1: Cronograma
     doc.setFontSize(14);
     doc.setTextColor(0);
     doc.text('Cronograma de Aplicações', 14, 40);
@@ -311,7 +329,6 @@ export default function Planejamentos() {
     const cronogramaRows = [];
     
     planFases.forEach(f => {
-        // LINHA DE CABEÇALHO PARA A ETAPA (Destaca e Separa)
         const phaseName = f.nome_etapa ? ` - ${f.nome_etapa.toUpperCase()}` : '';
         cronogramaRows.push([
             { 
@@ -327,7 +344,7 @@ export default function Planejamentos() {
             f.aplicacoes.forEach(app => {
                 const insumo = getInsumoDetalhes(app.insumo_id);
                 cronogramaRows.push([
-                    f.momento.toString(), // Coloca apenas o número do dia/semana na linha
+                    f.momento.toString(), 
                     app.metodo === 'foliar' ? 'Foliar' : 'Adubação',
                     insumo ? insumo.nome : '-',
                     `${app.quantidade} ${app.modo_aplicacao}`
@@ -341,13 +358,12 @@ export default function Planejamentos() {
         head: [['Etapa', 'Método', 'Produto', 'Dosagem']],
         body: cronogramaRows,
         theme: 'grid',
-        headStyles: { fillColor: [16, 185, 129] }, // Verde Esmeralda
+        headStyles: { fillColor: [16, 185, 129] }, 
         styles: { fontSize: 9 }
     });
     
     const finalY = doc.lastAutoTable.finalY || 45;
     
-    // Tabela 2: Resumo
     doc.setFontSize(14);
     doc.text('Resumo de Compras Necessárias', 14, finalY + 15);
     
@@ -357,7 +373,7 @@ export default function Planejamentos() {
             item.nome,
             `R$ ${(item.preco_unitario || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2})}`,
             `${item.quantidadeTotalBase.toLocaleString('pt-BR', {maximumFractionDigits: 2})} ${item.unidadeCalculada}`,
-            `${Math.ceil(item.qtdEmbalagens)} un.`, // Sugere comprar a embalagem inteira
+            `${Math.ceil(item.qtdEmbalagens)} un.`, 
             `R$ ${item.custoEstimado.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`
         ]);
     });
@@ -368,7 +384,7 @@ export default function Planejamentos() {
         body: resumoRows,
         foot: [['', '', '', 'TOTAL GERAL:', `R$ ${resumoCompras.custoTotal.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`]],
         theme: 'grid',
-        headStyles: { fillColor: [59, 130, 246] }, // Azul
+        headStyles: { fillColor: [59, 130, 246] }, 
         footStyles: { fillColor: [240, 240, 240], textColor: [0,0,0], fontStyle: 'bold' },
         styles: { fontSize: 9 }
     });
@@ -491,13 +507,18 @@ export default function Planejamentos() {
             ) : (
                 <div className="flex flex-wrap gap-2 w-full sm:w-auto">
                     {/* BOTÕES DE EXPORTAÇÃO */}
-                    <Button onClick={generatePDF} className="bg-white border border-stone-200 text-stone-700 hover:bg-stone-50 rounded-xl px-4 shadow-sm" disabled={saveMutation.isPending || planFases.length === 0}>
-                        <FileText className="w-4 h-4 mr-2 text-red-500" /> PDF
+                    <Button onClick={generatePDF} className="bg-white border border-stone-200 text-stone-700 hover:bg-stone-50 rounded-xl px-3 shadow-sm" disabled={saveMutation.isPending || planFases.length === 0} title="Exportar PDF">
+                        <FileText className="w-4 h-4 text-red-500" />
                     </Button>
-                    <Button onClick={generateExcel} className="bg-white border border-stone-200 text-stone-700 hover:bg-stone-50 rounded-xl px-4 shadow-sm" disabled={saveMutation.isPending || planFases.length === 0}>
-                        <TableIcon className="w-4 h-4 mr-2 text-emerald-600" /> Excel
+                    <Button onClick={generateExcel} className="bg-white border border-stone-200 text-stone-700 hover:bg-stone-50 rounded-xl px-3 shadow-sm" disabled={saveMutation.isPending || planFases.length === 0} title="Exportar Excel">
+                        <TableIcon className="w-4 h-4 text-emerald-600" />
                     </Button>
                     
+                    {/* BOTÃO NOVO: DUPLICAR */}
+                    <Button onClick={() => duplicateMutation.mutate()} className="bg-white border border-stone-200 text-stone-700 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-200 rounded-xl px-4 shadow-sm transition-all" disabled={duplicateMutation.isPending} title="Criar uma cópia deste planejamento">
+                        <Copy className="w-4 h-4 mr-2 text-blue-500" /> {duplicateMutation.isPending ? 'Copiando...' : 'Duplicar'}
+                    </Button>
+
                     {/* BOTÕES DE AÇÃO */}
                     <Button onClick={handleSaveCurrent} className="flex-1 sm:flex-none bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-6 shadow-lg shadow-blue-100" disabled={saveMutation.isPending}>
                         <Save className="w-4 h-4 mr-2" /> {saveMutation.isPending ? 'Salvando...' : 'Salvar'}
@@ -520,10 +541,19 @@ export default function Planejamentos() {
                   <div className="bg-stone-50 rounded-[2rem] p-6 border border-stone-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
                       <div>
                           <div className="flex items-center gap-3">
-                              <h2 className="text-xl font-black text-stone-800">{planNome}</h2>
+                              {/* NOVO: CAMPO DE TEXTO EDITÁVEL PARA O NOME DO PLANEJAMENTO */}
+                              <div className="relative group flex items-center">
+                                  <Input 
+                                      value={planNome}
+                                      onChange={(e) => setPlanNome(e.target.value)}
+                                      className="text-xl font-black text-stone-800 bg-transparent border-transparent hover:border-stone-200 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 rounded-lg h-10 px-2 w-full min-w-[250px] shadow-none transition-all"
+                                      title="Clique para renomear este planejamento"
+                                  />
+                                  <Edit2 className="w-4 h-4 text-stone-300 absolute right-3 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity" />
+                              </div>
                               <Badge variant="outline" className="bg-white capitalize text-stone-500">{planCultura}</Badge>
                           </div>
-                          <div className="flex items-center gap-4 mt-3">
+                          <div className="flex items-center gap-4 mt-3 px-2">
                               <p className="text-sm text-stone-500 flex items-center gap-1">
                                   <Settings className="w-4 h-4"/> Ciclo por <b>{cicloLabels[planTipoCiclo]}s</b>
                               </p>
