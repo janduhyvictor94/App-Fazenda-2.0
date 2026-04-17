@@ -268,23 +268,34 @@ export default function Planejamentos() {
 
     planFases.forEach(f => {
         const phaseName = f.nome_etapa ? ` - ${f.nome_etapa.toUpperCase()}` : '';
-        cronogramaRows.push([{ content: `${prefixoEtapa} ${f.momento}${phaseName}`, colSpan: 4, styles: { fillColor: [230, 245, 240], textColor: [6, 78, 59], fontStyle: 'bold', halign: 'left' } }]);
+        cronogramaRows.push([{ content: `${prefixoEtapa} ${f.momento}${phaseName}`, colSpan: 5, styles: { fillColor: [230, 245, 240], textColor: [6, 78, 59], fontStyle: 'bold', halign: 'left' } }]);
         
         if (f.aplicacoes.length === 0) {
-            cronogramaRows.push([{ content: 'Nenhum item cadastrado.', colSpan: 4, styles: { fontStyle: 'italic', halign: 'center', textColor: [150, 150, 150] } }]);
+            cronogramaRows.push([{ content: 'Nenhum item cadastrado.', colSpan: 5, styles: { fontStyle: 'italic', halign: 'center', textColor: [150, 150, 150] } }]);
         } else {
             f.aplicacoes.forEach(app => {
                 if (app.metodo === 'terceirizado') {
-                    cronogramaRows.push([ f.momento.toString(), 'Terceirizado', app.descricao_servico || 'Serviço', `R$ ${parseFloat(app.valor_estimado || 0).toLocaleString('pt-BR')}` ]);
+                    cronogramaRows.push([ f.momento.toString(), 'Terceirizado', app.descricao_servico || 'Serviço', `R$ ${parseFloat(app.valor_estimado || 0).toLocaleString('pt-BR')}`, '-' ]);
                 } else {
                     const insumo = getInsumoDetalhes(app.insumo_id);
-                    cronogramaRows.push([ f.momento.toString(), app.metodo === 'foliar' ? 'Foliar' : 'Adubação', insumo ? insumo.nome : '-', `${app.quantidade} ${app.modo_aplicacao}` ]);
+                    
+                    let usoTotalStr = '-';
+                    const qtd = parseFloat(app.quantidade) || 0;
+                    const plantas = parseInt(planPlantas) || 0;
+                    if (qtd > 0) {
+                        if (app.modo_aplicacao === 'g/planta' && plantas > 0) usoTotalStr = `${((qtd * plantas) / 1000).toLocaleString('pt-BR', {maximumFractionDigits: 2})} kg`;
+                        else if (app.modo_aplicacao === 'kg/area') usoTotalStr = `${qtd.toLocaleString('pt-BR', {maximumFractionDigits: 2})} kg`;
+                        else if (app.modo_aplicacao === 'ml/area') usoTotalStr = `${(qtd / 1000).toLocaleString('pt-BR', {maximumFractionDigits: 2})} L`;
+                        else if (app.modo_aplicacao === 'l/area') usoTotalStr = `${qtd.toLocaleString('pt-BR', {maximumFractionDigits: 2})} L`;
+                    }
+
+                    cronogramaRows.push([ f.momento.toString(), app.metodo === 'foliar' ? 'Foliar' : 'Adubação', insumo ? insumo.nome : '-', `${app.quantidade} ${app.modo_aplicacao}`, usoTotalStr ]);
                 }
             });
         }
     });
     
-    autoTable(doc, { startY: 45, head: [['Etapa', 'Método', 'Insumo/Serviço', 'Dosagem/Valor']], body: cronogramaRows, theme: 'grid', headStyles: { fillColor: [16, 185, 129] }, styles: { fontSize: 9 } });
+    autoTable(doc, { startY: 45, head: [['Etapa', 'Método', 'Insumo/Serviço', 'Dosagem/Valor', 'Uso Total']], body: cronogramaRows, theme: 'grid', headStyles: { fillColor: [16, 185, 129] }, styles: { fontSize: 9 } });
     const finalY = doc.lastAutoTable.finalY || 45;
     
     doc.setFontSize(14); doc.text('Resumo de Compras e Estimativas', 14, finalY + 15);
@@ -311,16 +322,27 @@ export default function Planejamentos() {
     let csv = '\uFEFF'; 
     const prefixoEtapa = planTipoCiclo === 'livre' ? 'Etapa' : cicloLabels[planTipoCiclo];
     csv += `Planejamento:;${planNome}\n`; csv += `Cultura:;${planCultura}\n`; csv += `Ciclo por:;${prefixoEtapa}s\n`; csv += `Qtd de Plantas:;${planPlantas || 0}\n\n`;
-    csv += 'CRONOGRAMA DE APLICACOES\n'; csv += 'Etapa;Nome da Etapa;Metodo;Produto_ou_Servico;Quantidade_ou_Estimativa;Modo_Aplicacao\n';
+    csv += 'CRONOGRAMA DE APLICACOES\n'; csv += 'Etapa;Nome da Etapa;Metodo;Produto_ou_Servico;Quantidade_ou_Estimativa;Modo_Aplicacao;Uso_Total\n';
     planFases.forEach(f => {
-        if (f.aplicacoes.length === 0) { csv += `${prefixoEtapa} ${f.momento};${f.nome_etapa || '-'};-;-;-;-\n`; } 
+        if (f.aplicacoes.length === 0) { csv += `${prefixoEtapa} ${f.momento};${f.nome_etapa || '-'};-;-;-;-;-\n`; } 
         else {
             f.aplicacoes.forEach(app => {
                 if (app.metodo === 'terceirizado') {
-                    csv += `${prefixoEtapa} ${f.momento};${f.nome_etapa || '-'};Terceirizado;${app.descricao_servico || 'Servico'};R$ ${app.valor_estimado || 0};Valor Estimado\n`;
+                    csv += `${prefixoEtapa} ${f.momento};${f.nome_etapa || '-'};Terceirizado;${app.descricao_servico || 'Servico'};R$ ${app.valor_estimado || 0};Valor Estimado;-\n`;
                 } else {
                     const insumo = getInsumoDetalhes(app.insumo_id); const nomeInsumo = insumo ? insumo.nome : '-'; const metodo = app.metodo === 'foliar' ? 'Foliar' : 'Adubacao';
-                    csv += `${prefixoEtapa} ${f.momento};${f.nome_etapa || '-'};${metodo};${nomeInsumo};${app.quantidade};${app.modo_aplicacao}\n`;
+                    
+                    let usoTotalStr = '-';
+                    const qtd = parseFloat(app.quantidade) || 0;
+                    const plantas = parseInt(planPlantas) || 0;
+                    if (qtd > 0) {
+                        if (app.modo_aplicacao === 'g/planta' && plantas > 0) usoTotalStr = `${((qtd * plantas) / 1000).toLocaleString('pt-BR', {maximumFractionDigits: 2})} kg`;
+                        else if (app.modo_aplicacao === 'kg/area') usoTotalStr = `${qtd.toLocaleString('pt-BR', {maximumFractionDigits: 2})} kg`;
+                        else if (app.modo_aplicacao === 'ml/area') usoTotalStr = `${(qtd / 1000).toLocaleString('pt-BR', {maximumFractionDigits: 2})} L`;
+                        else if (app.modo_aplicacao === 'l/area') usoTotalStr = `${qtd.toLocaleString('pt-BR', {maximumFractionDigits: 2})} L`;
+                    }
+
+                    csv += `${prefixoEtapa} ${f.momento};${f.nome_etapa || '-'};${metodo};${nomeInsumo};${app.quantidade};${app.modo_aplicacao};${usoTotalStr}\n`;
                 }
             });
         }
