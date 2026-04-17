@@ -92,7 +92,7 @@ export default function Planejamentos() {
 
   const deleteMutation = useMutation({ mutationFn: async (id) => { const { error } = await supabase.from('planejamentos').delete().eq('id', id); if (error) throw error; }, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['planejamentos'] }); setActivePlanId('novo'); } });
 
-  // AQUI FICA A CORREÇÃO: MATEMÁTICA REAL FRACIONADA PARA ATIVIDADES
+  // AQUI FICA A CORREÇÃO: MATEMÁTICA COM ARREDONDAMENTO PARA EMBALAGEM FECHADA (MATH.CEIL)
   const applyToSafraMutation = useMutation({
     mutationFn: async () => {
         if (!applySafraId || !applyStartDate) throw new Error("Preencha a safra e a data de início.");
@@ -136,12 +136,13 @@ export default function Planejamentos() {
 
                 const tamanhoEmb = parseFloat(insumo.tamanho_embalagem) || 1;
                 const fracaoUso = qtdTotalBase / tamanhoEmb;
-                const valorTotal = fracaoUso * (insumo.preco_unitario || 0);
+                const embalagensFechadas = Math.ceil(fracaoUso); // <--- AQUI ESTÁ A ÚNICA ALTERAÇÃO DESTA FUNÇÃO
+                const valorTotal = embalagensFechadas * (insumo.preco_unitario || 0);
 
                 return {
                     insumo_id: insumo.id,
                     nome: insumo.nome,
-                    quantidade: parseFloat(fracaoUso.toFixed(4)), 
+                    quantidade: embalagensFechadas, 
                     unidade: 'un.', 
                     valor_unitario: insumo.preco_unitario || 0,
                     valor_total: valorTotal,
@@ -175,7 +176,7 @@ export default function Planejamentos() {
     },
     onSuccess: () => {
         setOpenApplyModal(false);
-        alert(`Sucesso! ${planFases.length} atividades foram agendadas na tela de Atividades com os custos proporcionais exatos.`);
+        alert(`Sucesso! ${planFases.length} atividades foram agendadas na tela de Atividades.`);
     },
     onError: (err) => {
         alert("Erro ao gerar: " + err.message);
@@ -584,6 +585,13 @@ export default function Planejamentos() {
                                                   {fase.aplicacoes.map((app) => {
                                                       const config = metodoConfig[app.metodo] || metodoConfig.foliar;
                                                       const Icon = config.icon;
+                                                      
+                                                      const plantas = parseInt(planPlantas) || 0;
+                                                      const qtdFisica = parseFloat(app.quantidade) || 0;
+                                                      const pesoCalculado = (app.modo_aplicacao === 'g/planta' && plantas > 0) 
+                                                        ? (qtdFisica * plantas) / 1000 
+                                                        : 0;
+
                                                       return (
                                                           <div key={app.id} className="flex flex-col sm:flex-row gap-2 sm:items-center p-2 rounded-xl bg-stone-50/50 border border-stone-100 hover:border-stone-200 transition-colors">
                                                               <Select value={app.metodo} onValueChange={(v) => {
@@ -635,10 +643,10 @@ export default function Planejamentos() {
                                                                           </SelectContent>
                                                                       </Select>
 
-                                                                      <div className="flex items-center gap-2 w-full sm:w-[220px]">
+                                                                      <div className="flex items-center gap-2 w-full sm:w-auto">
                                                                           <Input type="number" placeholder="Qtd" value={app.quantidade} onChange={(e) => handleUpdateAplicacao(fase.id, app.id, 'quantidade', e.target.value)} className="w-20 h-9 text-xs rounded-lg bg-white text-center font-bold" />
                                                                           <Select value={app.modo_aplicacao || (app.metodo === 'foliar' ? 'ml/area' : 'g/planta')} onValueChange={(v) => handleUpdateAplicacao(fase.id, app.id, 'modo_aplicacao', v)}>
-                                                                              <SelectTrigger className="flex-1 h-9 text-xs rounded-lg bg-white border-stone-200 font-medium"><SelectValue /></SelectTrigger>
+                                                                              <SelectTrigger className="w-28 h-9 text-xs rounded-lg bg-white font-medium"><SelectValue /></SelectTrigger>
                                                                               <SelectContent>
                                                                                   {app.metodo === 'foliar' ? (
                                                                                       <><SelectItem value="ml/area">ml / área</SelectItem><SelectItem value="l/area">L / área</SelectItem></>
@@ -647,6 +655,14 @@ export default function Planejamentos() {
                                                                                   )}
                                                                               </SelectContent>
                                                                           </Select>
+                                                                          
+                                                                          {pesoCalculado > 0 && (
+                                                                            <div className="flex flex-col items-center justify-center bg-emerald-50 border border-emerald-100 px-3 py-1 rounded-lg min-w-[70px]">
+                                                                              <span className="text-[8px] font-black text-emerald-700 uppercase leading-none mb-1">Uso Total</span>
+                                                                              <span className="text-[11px] font-black text-emerald-600 leading-none">{pesoCalculado.toLocaleString('pt-BR', {minimumFractionDigits: 1})} <span className="text-[8px]">kg</span></span>
+                                                                            </div>
+                                                                          )}
+                                                                          
                                                                           <Button variant="ghost" size="sm" onClick={() => handleRemoveAplicacao(fase.id, app.id)} className="h-8 w-8 p-0 text-stone-300 hover:text-red-500 hover:bg-white shrink-0"><Trash2 className="w-3 h-3"/></Button>
                                                                       </div>
                                                                   </>
