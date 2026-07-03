@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Printer, Wheat, DollarSign, TrendingUp, BarChart3, Package, Filter, Calendar as CalendarIcon, Calculator, Sprout } from 'lucide-react';
 import StatCard from '@/components/ui/StatCard';
 import PageSkeleton from '@/components/ui/PageSkeleton';
-import { format, parseISO, isWithinInterval, startOfYear, endOfYear } from 'date-fns';
+import { format, parseISO, isWithinInterval, startOfYear, endOfYear, startOfMonth, endOfMonth } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, LineChart, Line, CartesianGrid } from 'recharts';
 
@@ -46,10 +46,10 @@ const tipoColheitaLabels = {
 export default function Relatorios({ showMessage }) {
   const [filtroTalhao, setFiltroTalhao] = useState('todos');
   
-  // Datas padrão: Ano Atual
+  // Datas padrão: Mês Atual (o usuário pode trocar livremente pelos campos de data)
   const currentYear = new Date().getFullYear();
-  const [dataInicio, setDataInicio] = useState(`${currentYear}-01-01`);
-  const [dataFim, setDataFim] = useState(`${currentYear}-12-31`);
+  const [dataInicio, setDataInicio] = useState(format(startOfMonth(new Date()), 'yyyy-MM-dd'));
+  const [dataFim, setDataFim] = useState(format(endOfMonth(new Date()), 'yyyy-MM-dd'));
 
   const { data: talhoes = [], isLoading: l1 } = useQuery({
     queryKey: ['talhoes'],
