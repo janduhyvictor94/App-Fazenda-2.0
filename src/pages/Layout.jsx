@@ -36,7 +36,7 @@ export default function Layout({ children, currentPageName }) {
   };
 
   return (
-    <div className="min-h-screen bg-[#FAFAFA] bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-emerald-50/40 via-stone-50 to-white font-sans antialiased text-stone-900 selection:bg-emerald-100 selection:text-emerald-900">
+    <div className="min-h-screen bg-[#FAFAFA] dark:bg-stone-950 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-emerald-50/40 via-stone-50 to-white dark:from-stone-900/30 dark:via-stone-950 dark:to-stone-950 font-sans antialiased text-stone-900 selection:bg-emerald-100 selection:text-emerald-900">
       
       {/* Overlay Mobile */}
       {sidebarOpen && (
