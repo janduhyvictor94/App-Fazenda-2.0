@@ -80,16 +80,22 @@ export default function Talhoes() {
   const deleteMutation = useMutation({
     mutationFn: async (id) => {
       // O erro 409 ao excluir acontece porque outras tabelas referenciam este talhão
-      // (custos, colheitas, atividades, safras, pluviometria, funcionários) via talhao_id,
+      // (custos, colheitas, atividades, pluviometria, funcionários) via talhao_id,
       // e o banco bloqueia a exclusão para não deixar dados órfãos (chave estrangeira).
       // Solução: desvincular (talhao_id = null) esses registros antes de excluir o talhão.
       // O histórico é mantido — passa a aparecer como "Geral/Sede" no lugar do talhão excluído.
-      const tabelasRelacionadas = ['custos', 'colheitas', 'atividades', 'safras', 'pluviometria', 'metas_talhoes', 'funcionarios'];
+      const tabelasParaDesvincular = ['custos', 'colheitas', 'atividades', 'pluviometria', 'metas_talhoes', 'funcionarios'];
 
-      for (const tabela of tabelasRelacionadas) {
+      for (const tabela of tabelasParaDesvincular) {
         const { error: errUnlink } = await supabase.from(tabela).update({ talhao_id: null }).eq('talhao_id', id);
         if (errUnlink) throw errUnlink;
       }
+
+      // "safras" tem talhao_id como NOT NULL (uma safra sempre pertence a um talhão),
+      // então não dá para desvincular. Como nenhuma outra tabela referencia safra_id,
+      // é seguro excluir as safras daquele talhão junto com ele.
+      const { error: errSafras } = await supabase.from('safras').delete().eq('talhao_id', id);
+      if (errSafras) throw errSafras;
 
       const { error } = await supabase.from('talhoes').delete().eq('id', id);
       if (error) throw error;
