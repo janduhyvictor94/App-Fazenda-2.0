@@ -126,3 +126,190 @@
   font-weight: 600 !important;
   font-size: 13px !important;
 }
+
+/* ============================================================
+   PALETAS DE COR
+   O app foi construído com a cor "esmeralda" fixa (bg-emerald-600
+   etc.) espalhada pelas páginas. Em vez de reescrever cada arquivo,
+   redirecionamos essas classes para variáveis CSS (--brand-*), que
+   mudam de valor conforme o atributo data-palette na tag <html>
+   (controlado pelo ThemeContext). Resultado: trocar a paleta muda
+   o app inteiro instantaneamente.
+   ============================================================ */
+:root {
+  --brand-50: #ecfdf5;
+  --brand-100: #d1fae5;
+  --brand-200: #a7f3d0;
+  --brand-400: #34d399;
+  --brand-500: #10b981;
+  --brand-600: #059669;
+  --brand-700: #047857;
+  --brand-800: #065f46;
+  --brand-900: #064e3b;
+}
+
+[data-palette="azul"] {
+  --brand-50: #eff6ff; --brand-100: #dbeafe; --brand-200: #bfdbfe; --brand-400: #60a5fa;
+  --brand-500: #3b82f6; --brand-600: #2563eb; --brand-700: #1d4ed8; --brand-800: #1e40af; --brand-900: #1e3a8a;
+}
+[data-palette="roxo"] {
+  --brand-50: #f5f3ff; --brand-100: #ede9fe; --brand-200: #ddd6fe; --brand-400: #a78bfa;
+  --brand-500: #8b5cf6; --brand-600: #7c3aed; --brand-700: #6d28d9; --brand-800: #5b21b6; --brand-900: #4c1d95;
+}
+[data-palette="ambar"] {
+  --brand-50: #fffbeb; --brand-100: #fef3c7; --brand-200: #fde68a; --brand-400: #fbbf24;
+  --brand-500: #f59e0b; --brand-600: #d97706; --brand-700: #b45309; --brand-800: #92400e; --brand-900: #78350f;
+}
+[data-palette="rosa"] {
+  --brand-50: #fff1f2; --brand-100: #ffe4e6; --brand-200: #fecdd3; --brand-400: #fb7185;
+  --brand-500: #f43f5e; --brand-600: #e11d48; --brand-700: #be123c; --brand-800: #9f1239; --brand-900: #881337;
+}
+[data-palette="ciano"] {
+  --brand-50: #ecfeff; --brand-100: #cffafe; --brand-200: #a5f3fc; --brand-400: #22d3ee;
+  --brand-500: #06b6d4; --brand-600: #0891b2; --brand-700: #0e7490; --brand-800: #155e75; --brand-900: #164e63;
+}
+[data-palette="indigo"] {
+  --brand-50: #eef2ff; --brand-100: #e0e7ff; --brand-200: #c7d2fe; --brand-400: #818cf8;
+  --brand-500: #6366f1; --brand-600: #4f46e5; --brand-700: #4338ca; --brand-800: #3730a3; --brand-900: #312e81;
+}
+[data-palette="lima"] {
+  --brand-50: #f7fee7; --brand-100: #ecfccb; --brand-200: #d9f99d; --brand-400: #a3e635;
+  --brand-500: #84cc16; --brand-600: #65a30d; --brand-700: #4d7c0f; --brand-800: #3f6212; --brand-900: #365314;
+}
+
+/* Fundos */
+.bg-emerald-50, .hover\:bg-emerald-50:hover { background-color: var(--brand-50) !important; }
+.bg-emerald-100 { background-color: var(--brand-100) !important; }
+.bg-emerald-200 { background-color: var(--brand-200) !important; }
+.bg-emerald-400 { background-color: var(--brand-400) !important; }
+.bg-emerald-500 { background-color: var(--brand-500) !important; }
+.bg-emerald-600 { background-color: var(--brand-600) !important; }
+.bg-emerald-700 { background-color: var(--brand-700) !important; }
+.hover\:bg-emerald-700:hover { background-color: var(--brand-700) !important; }
+.bg-emerald-800 { background-color: var(--brand-800) !important; }
+.bg-emerald-900 { background-color: var(--brand-900) !important; }
+
+/* Textos */
+.text-emerald-100 { color: var(--brand-100) !important; }
+.text-emerald-400 { color: var(--brand-400) !important; }
+.text-emerald-500 { color: var(--brand-500) !important; }
+.text-emerald-600 { color: var(--brand-600) !important; }
+.hover\:text-emerald-600:hover { color: var(--brand-600) !important; }
+.text-emerald-700 { color: var(--brand-700) !important; }
+.hover\:text-emerald-700:hover { color: var(--brand-700) !important; }
+.text-emerald-800 { color: var(--brand-800) !important; }
+.text-emerald-900 { color: var(--brand-900) !important; }
+.group:hover .group-hover\:text-emerald-500 { color: var(--brand-500) !important; }
+.group:hover .group-hover\:text-emerald-700 { color: var(--brand-700) !important; }
+
+/* Bordas */
+.border-emerald-100, .hover\:border-emerald-100:hover { border-color: var(--brand-100) !important; }
+.border-emerald-200, .hover\:border-emerald-200:hover { border-color: var(--brand-200) !important; }
+.border-emerald-500, .hover\:border-emerald-500:hover { border-color: var(--brand-500) !important; }
+.border-emerald-600 { border-color: var(--brand-600) !important; }
+.border-emerald-500\/30 { border-color: color-mix(in srgb, var(--brand-500) 30%, transparent) !important; }
+
+/* Anéis de foco */
+.ring-emerald-500, .focus-visible\:ring-emerald-500:focus-visible { --tw-ring-color: var(--brand-500) !important; }
+
+/* Sombras coloridas (botões com "glow") */
+.shadow-emerald-100 { --tw-shadow-color: var(--brand-100) !important; }
+.shadow-emerald-200 { --tw-shadow-color: var(--brand-200) !important; }
+.shadow-emerald-400 { --tw-shadow-color: var(--brand-400) !important; }
+.shadow-emerald-500 { --tw-shadow-color: var(--brand-500) !important; }
+
+/* Gradientes (logo, header) */
+.from-emerald-50 { --tw-gradient-from: var(--brand-50) !important; }
+.from-emerald-500 { --tw-gradient-from: var(--brand-500) !important; }
+.from-emerald-600 { --tw-gradient-from: var(--brand-600) !important; }
+.via-emerald-50 { --tw-gradient-via: var(--brand-50) !important; }
+.to-emerald-100 { --tw-gradient-to: var(--brand-100) !important; }
+.to-emerald-700 { --tw-gradient-to: var(--brand-700) !important; }
+
+/* Seleção de texto (selecionar com o mouse) */
+.selection\:bg-emerald-100::selection, .selection\:bg-emerald-100 *::selection { background-color: var(--brand-100) !important; }
+.selection\:text-emerald-900::selection, .selection\:text-emerald-900 *::selection { color: var(--brand-900) !important; }
+
+/* ============================================================
+   MODO ESCURO
+   Mesma lógica: repinta as classes fixas (bg-white, stone-*) que
+   assumem fundo claro, quando a tag <html> tem a classe "dark".
+   Cores intencionalmente escuras do design original (bg-stone-800/900
+   em botões e cards de destaque) são mantidas como estão.
+   ============================================================ */
+.dark { color-scheme: dark; }
+
+.dark body,
+.dark .bg-\[\#FAFAFA\] {
+  background-color: #0c0a09 !important;
+}
+
+/* Superfícies (cards, headers, sidebar) */
+.dark .bg-white,
+.dark .bg-white\/90,
+.dark .bg-white\/60,
+.dark .hover\:bg-white:hover,
+.dark .focus\:bg-white:focus {
+  background-color: #1c1917 !important;
+}
+.dark .bg-white\/20 { background-color: rgba(28, 25, 23, 0.4) !important; }
+.dark .hover\:bg-white\/30:hover { background-color: rgba(28, 25, 23, 0.5) !important; }
+
+.dark .bg-stone-50,
+.dark .bg-stone-50\/30,
+.dark .bg-stone-50\/50,
+.dark .hover\:bg-stone-50:hover,
+.dark .hover\:bg-stone-50\/50:hover,
+.dark .from-stone-50,
+.dark .via-stone-50 {
+  background-color: #211d1b !important;
+}
+.dark .bg-stone-100,
+.dark .hover\:bg-stone-100:hover {
+  background-color: #3a3532 !important;
+}
+.dark .bg-stone-200,
+.dark .bg-stone-200\/50 {
+  background-color: #524c48 !important;
+}
+
+/* Textos */
+.dark .text-stone-900,
+.dark .hover\:text-stone-900:hover {
+  color: #fafaf9 !important;
+}
+.dark .text-stone-800,
+.dark .hover\:text-stone-800:hover {
+  color: #f5f5f4 !important;
+}
+.dark .text-stone-700,
+.dark .hover\:text-stone-700:hover {
+  color: #e7e5e4 !important;
+}
+.dark .text-stone-600,
+.dark .hover\:text-stone-600:hover {
+  color: #d6d3d1 !important;
+}
+.dark .group:hover .group-hover\:text-stone-600 { color: #d6d3d1 !important; }
+.dark .text-stone-500 { color: #a8a29e !important; }
+.dark .text-stone-400 { color: #85807c !important; }
+.dark .text-stone-300 { color: #57534e !important; }
+.dark .text-stone-200 { color: #44403c !important; }
+
+/* Bordas */
+.dark .border-stone-50,
+.dark .border-stone-100,
+.dark .border-stone-100\/50 {
+  border-color: #2f2b28 !important;
+}
+.dark .border-stone-200,
+.dark .border-stone-200\/50 {
+  border-color: #44403c !important;
+}
+
+/* Sombras suaves (evita "halo" claro em volta dos cards no escuro) */
+.dark .shadow-stone-200\/20,
+.dark .shadow-stone-200\/40,
+.dark .shadow-stone-200\/50 {
+  --tw-shadow-color: rgba(0, 0, 0, 0.5) !important;
+}
