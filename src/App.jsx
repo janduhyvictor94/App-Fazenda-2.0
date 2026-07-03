@@ -4,6 +4,7 @@ import Login from './pages/Login';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabaseClient';
 import { Loader2 } from 'lucide-react';
+import { ThemeProvider } from '@/context/ThemeContext';
 
 const queryClient = new QueryClient();
 
@@ -37,9 +38,11 @@ function App() {
   }
 
   return (
-    <QueryClientProvider client={queryClient}>
-      {!session ? <Login /> : <Pages />}
-    </QueryClientProvider>
+    <ThemeProvider>
+      <QueryClientProvider client={queryClient}>
+        {!session ? <Login /> : <Pages />}
+      </QueryClientProvider>
+    </ThemeProvider>
   );
 }
 
