@@ -6,15 +6,16 @@ import {
   LayoutDashboard, Map, Wheat, Calendar, Package, 
   DollarSign, Users, FileText, ClipboardList,
   Menu, Leaf, LogOut, CloudRain, Sparkles, ChevronRight,
-  Sprout, FileSpreadsheet // IMPORT DAS PLANILHAS
+  Sprout // NOVO IMPORT
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import ThemeSwitcher from '@/components/ui/ThemeSwitcher';
 
 const navigation = [
   { name: 'Dashboard', icon: LayoutDashboard, page: 'Dashboard' },
   // NOVA ABA SAFRAS AQUI, LOGO APÓS O DASHBOARD PARA DESTAQUE
   { name: 'Gestão de Safras', icon: Sprout, page: 'Safras' }, 
-  { name: 'Planejamentos', icon: FileSpreadsheet, page: 'Planejamentos' }, // NOVA ABA PLANILHAS AQUI
+  
   { name: 'Talhões', icon: Map, page: 'Talhoes' },
   { name: 'Colheitas', icon: Wheat, page: 'Colheitas' },
   { name: 'Atividades', icon: ClipboardList, page: 'Atividades' },
@@ -115,6 +116,7 @@ export default function Layout({ children, currentPageName }) {
             </div>
 
             <div className="flex items-center gap-4">
+              <ThemeSwitcher />
               <div className="hidden sm:flex flex-col items-end">
                 <p className="text-sm font-bold text-stone-800">Administrador</p>
                 <div className="flex items-center gap-1.5">
