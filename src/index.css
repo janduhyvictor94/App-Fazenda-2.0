@@ -313,3 +313,23 @@
 .dark .shadow-stone-200\/50 {
   --tw-shadow-color: rgba(0, 0, 0, 0.5) !important;
 }
+
+/* Realces coloridos translúcidos (ex: coluna "Custo Total" em Relatórios, linhas de alerta)
+   Sem isso, um tom claro em baixa opacidade sobre fundo escuro vira um cinza sujo. */
+.dark .bg-red-50\/50,
+.dark .bg-red-50\/30 {
+  background-color: rgba(239, 68, 68, 0.12) !important;
+}
+.dark .bg-red-100\/50 {
+  background-color: rgba(239, 68, 68, 0.18) !important;
+}
+.dark .border-red-100 {
+  border-color: rgba(239, 68, 68, 0.3) !important;
+}
+.dark .bg-blue-50\/30,
+.dark .hover\:bg-blue-50\/60:hover {
+  background-color: rgba(59, 130, 246, 0.12) !important;
+}
+.dark .border-blue-100\/50 {
+  border-color: rgba(59, 130, 246, 0.3) !important;
+}
