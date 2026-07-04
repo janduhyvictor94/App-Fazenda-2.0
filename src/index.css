@@ -314,6 +314,28 @@
   --tw-shadow-color: rgba(0, 0, 0, 0.5) !important;
 }
 
+/* Gráficos (Recharts) — os tooltips usam "contentStyle" (estilo inline do React),
+   então não são alcançados pelas classes normais. Corrigido aqui via !important,
+   que consegue sobrescrever estilo inline. Cobre Dashboard, Relatórios etc. */
+.dark .recharts-default-tooltip {
+  background-color: #1c1917 !important;
+  border-color: #44403c !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5) !important;
+}
+.dark .recharts-tooltip-label,
+.dark .recharts-tooltip-item {
+  color: #f5f5f4 !important;
+}
+.dark .recharts-tooltip-cursor {
+  fill: rgba(255, 255, 255, 0.04) !important;
+}
+.dark .recharts-cartesian-axis-tick text {
+  fill: #78716c !important;
+}
+.dark .recharts-cartesian-grid line {
+  stroke: #292524 !important;
+}
+
 /* Realces coloridos translúcidos (ex: coluna "Custo Total" em Relatórios, linhas de alerta)
    Sem isso, um tom claro em baixa opacidade sobre fundo escuro vira um cinza sujo. */
 .dark .bg-red-50\/50,
