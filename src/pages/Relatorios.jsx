@@ -45,11 +45,34 @@ const tipoColheitaLabels = {
 
 export default function Relatorios({ showMessage }) {
   const [filtroTalhao, setFiltroTalhao] = useState('todos');
-  
+
+  // Modo de visualização: 'periodo' (padrão, mostra o mês atual), 'geral' (histórico completo) ou 'talhao' (foco em 1 talhão)
+  const [modoRelatorio, setModoRelatorio] = useState('periodo');
+
   // Datas padrão: Mês Atual (o usuário pode trocar livremente pelos campos de data)
   const currentYear = new Date().getFullYear();
   const [dataInicio, setDataInicio] = useState(format(startOfMonth(new Date()), 'yyyy-MM-dd'));
   const [dataFim, setDataFim] = useState(format(endOfMonth(new Date()), 'yyyy-MM-dd'));
+
+  // Intervalo "sem limite", usado nos modos Geral e Por Talhão (não restringem por data)
+  const DATA_INICIO_TUDO = '2000-01-01';
+  const DATA_FIM_TUDO = '2100-12-31';
+
+  const handleMudarModo = (modo) => {
+    setModoRelatorio(modo);
+    if (modo === 'geral') {
+      setFiltroTalhao('todos');
+      setDataInicio(DATA_INICIO_TUDO);
+      setDataFim(DATA_FIM_TUDO);
+    } else if (modo === 'talhao') {
+      setDataInicio(DATA_INICIO_TUDO);
+      setDataFim(DATA_FIM_TUDO);
+    } else if (modo === 'periodo') {
+      setFiltroTalhao('todos');
+      setDataInicio(format(startOfMonth(new Date()), 'yyyy-MM-dd'));
+      setDataFim(format(endOfMonth(new Date()), 'yyyy-MM-dd'));
+    }
+  };
 
   const { data: talhoes = [], isLoading: l1 } = useQuery({
     queryKey: ['talhoes'],
@@ -252,32 +275,62 @@ export default function Relatorios({ showMessage }) {
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
       {/* Header */}
-      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 bg-white p-4 rounded-[1.5rem] border border-stone-100 shadow-sm">
-        <div>
-          <h1 className="text-2xl font-bold text-stone-900 tracking-tight">Relatórios Gerenciais</h1>
-          <p className="text-stone-500 font-medium">Análise de safra, custos e resultados</p>
+      <div className="flex flex-col gap-4 bg-white p-4 rounded-[1.5rem] border border-stone-100 shadow-sm">
+        <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-stone-900 tracking-tight">Relatórios Gerenciais</h1>
+            <p className="text-stone-500 font-medium">Análise de safra, custos e resultados</p>
+          </div>
+          <div className="flex flex-wrap gap-2 items-center">
+            {/* Toggle de modo: Geral / Por Talhão / Por Período */}
+            <div className="flex items-center gap-1 bg-stone-50 p-1 rounded-xl border border-stone-200">
+              <button
+                onClick={() => handleMudarModo('geral')}
+                className={`px-3 h-8 rounded-lg text-sm font-bold transition-all ${modoRelatorio === 'geral' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}
+              >
+                Geral
+              </button>
+              <button
+                onClick={() => handleMudarModo('talhao')}
+                className={`px-3 h-8 rounded-lg text-sm font-bold transition-all ${modoRelatorio === 'talhao' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}
+              >
+                Por Talhão
+              </button>
+              <button
+                onClick={() => handleMudarModo('periodo')}
+                className={`px-3 h-8 rounded-lg text-sm font-bold transition-all ${modoRelatorio === 'periodo' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}
+              >
+                Por Período
+              </button>
+            </div>
+            <Button onClick={() => window.print()} variant="outline" className="rounded-xl border-stone-200 text-stone-600 hover:bg-stone-50 h-10 active:scale-95 transition-all">
+              <Printer className="w-4 h-4 mr-2" /> Imprimir
+            </Button>
+          </div>
         </div>
-        <div className="flex flex-wrap gap-2 items-center">
-          <div className="flex items-center gap-2 bg-stone-50 p-1 rounded-xl border border-stone-200">
+
+        {/* Controle específico do modo selecionado */}
+        {modoRelatorio === 'talhao' && (
+          <div className="flex items-center gap-2 bg-stone-50 p-1 rounded-xl border border-stone-200 w-fit">
              <Filter className="w-4 h-4 text-stone-400 ml-2" />
              <Select value={filtroTalhao} onValueChange={setFiltroTalhao}>
-                <SelectTrigger className="w-40 border-none bg-transparent shadow-none h-8 font-medium text-stone-700"><SelectValue placeholder="Talhão" /></SelectTrigger>
+                <SelectTrigger className="w-48 border-none bg-transparent shadow-none h-8 font-medium text-stone-700"><SelectValue placeholder="Talhão" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="todos">Todos os Talhões</SelectItem>
+                  <SelectItem value="todos">Selecione um talhão...</SelectItem>
                   {talhoes.map((t) => <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>)}
                 </SelectContent>
               </Select>
           </div>
-          <div className="flex items-center gap-2 bg-stone-50 p-1 rounded-xl border border-stone-200">
+        )}
+
+        {modoRelatorio === 'periodo' && (
+          <div className="flex items-center gap-2 bg-stone-50 p-1 rounded-xl border border-stone-200 w-fit">
              <CalendarIcon className="w-4 h-4 text-stone-400 ml-2" />
              <Input type="date" value={dataInicio} onChange={(e) => setDataInicio(e.target.value)} className="w-32 border-none bg-transparent shadow-none h-8 p-0 text-sm font-medium text-stone-700" />
              <span className="text-stone-400">-</span>
              <Input type="date" value={dataFim} onChange={(e) => setDataFim(e.target.value)} className="w-32 border-none bg-transparent shadow-none h-8 p-0 text-sm font-medium text-stone-700" />
           </div>
-          <Button onClick={() => window.print()} variant="outline" className="rounded-xl border-stone-200 text-stone-600 hover:bg-stone-50 h-10 active:scale-95 transition-all">
-            <Printer className="w-4 h-4 mr-2" /> Imprimir
-          </Button>
-        </div>
+        )}
       </div>
 
       {/* KPI Cards (Respeitam filtro visual de talhão E data E STATUS PAGO) */}
