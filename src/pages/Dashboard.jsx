@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { 
   LayoutDashboard, Map, Wheat, TrendingUp, 
-  DollarSign, PieChart, Activity, Wallet, Sprout, Calendar, ArrowRight, Tractor, CheckCircle2, BarChart2, X, Copy, FileText 
+  DollarSign, PieChart, Activity, Wallet, Sprout, Calendar, ArrowRight, Tractor, CheckCircle2, BarChart2, X, Copy, FileText, Bell 
 } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
@@ -17,8 +17,10 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { format, subMonths, startOfMonth, endOfMonth, eachMonthOfInterval, isAfter, parseISO, isBefore } from 'date-fns';
+import { format, subMonths, startOfMonth, endOfMonth, eachMonthOfInterval, isAfter, parseISO, isBefore, isSameMonth, addMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { Link } from 'react-router-dom';
+import { calcularFolha } from './Funcionarios';
 
 const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6'];
 
@@ -355,6 +357,37 @@ export default function Dashboard() {
   const lucroReal = receitaTotal - custoTotalGlobal;
   const produtividadeMedia = areaTotalExibida > 0 ? (totalColheitaTon / areaTotalExibida) : 0;
 
+  // --- LEMBRETE DE PAGAMENTO DE FOLHA (mesma lógica de Funcionarios.jsx) ---
+  // Salário do mês anterior vence no 5º dia útil do mês atual (ex: folha de maio vence em junho)
+  const lembretesFolha = useMemo(() => {
+    const hoje = new Date();
+    const fimMesAtual = endOfMonth(hoje);
+    const limiteAntigo = addMonths(fimMesAtual, -3);
+    let count = 0;
+    let total = 0;
+
+    funcionarios.filter(f => f.status === 'ativo').forEach(func => {
+      const dataCorte = func.data_inicio_contabil ? parseISO(func.data_inicio_contabil) : null;
+      const eventos = calcularFolha(func).filter(e => e.tipo === 'Salário Mensal' && !isAfter(e.data_pagamento, fimMesAtual));
+
+      eventos.forEach(evt => {
+        if (dataCorte && isBefore(evt.data_pagamento, dataCorte)) return;
+        if (isBefore(evt.data_pagamento, limiteAntigo)) return;
+
+        const custo = custos.find(c =>
+          c.categoria === 'funcionario' && c.data &&
+          isSameMonth(parseISO(c.data), evt.data_pagamento) &&
+          c.descricao?.includes(func.nome) && c.descricao?.includes(evt.tipo)
+        );
+
+        const pago = custo && custo.status_pagamento === 'pago';
+        if (!pago) { count++; total += evt.valor; }
+      });
+    });
+
+    return { count, total };
+  }, [funcionarios, custos]);
+
   if (l1 || l2 || l3 || l4 || l5 || l6) return <PageSkeleton />;
 
   return (
@@ -446,6 +479,19 @@ export default function Dashboard() {
             </div>
         </DialogContent>
       </Dialog>
+
+      {lembretesFolha.count > 0 && (
+        <Link to="/Funcionarios" className="flex items-center justify-between gap-4 bg-amber-50 border border-amber-200 rounded-[1.5rem] p-4 hover:bg-amber-100 transition-colors">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-amber-100 rounded-xl"><Bell className="w-5 h-5 text-amber-700" /></div>
+            <div>
+              <p className="font-bold text-amber-900 text-sm">Lembrete: {lembretesFolha.count} pagamento{lembretesFolha.count > 1 ? 's' : ''} de folha pendente{lembretesFolha.count > 1 ? 's' : ''}</p>
+              <p className="text-xs text-amber-700">Total a lançar/pagar: R$ {lembretesFolha.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} — clique para ir em Funcionários</p>
+            </div>
+          </div>
+          <ArrowRight className="w-4 h-4 text-amber-600 flex-shrink-0" />
+        </Link>
+      )}
 
       {/* Header + BARRA DE FILTROS */}
       <div className="flex flex-col gap-4 bg-white p-6 rounded-[2rem] border border-stone-100 shadow-sm">
