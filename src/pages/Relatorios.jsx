@@ -149,10 +149,15 @@ export default function Relatorios({ showMessage }) {
   // --- LÓGICA DE SAFRA & CUSTOS (Rateio Real - SOMENTE PAGOS) ---
   
   const areaTotalFazenda = talhoes.reduce((acc, t) => acc + (Number(t.area_hectares) || 0), 0);
-  
+
+  // Um custo é "Geral da Fazenda" (entra no rateio) se não tiver talhão definido.
+  // Checagem defensiva: cobre tanto talhao_id vazio/null quanto valores salvos como texto
+  // "geral"/"todos"/"null" (mesmo padrão usado em Dashboard.jsx e Talhoes.jsx).
+  const isCustoGeral = (c) => !c.talhao_id || String(c.talhao_id).trim() === '' || String(c.talhao_id).toLowerCase() === 'geral' || String(c.talhao_id).toLowerCase() === 'todos' || String(c.talhao_id).toLowerCase() === 'null';
+
   // Custos Gerais (Sem talhão definido) -> SÓ PAGOS
-  // Isso pega folha de pagamento geral, energia, etc., que estão como 'pago' e sem talhão
-  const custosGeraisPeriodo = custosPagosNoPeriodo.filter(c => !c.talhao_id).reduce((acc, c) => acc + (Number(c.valor) || 0), 0);
+  // Isso pega folha de pagamento geral, energia, água, etc., que estão como 'pago' e sem talhão
+  const custosGeraisPeriodo = custosPagosNoPeriodo.filter(isCustoGeral).reduce((acc, c) => acc + (Number(c.valor) || 0), 0);
   
   // Rateio por Hectare
   const rateioPorHa = areaTotalFazenda > 0 ? custosGeraisPeriodo / areaTotalFazenda : 0;
