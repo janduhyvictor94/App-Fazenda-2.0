@@ -10,10 +10,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, Edit, Trash2, Users, Phone, Calendar, Briefcase, User, Calculator, TrendingUp, CalendarRange, Printer, FileText, Lock } from 'lucide-react';
+import { Plus, Edit, Trash2, Users, Phone, Calendar, Briefcase, User, Calculator, TrendingUp, CalendarRange, Printer, FileText, Lock, Bell } from 'lucide-react';
 import EmptyState from '@/components/ui/EmptyState';
 import StatCard from '@/components/ui/StatCard';
-import { format, addMonths, startOfMonth, isWeekend, isBefore, differenceInMonths, setDate, isSameMonth, parseISO, startOfDay, endOfDay, isAfter, isValid } from 'date-fns';
+import { format, addMonths, startOfMonth, endOfMonth, isWeekend, isBefore, differenceInMonths, setDate, isSameMonth, parseISO, startOfDay, endOfDay, isAfter, isValid } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 const statusLabels = {
@@ -73,7 +73,7 @@ const getQuintoDiaUtil = (date) => {
   return d;
 };
 
-const calcularFolha = (funcionario) => {
+export const calcularFolha = (funcionario) => {
   if (!funcionario.data_admissao || !funcionario.salario) return [];
   const admissao = new Date(funcionario.data_admissao + 'T12:00:00');
   const hoje = new Date();
@@ -374,6 +374,38 @@ export default function Funcionarios() {
 
   const totalGeralPeriodo = relatorioGeral.filter(e => e.status !== 'HISTÓRICO').reduce((acc, curr) => acc + curr.valor, 0);
   const custoTotalPeriodoInd = eventosFolhaIndividual.filter(e => e.status !== 'ignorado').reduce((acc, e) => acc + e.valor, 0);
+
+  // --- LEMBRETE DE PAGAMENTO DE FOLHA ---
+  // Todo mês, o salário do mês anterior vence no 5º dia útil (ex: folha de maio vence em junho).
+  // Aqui listamos quem ainda não foi lançado como "pago" até o mês atual, pra virar um lembrete visual.
+  const lembretesFolha = useMemo(() => {
+    const hoje = new Date();
+    const fimMesAtual = endOfMonth(hoje);
+    const limiteAntigo = addMonths(fimMesAtual, -3); // ignora pendências de mais de 3 meses atrás (provavelmente já tratadas/históricas)
+    let pendentes = [];
+
+    funcionarios.filter(f => f.status === 'ativo').forEach(func => {
+      const dataCorte = func.data_inicio_contabil ? parseISO(func.data_inicio_contabil) : null;
+      const eventos = calcularFolha(func).filter(e => e.tipo === 'Salário Mensal' && !isAfter(e.data_pagamento, fimMesAtual));
+
+      eventos.forEach(evt => {
+        if (dataCorte && isBefore(evt.data_pagamento, dataCorte)) return; // histórico antigo, ignora
+        if (isBefore(evt.data_pagamento, limiteAntigo)) return; // muito antigo, ignora
+
+        const custo = todosCustosFuncionarios.find(c => {
+          const dataCusto = parseISO(c.data);
+          return isSameMonth(dataCusto, evt.data_pagamento) && c.descricao.includes(func.nome) && c.descricao.includes(evt.tipo);
+        });
+
+        const pago = custo && custo.status_pagamento === 'pago';
+        if (!pago) pendentes.push({ funcionario: func, evento: evt, custo });
+      });
+    });
+
+    return pendentes.sort((a, b) => a.evento.data_pagamento - b.evento.data_pagamento);
+  }, [funcionarios, todosCustosFuncionarios]);
+
+  const totalLembretes = lembretesFolha.reduce((acc, item) => acc + item.evento.valor, 0);
   
   // Totais Cards (Ignorando históricos)
   const eventosValidosInd = eventosFolhaIndividual.filter(e => e.status !== 'ignorado');
@@ -419,6 +451,32 @@ export default function Funcionarios() {
                 </div>
             )}
         </div>, document.body
+      )}
+
+      {lembretesFolha.length > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-[1.5rem] p-4 space-y-3 no-print">
+          <div className="flex items-center gap-2 font-bold text-amber-800">
+            <Bell className="w-5 h-5" />
+            Lembrete: {lembretesFolha.length} pagamento{lembretesFolha.length > 1 ? 's' : ''} de folha pendente{lembretesFolha.length > 1 ? 's' : ''}
+            <span className="ml-auto text-sm font-bold text-amber-700">Total: R$ {totalLembretes.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+          </div>
+          <div className="space-y-2">
+            {lembretesFolha.map((item, idx) => (
+              <div key={idx} className="flex items-center justify-between bg-white rounded-xl p-3 border border-amber-100">
+                <div>
+                  <p className="font-bold text-stone-800 text-sm">{item.funcionario.nome}</p>
+                  <p className="text-xs text-stone-500">Ref: {item.evento.referencia} · Vencimento: {format(item.evento.data_pagamento, 'dd/MM/yyyy')}</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="font-bold text-amber-700 text-sm">R$ {item.evento.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                  <Button size="sm" className="rounded-lg bg-amber-600 hover:bg-amber-700 text-white" onClick={() => { setSelectedFuncionario(item.funcionario); setFolhaOpen(true); }}>
+                    Ver / Lançar
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
 
       <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 bg-white p-4 rounded-[1.5rem] border border-stone-100 shadow-sm no-print">
