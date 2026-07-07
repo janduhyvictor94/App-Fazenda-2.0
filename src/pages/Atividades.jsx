@@ -142,23 +142,54 @@ export default function Atividades() {
       const payload = activities.map(a => { const { talhao_nome, tempId, ...rest } = a; if (rest.valor_terceirizado === '') rest.valor_terceirizado = null; return rest; });
       const { error } = await supabase.from('atividades').insert(payload); if (error) throw error;
     },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['atividades'] }); generateSummaryText(activityQueue); setActivityQueue([]); setOpen(false); setSummaryOpen(true); }
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['atividades'] }); generateSummaryText(activityQueue); setActivityQueue([]); setOpen(false); setSummaryOpen(true); },
+    onError: (error) => { alert(`Não foi possível salvar a programação.\n\nMotivo: ${error.message || 'Erro desconhecido'}`); console.error('Erro ao salvar atividades:', error); }
   });
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }) => {
       const payload = { ...data }; if (payload.valor_terceirizado === '') payload.valor_terceirizado = null;
       const { data: result, error } = await supabase.from('atividades').update(payload).eq('id', id).select(); if (error) throw error; return result;
-    }, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['atividades'] }); resetForm(); }
+    }, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['atividades'] }); resetForm(); },
+    onError: (error) => { alert(`Não foi possível salvar a atividade.\n\nMotivo: ${error.message || 'Erro desconhecido'}`); console.error('Erro ao atualizar atividade:', error); }
   });
 
-  const deleteMutation = useMutation({ mutationFn: async (id) => { const { error } = await supabase.from('atividades').delete().eq('id', id); if (error) throw error; }, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['atividades'] }); } });
-  const createTipoMutation = useMutation({ mutationFn: async (data) => { const { data: result, error } = await supabase.from('tipos_atividade').insert(data).select(); if (error) throw error; return result; }, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['tipos-atividade'] }); setNovoTipo(''); } });
-  const deleteTipoMutation = useMutation({ mutationFn: async (id) => { const { error } = await supabase.from('tipos_atividade').delete().eq('id', id); if (error) throw error; }, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['tipos-atividade'] }); } });
+  const deleteMutation = useMutation({
+    mutationFn: async (id) => { const { error } = await supabase.from('atividades').delete().eq('id', id); if (error) throw error; },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['atividades'] }); },
+    onError: (error) => { alert(`Não foi possível excluir a atividade.\n\nMotivo: ${error.message || 'Erro desconhecido'}`); console.error('Erro ao excluir atividade:', error); }
+  });
+  const createTipoMutation = useMutation({
+    mutationFn: async (data) => { const { data: result, error } = await supabase.from('tipos_atividade').insert(data).select(); if (error) throw error; return result; },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['tipos-atividade'] }); setNovoTipo(''); },
+    onError: (error) => { alert(`Não foi possível criar o tipo.\n\nMotivo: ${error.message || 'Erro desconhecido'}`); console.error('Erro ao criar tipo:', error); }
+  });
+  const deleteTipoMutation = useMutation({
+    mutationFn: async (id) => { const { error } = await supabase.from('tipos_atividade').delete().eq('id', id); if (error) throw error; },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['tipos-atividade'] }); },
+    onError: (error) => { alert(`Não foi possível excluir o tipo.\n\nMotivo: ${error.message || 'Erro desconhecido'}`); console.error('Erro ao excluir tipo:', error); }
+  });
 
   const handleAddToQueue = (e) => {
       e.preventDefault();
       if (!formData.talhao_id || !formData.tipo || !formData.data_programada) return alert("Preencha Válvula, Tipo e Data para adicionar.");
+
+      // Se estiver dentro de uma safra específica, avisa se a data escolhida cair fora do período dela
+      // (a atividade será salva normalmente, mas não vai aparecer neste filtro por safra)
+      if (filtroSafra !== 'todas') {
+          const safraAtual = safras.find(s => s.id === filtroSafra);
+          if (safraAtual) {
+              const inicio = safraAtual.data_inicio || '2000-01-01';
+              const fim = safraAtual.data_fim || '2099-12-31';
+              if (formData.data_programada < inicio || formData.data_programada > fim) {
+                  const dataInicioFmt = format(parseISO(inicio), 'dd/MM/yyyy');
+                  const dataFimFmt = safraAtual.data_fim ? format(parseISO(fim), 'dd/MM/yyyy') : 'em aberto';
+                  const confirmar = confirm(`A data escolhida (${format(parseISO(formData.data_programada), 'dd/MM/yyyy')}) está fora do período desta safra (${dataInicioFmt} até ${dataFimFmt}).\n\nA atividade será salva normalmente, mas NÃO vai aparecer neste filtro "${safraAtual.nome}" — só em "Todas as Atividades".\n\nDeseja continuar mesmo assim?`);
+                  if (!confirmar) return;
+              }
+          }
+      }
+
       const talhaoNome = talhoes.find(t => String(t.id) === String(formData.talhao_id))?.nome || 'Válvula';
       const custoCalc = calcularCustoTotal();
       const newItem = { ...formData, valor_terceirizado: formData.valor_terceirizado ? parseFloat(formData.valor_terceirizado) : null, custo_total: custoCalc, data_realizada: formData.status === 'concluida' ? (formData.data_realizada || format(new Date(), 'yyyy-MM-dd')) : null, talhao_nome: talhaoNome, tempId: Date.now() };
