@@ -117,7 +117,12 @@ export default function Relatorios({ showMessage }) {
   // 1. Filtragem Base por Data
   const colheitasNoPeriodo = filtrarPorPeriodo(colheitas, 'data');
   const custosNoPeriodo = filtrarPorPeriodo(custos, 'data');
-  const atividadesNoPeriodo = filtrarPorPeriodo(atividades.filter(a => a.status === 'concluida'), 'data_programada');
+  // Etapas do modo "Livre" (Planejamentos) só ganham data quando concluídas (data_realizada).
+  // Aqui garantimos que essa data conte para o período, mesmo sem data_programada original.
+  const atividadesConcluidasComData = atividades
+    .filter(a => a.status === 'concluida')
+    .map(a => ({ ...a, data_programada: a.data_realizada || a.data_programada }));
+  const atividadesNoPeriodo = filtrarPorPeriodo(atividadesConcluidasComData, 'data_programada');
 
   // 2. Filtro de "PAGO" (Crucial para o Relatório Real)
   // Criamos uma lista específica de custos que foram efetivamente pagos neste período
