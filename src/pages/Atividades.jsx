@@ -51,6 +51,10 @@ export default function Atividades() {
   const [editingAtividade, setEditingAtividade] = useState(null);
   const [activityQueue, setActivityQueue] = useState([]);
 
+  const [concludeModalOpen, setConcludeModalOpen] = useState(false);
+  const [activityToConclude, setActivityToConclude] = useState(null);
+  const [dataConclusaoInput, setDataConclusaoInput] = useState(format(new Date(), 'yyyy-MM-dd'));
+
   const [filtroTalhao, setFiltroTalhao] = useState('todos');
   const [filtroStatus, setFiltroStatus] = useState('todos');
   const [filtroSafra, setFiltroSafra] = useState('todas'); 
@@ -192,7 +196,8 @@ export default function Atividades() {
 
       const talhaoNome = talhoes.find(t => String(t.id) === String(formData.talhao_id))?.nome || 'Válvula';
       const custoCalc = calcularCustoTotal();
-      const newItem = { ...formData, valor_terceirizado: formData.valor_terceirizado ? parseFloat(formData.valor_terceirizado) : null, custo_total: custoCalc, data_realizada: formData.status === 'concluida' ? (formData.data_realizada || format(new Date(), 'yyyy-MM-dd')) : null, talhao_nome: talhaoNome, tempId: Date.now() };
+      const safraIdAtual = filtroSafra !== 'todas' ? filtroSafra : null;
+      const newItem = { ...formData, safra_id: safraIdAtual, valor_terceirizado: formData.valor_terceirizado ? parseFloat(formData.valor_terceirizado) : null, custo_total: custoCalc, data_realizada: formData.status === 'concluida' ? (formData.data_realizada || format(new Date(), 'yyyy-MM-dd')) : null, talhao_nome: talhaoNome, tempId: Date.now() };
       setActivityQueue([...activityQueue, newItem]);
       setFormData(prev => ({ ...prev, talhao_id: formData.talhao_id, observacoes: '', insumos_utilizados: [], custo_total: 0, terceirizada: false, valor_terceirizado: '' }));
   };
@@ -223,6 +228,16 @@ export default function Atividades() {
     if (atividade.insumos_utilizados && atividade.insumos_utilizados.length > 0) { text += `\n📦 *Insumos:*`; atividade.insumos_utilizados.forEach(i => { text += `\n   ▪ ${i.nome}: ${i.quantidade} ${i.unidade}` + (i.metodo_aplicacao ? ` (${i.metodo_aplicacao})` : ''); }); text += `\n`; }
     if (atividade.observacoes) text += `\n📝 *Observações:*\n${atividade.observacoes}`;
     setSummaryText(text); setSummaryOpen(true);
+  };
+
+  const handleConfirmarConclusao = () => {
+      if (!activityToConclude || !dataConclusaoInput) return alert("Escolha a data em que a atividade foi realizada.");
+      updateMutation.mutate({
+          id: activityToConclude.id,
+          data: { ...activityToConclude, status: 'concluida', data_realizada: dataConclusaoInput }
+      });
+      setConcludeModalOpen(false);
+      setActivityToConclude(null);
   };
 
   const copyToClipboard = () => { navigator.clipboard.writeText(summaryText); alert("Texto copiado! Agora cole no WhatsApp."); };
@@ -272,6 +287,10 @@ export default function Atividades() {
     if (filtroTalhao !== 'todos' && String(a.talhao_id) !== String(filtroTalhao)) return false;
     if (filtroStatus !== 'todos' && a.status !== filtroStatus) return false;
     if (filtroSafra !== 'todas') {
+        // Se a atividade já tem safra_id gravado, usa isso direto (mais confiável, funciona mesmo sem data)
+        if (a.safra_id) return String(a.safra_id) === String(filtroSafra);
+
+        // Fallback para atividades antigas, sem safra_id: cai de volta na checagem por data
         const safraSelecionada = safras.find(s => s.id === filtroSafra);
         if (safraSelecionada) {
             if (String(a.talhao_id) !== String(safraSelecionada.talhao_id)) return false;
@@ -282,6 +301,17 @@ export default function Atividades() {
         }
     }
     return true;
+  }).sort((a, b) => {
+    // Etapas "livres" (sem data programada nem real ainda) sobem pro topo, ordenadas pela sequência da etapa.
+    // As demais mantêm a ordem por data efetiva (real, se já concluída; senão a programada) — mais recente primeiro.
+    const dataEfetivaA = a.data_realizada || a.data_programada;
+    const dataEfetivaB = b.data_realizada || b.data_programada;
+    const aSemData = !dataEfetivaA;
+    const bSemData = !dataEfetivaB;
+    if (aSemData && bSemData) return (a.ordem_etapa ?? 0) - (b.ordem_etapa ?? 0);
+    if (aSemData) return -1;
+    if (bSemData) return 1;
+    return new Date(dataEfetivaB) - new Date(dataEfetivaA);
   });
 
   const getTalhaoNome = (id) => talhoes.find(t => String(t.id) === String(id))?.nome || '-';
@@ -450,6 +480,30 @@ export default function Atividades() {
                     </Card>
                 ))}
             </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={concludeModalOpen} onOpenChange={setConcludeModalOpen}>
+        <DialogContent className="sm:max-w-sm rounded-[2rem]">
+            <DialogHeader>
+                <DialogTitle className="flex items-center gap-2"><CheckCircle2 className="w-5 h-5 text-emerald-600" /> Concluir Atividade</DialogTitle>
+                <DialogDescription>Escolha a data em que isso realmente aconteceu. É essa data que vai jogar o custo no mês certo do financeiro.</DialogDescription>
+            </DialogHeader>
+            {activityToConclude && (
+                <div className="space-y-4 pt-2">
+                    <div className="bg-stone-50 p-3 rounded-xl border border-stone-100">
+                        <p className="font-bold text-stone-800 text-sm">{activityToConclude.tipo === 'outro' ? activityToConclude.tipo_personalizado : getTipoLabel(activityToConclude.tipo)}</p>
+                        <p className="text-xs text-stone-500">{getTalhaoNome(activityToConclude.talhao_id)} · Custo: R$ {(activityToConclude.custo_total || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                    </div>
+                    <div className="space-y-2">
+                        <Label>Data Real de Realização</Label>
+                        <Input type="date" value={dataConclusaoInput} onChange={(e) => setDataConclusaoInput(e.target.value)} className="rounded-xl" />
+                    </div>
+                    <Button onClick={handleConfirmarConclusao} disabled={updateMutation.isPending} className="w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-11">
+                        {updateMutation.isPending ? 'Salvando...' : 'Confirmar Conclusão'}
+                    </Button>
+                </div>
+            )}
         </DialogContent>
       </Dialog>
 
@@ -646,7 +700,11 @@ export default function Atividades() {
                 {atividadesFiltradas.map((atividade) => (
                   <TableRow key={atividade.id} className="hover:bg-stone-50 transition-colors">
                     <TableCell className="pl-6 font-medium text-stone-600">
-                        {atividade.data_programada ? format(new Date(atividade.data_programada + 'T12:00:00'), 'dd/MM/yy') : '-'}
+                        {(() => {
+                            const dataExibir = atividade.data_realizada || atividade.data_programada;
+                            if (!dataExibir) return <span className="text-stone-300 italic text-xs">Sem data</span>;
+                            return format(new Date(dataExibir + 'T12:00:00'), 'dd/MM/yy');
+                        })()}
                     </TableCell>
                     <TableCell>
                         <div className="font-bold text-stone-800">{atividade.tipo === 'outro' ? atividade.tipo_personalizado : getTipoLabel(atividade.tipo)}</div>
@@ -661,7 +719,7 @@ export default function Atividades() {
                     <TableCell className="text-right pr-6">
                       <div className="flex justify-end gap-1">
                         {atividade.status !== 'concluida' && (
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-emerald-500 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg" onClick={() => updateMutation.mutate({ id: atividade.id, data: { ...atividade, status: 'concluida', data_realizada: format(new Date(), 'yyyy-MM-dd') } })} title="Concluir">
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-emerald-500 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg" onClick={() => { setActivityToConclude(atividade); setDataConclusaoInput(format(new Date(), 'yyyy-MM-dd')); setConcludeModalOpen(true); }} title="Concluir">
                                 <CheckCircle2 className="w-4 h-4" />
                             </Button>
                         )}
