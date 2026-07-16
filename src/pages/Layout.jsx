@@ -6,7 +6,7 @@ import {
   LayoutDashboard, Map, Wheat, Calendar, Package, 
   DollarSign, Users, FileText, ClipboardList,
   Menu, Leaf, LogOut, CloudRain, Sparkles, ChevronRight,
-  Sprout // NOVO IMPORT
+  Sprout, ClipboardCheck // NOVO IMPORT
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import ThemeSwitcher from '@/components/ui/ThemeSwitcher';
@@ -15,6 +15,7 @@ const navigation = [
   { name: 'Dashboard', icon: LayoutDashboard, page: 'Dashboard' },
   // NOVA ABA SAFRAS AQUI, LOGO APÓS O DASHBOARD PARA DESTAQUE
   { name: 'Gestão de Safras', icon: Sprout, page: 'Safras' }, 
+  { name: 'Planejamentos', icon: ClipboardCheck, page: 'Planejamentos' },
   
   { name: 'Talhões', icon: Map, page: 'Talhoes' },
   { name: 'Colheitas', icon: Wheat, page: 'Colheitas' },
