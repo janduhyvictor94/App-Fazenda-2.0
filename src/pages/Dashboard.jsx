@@ -114,13 +114,13 @@ export default function Dashboard() {
         const fimMes = format(endOfMonth(new Date()), 'yyyy-MM-dd');
         fColheitas = colheitas.filter(c => c.data && c.data >= inicioMes && c.data <= fimMes);
         fCustos = custos.filter(c => c.data && c.data >= inicioMes && c.data <= fimMes);
-        fAtividades = atividades.filter(a => a.data_programada && a.data_programada >= inicioMes && a.data_programada <= fimMes);
+        fAtividades = atividades.filter(a => { const d = a.data_realizada || a.data_programada; return d && d >= inicioMes && d <= fimMes; });
         areaAnalise = areaTotalFazenda;
     }
     else if (filterType === 'periodo' && dateStart && dateEnd) {
         fColheitas = colheitas.filter(c => c.data && c.data >= dateStart && c.data <= dateEnd);
         fCustos = custos.filter(c => c.data && c.data >= dateStart && c.data <= dateEnd);
-        fAtividades = atividades.filter(a => a.data_programada && a.data_programada >= dateStart && a.data_programada <= dateEnd);
+        fAtividades = atividades.filter(a => { const d = a.data_realizada || a.data_programada; return d && d >= dateStart && d <= dateEnd; });
         areaAnalise = areaTotalFazenda;
     }
     else if (filterType === 'talhao' && selectedTalhao && selectedTalhao !== 'nenhum') {
@@ -179,7 +179,11 @@ export default function Dashboard() {
             fCustos = [...custosDiretos, ...custosGlobais];
 
             fColheitas = colheitas.filter(c => String(c.talhao_id) === talhaoId && c.data && c.data >= start && c.data <= end);
-            fAtividades = atividades.filter(a => String(a.talhao_id) === talhaoId && a.data_programada && a.data_programada >= start && a.data_programada <= end);
+            fAtividades = atividades.filter(a => {
+                if (a.safra_id) return String(a.safra_id) === String(safra.id);
+                const d = a.data_realizada || a.data_programada;
+                return String(a.talhao_id) === talhaoId && d && d >= start && d <= end;
+            });
         }
     } else {
         areaAnalise = areaTotalFazenda;
@@ -262,7 +266,7 @@ export default function Dashboard() {
             }));
 
         const operacionaisRaw = filteredData.atividades
-            .filter(a => a.data_programada && a.data_programada.startsWith(mesReferencia) && a.status === 'concluida');
+            .filter(a => (a.data_realizada || a.data_programada || '').startsWith(mesReferencia) && a.status === 'concluida');
 
         operacionaisRaw.forEach(ativ => {
             const talhao = talhoes.find(t => t.id === ativ.talhao_id);
@@ -316,7 +320,7 @@ export default function Dashboard() {
         .reduce((acc, c) => acc + parseNumber(c.valor), 0);
       
       const despAtiv = filteredData.atividades
-        .filter(a => a.data_programada && a.data_programada.startsWith(mesStr) && a.status === 'concluida')
+        .filter(a => (a.data_realizada || a.data_programada || '').startsWith(mesStr) && a.status === 'concluida')
         .reduce((acc, a) => acc + parseNumber(a.custo_total), 0);
       
       return { name: label, rawDate: mesStr, Receita: rec, Despesa: despFin + despAtiv };
@@ -336,8 +340,14 @@ export default function Dashboard() {
   const proximasAtividades = useMemo(() => {
       const hoje = new Date();
       return filteredData.atividades
-        .filter(a => (a.status === 'pendente' || a.status === 'programada') && a.data_programada && isAfter(parseISO(a.data_programada), subMonths(hoje, 1))) 
-        .sort((a, b) => new Date(a.data_programada) - new Date(b.data_programada))
+        .filter(a => (a.status === 'pendente' || a.status === 'programada') && (!a.data_programada || isAfter(parseISO(a.data_programada), subMonths(hoje, 1))))
+        .sort((a, b) => {
+            // Etapas sem data (modo Livre) sobem pro topo, na ordem da etapa
+            if (!a.data_programada && !b.data_programada) return (a.ordem_etapa ?? 0) - (b.ordem_etapa ?? 0);
+            if (!a.data_programada) return -1;
+            if (!b.data_programada) return 1;
+            return new Date(a.data_programada) - new Date(b.data_programada);
+        })
         .slice(0, 5);
   }, [filteredData]);
 
@@ -650,7 +660,7 @@ export default function Dashboard() {
                                             {getTalhaoNome(ativ.talhao_id)}
                                         </Badge>
                                         <p className="text-xs text-stone-500 flex items-center gap-1">
-                                            <Calendar className="w-3 h-3" /> {format(parseISO(ativ.data_programada), 'dd/MM/yyyy')}
+                                            <Calendar className="w-3 h-3" /> {ativ.data_programada ? format(parseISO(ativ.data_programada), 'dd/MM/yyyy') : 'Sem data — etapa livre'}
                                         </p>
                                     </div>
                                 </div>
