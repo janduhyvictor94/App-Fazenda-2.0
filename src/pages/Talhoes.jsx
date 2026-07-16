@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Plus, Edit, Trash2, Map, Leaf, Eye, Sprout, Ruler } from 'lucide-react';
@@ -79,11 +79,34 @@ export default function Talhoes() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id) => {
+      // O erro 409 ao excluir acontece porque outras tabelas referenciam este talhão
+      // (custos, colheitas, atividades, safras, pluviometria, funcionários) via talhao_id,
+      // e o banco bloqueia a exclusão para não deixar dados órfãos (chave estrangeira).
+      // Solução: desvincular (talhao_id = null) esses registros antes de excluir o talhão.
+      // O histórico é mantido — passa a aparecer como "Geral/Sede" no lugar do talhão excluído.
+      const tabelasRelacionadas = ['custos', 'colheitas', 'atividades', 'safras', 'pluviometria', 'metas_talhoes', 'funcionarios'];
+
+      for (const tabela of tabelasRelacionadas) {
+        const { error: errUnlink } = await supabase.from(tabela).update({ talhao_id: null }).eq('talhao_id', id);
+        if (errUnlink) throw errUnlink;
+      }
+
       const { error } = await supabase.from('talhoes').delete().eq('id', id);
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['talhoes'] });
+      queryClient.invalidateQueries({ queryKey: ['custos'] });
+      queryClient.invalidateQueries({ queryKey: ['colheitas'] });
+      queryClient.invalidateQueries({ queryKey: ['atividades'] });
+      queryClient.invalidateQueries({ queryKey: ['safras'] });
+      queryClient.invalidateQueries({ queryKey: ['pluviometria'] });
+      queryClient.invalidateQueries({ queryKey: ['metas_talhoes'] });
+      queryClient.invalidateQueries({ queryKey: ['funcionarios'] });
+    },
+    onError: (error) => {
+      console.error('Erro ao excluir talhão:', error);
+      alert(`Não foi possível excluir o talhão.\n\n${error.message || 'Verifique se ainda há registros vinculados a ele.'}`);
     }
   });
 
@@ -149,6 +172,7 @@ export default function Talhoes() {
           <DialogContent className="sm:max-w-lg rounded-[2rem]">
             <DialogHeader>
               <DialogTitle>{editingTalhao ? 'Editar Talhão' : 'Novo Talhão'}</DialogTitle>
+              <DialogDescription>Preencha os dados da área produtiva.</DialogDescription>
             </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4 pt-4">
               <div className="grid grid-cols-2 gap-4">

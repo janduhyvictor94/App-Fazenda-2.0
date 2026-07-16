@@ -97,20 +97,26 @@ export default function Planejamentos() {
         if (!applySafraId || !applyStartDate) throw new Error("Preencha a safra e a data de início.");
         const safraSelecionada = safras.find(s => s.id === applySafraId);
         if (!safraSelecionada) throw new Error("Safra não encontrada.");
+        if (planFases.length === 0) throw new Error("O planejamento está vazio.");
 
-        const baseDate = parseISO(applyStartDate);
+        // A CORREÇÃO: Força o relógio para meio-dia. Impossível o fuso jogar pro dia anterior.
+        const baseDate = new Date(`${applyStartDate}T12:00:00`);
+        
         const atividadesParaInserir = [];
+
+        const menorMomento = Math.min(...planFases.map(f => Number(f.momento)));
 
         planFases.forEach(fase => {
             let dataCalculada;
+            
+            const momentoRelativo = Number(fase.momento) - menorMomento;
+
             if (planTipoCiclo === 'semana') {
-                dataCalculada = addDays(baseDate, fase.momento * 7);
+                dataCalculada = addDays(baseDate, momentoRelativo * 7);
             } else if (planTipoCiclo === 'mes') {
-                dataCalculada = addMonths(baseDate, fase.momento);
-            } else if (planTipoCiclo === 'livre') {
-                dataCalculada = addDays(baseDate, fase.momento);
+                dataCalculada = addMonths(baseDate, momentoRelativo);
             } else {
-                dataCalculada = addDays(baseDate, fase.momento); 
+                dataCalculada = addDays(baseDate, momentoRelativo); 
             }
             
             const dataProgStr = format(dataCalculada, 'yyyy-MM-dd');
