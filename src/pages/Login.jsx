@@ -31,7 +31,7 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-stone-50 via-emerald-50 to-emerald-100 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-stone-50 via-emerald-50 to-emerald-100 dark:from-stone-950 dark:via-stone-900 dark:to-stone-950 flex items-center justify-center p-4">
       <Card className="w-full max-w-md shadow-xl border-emerald-100 animate-in fade-in zoom-in duration-500">
         <CardHeader className="space-y-4 text-center pb-8">
           <div className="mx-auto w-16 h-16 bg-gradient-to-br from-emerald-500 to-emerald-700 rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-500/20">

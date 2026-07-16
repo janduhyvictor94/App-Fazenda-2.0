@@ -6,15 +6,17 @@ import {
   LayoutDashboard, Map, Wheat, Calendar, Package, 
   DollarSign, Users, FileText, ClipboardList,
   Menu, Leaf, LogOut, CloudRain, Sparkles, ChevronRight,
-  Sprout, FileSpreadsheet // IMPORT DAS PLANILHAS
+  Sprout, ClipboardCheck // NOVO IMPORT
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import ThemeSwitcher from '@/components/ui/ThemeSwitcher';
 
 const navigation = [
   { name: 'Dashboard', icon: LayoutDashboard, page: 'Dashboard' },
   // NOVA ABA SAFRAS AQUI, LOGO APÓS O DASHBOARD PARA DESTAQUE
   { name: 'Gestão de Safras', icon: Sprout, page: 'Safras' }, 
-  { name: 'Planejamentos', icon: FileSpreadsheet, page: 'Planejamentos' }, // NOVA ABA PLANILHAS AQUI
+  { name: 'Planejamentos', icon: ClipboardCheck, page: 'Planejamentos' },
+  
   { name: 'Talhões', icon: Map, page: 'Talhoes' },
   { name: 'Colheitas', icon: Wheat, page: 'Colheitas' },
   { name: 'Atividades', icon: ClipboardList, page: 'Atividades' },
@@ -35,7 +37,7 @@ export default function Layout({ children, currentPageName }) {
   };
 
   return (
-    <div className="min-h-screen bg-[#FAFAFA] bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-emerald-50/40 via-stone-50 to-white font-sans antialiased text-stone-900 selection:bg-emerald-100 selection:text-emerald-900">
+    <div className="min-h-screen bg-[#FAFAFA] dark:bg-stone-950 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-emerald-50/40 via-stone-50 to-white dark:from-stone-900/30 dark:via-stone-950 dark:to-stone-950 font-sans antialiased text-stone-900 selection:bg-emerald-100 selection:text-emerald-900">
       
       {/* Overlay Mobile */}
       {sidebarOpen && (
@@ -115,6 +117,7 @@ export default function Layout({ children, currentPageName }) {
             </div>
 
             <div className="flex items-center gap-4">
+              <ThemeSwitcher />
               <div className="hidden sm:flex flex-col items-end">
                 <p className="text-sm font-bold text-stone-800">Administrador</p>
                 <div className="flex items-center gap-1.5">

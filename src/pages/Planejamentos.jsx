@@ -78,7 +78,8 @@ export default function Planejamentos() {
         if (error) throw error; return data;
       }
     },
-    onSuccess: (data) => { queryClient.invalidateQueries({ queryKey: ['planejamentos'] }); setActivePlanId(data.id); setOpenNovaPlanilha(false); alert('Salvo com sucesso!'); }
+    onSuccess: (data) => { queryClient.invalidateQueries({ queryKey: ['planejamentos'] }); setActivePlanId(data.id); setOpenNovaPlanilha(false); alert('Salvo com sucesso!'); },
+    onError: (error) => { alert(`Não foi possível salvar o planejamento.\n\nMotivo: ${error.message || 'Erro desconhecido'}`); console.error('Erro ao salvar planejamento:', error); }
   });
 
   const duplicateMutation = useMutation({
@@ -87,20 +88,22 @@ export default function Planejamentos() {
       const { data, error } = await supabase.from('planejamentos').insert([payload]).select().single();
       if (error) throw error; return data;
     },
-    onSuccess: (data) => { queryClient.invalidateQueries({ queryKey: ['planejamentos'] }); setActivePlanId(data.id); }
+    onSuccess: (data) => { queryClient.invalidateQueries({ queryKey: ['planejamentos'] }); setActivePlanId(data.id); },
+    onError: (error) => { alert(`Não foi possível duplicar o planejamento.\n\nMotivo: ${error.message || 'Erro desconhecido'}`); console.error('Erro ao duplicar planejamento:', error); }
   });
 
-  const deleteMutation = useMutation({ mutationFn: async (id) => { const { error } = await supabase.from('planejamentos').delete().eq('id', id); if (error) throw error; }, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['planejamentos'] }); setActivePlanId('novo'); } });
+  const deleteMutation = useMutation({ mutationFn: async (id) => { const { error } = await supabase.from('planejamentos').delete().eq('id', id); if (error) throw error; }, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['planejamentos'] }); setActivePlanId('novo'); }, onError: (error) => { alert(`Não foi possível excluir o planejamento.\n\nMotivo: ${error.message || 'Erro desconhecido'}`); console.error('Erro ao excluir planejamento:', error); } });
 
   const applyToSafraMutation = useMutation({
     mutationFn: async () => {
-        if (!applySafraId || !applyStartDate) throw new Error("Preencha a safra e a data de início.");
+        if (!applySafraId) throw new Error("Selecione a safra de destino.");
+        if (planTipoCiclo !== 'livre' && !applyStartDate) throw new Error("Preencha a data de início.");
         const safraSelecionada = safras.find(s => s.id === applySafraId);
         if (!safraSelecionada) throw new Error("Safra não encontrada.");
         if (planFases.length === 0) throw new Error("O planejamento está vazio.");
 
         // A CORREÇÃO: Força o relógio para meio-dia. Impossível o fuso jogar pro dia anterior.
-        const baseDate = new Date(`${applyStartDate}T12:00:00`);
+        const baseDate = applyStartDate ? new Date(`${applyStartDate}T12:00:00`) : new Date();
         
         const atividadesParaInserir = [];
 
@@ -108,18 +111,22 @@ export default function Planejamentos() {
 
         planFases.forEach(fase => {
             let dataCalculada;
-            
+            let dataProgStr = null;
+
             const momentoRelativo = Number(fase.momento) - menorMomento;
 
-            if (planTipoCiclo === 'semana') {
-                dataCalculada = addDays(baseDate, momentoRelativo * 7);
-            } else if (planTipoCiclo === 'mes') {
-                dataCalculada = addMonths(baseDate, momentoRelativo);
-            } else {
-                dataCalculada = addDays(baseDate, momentoRelativo); 
+            // No modo "Livre/Etapas" a atividade nasce SEM data — ela só ganha data real
+            // quando você marcar como concluída em Atividades, escolhendo o dia que aconteceu de fato.
+            if (planTipoCiclo !== 'livre') {
+                if (planTipoCiclo === 'semana') {
+                    dataCalculada = addDays(baseDate, momentoRelativo * 7);
+                } else if (planTipoCiclo === 'mes') {
+                    dataCalculada = addMonths(baseDate, momentoRelativo);
+                } else {
+                    dataCalculada = addDays(baseDate, momentoRelativo);
+                }
+                dataProgStr = format(dataCalculada, 'yyyy-MM-dd');
             }
-            
-            const dataProgStr = format(dataCalculada, 'yyyy-MM-dd');
 
             const terceirizados = fase.aplicacoes.filter(app => app.metodo === 'terceirizado');
             const isTerceirizada = terceirizados.length > 0;
@@ -163,6 +170,8 @@ export default function Planejamentos() {
 
             atividadesParaInserir.push({
                 talhao_id: safraSelecionada.talhao_id,
+                safra_id: applySafraId,
+                ordem_etapa: fase.momento,
                 tipo: 'outro',
                 tipo_personalizado: fase.nome_etapa || `Aplicação Etapa ${fase.momento}`,
                 data_programada: dataProgStr,
@@ -390,10 +399,10 @@ export default function Planejamentos() {
                     </Select>
                 </div>
                 <div className="space-y-2">
-                    <Label>Data Base de Início</Label>
+                    <Label>Data Base de Início {planTipoCiclo === 'livre' && <span className="text-stone-400 font-normal">(opcional)</span>}</Label>
                     <Input type="date" value={applyStartDate} onChange={e => setApplyStartDate(e.target.value)} className="rounded-xl" />
                     {planTipoCiclo === 'livre' ? (
-                        <p className="text-[10px] text-stone-500">Como é um ciclo flexível, as atividades nascerão em ordem a partir desta data, podendo ser ajustadas depois.</p>
+                        <p className="text-[10px] text-stone-500">As etapas nascem <b>sem data</b> em Atividades, na ordem certa. Você escolhe a data real de cada uma só quando marcar como concluída — e é aí que o custo entra no financeiro daquele talhão.</p>
                     ) : (
                         <p className="text-[10px] text-stone-500">As {cicloLabels[planTipoCiclo]}s serão calculadas a partir desta data.</p>
                     )}

@@ -46,7 +46,8 @@ export default function Financeiro({ showMessage }) {
   const [filtroCategoria, setFiltroCategoria] = useState('todos');
   
   // ESTADOS PARA FILTRO DE MÊS/ANO
-  const [tipoFiltroData, setTipoFiltroData] = useState('geral'); 
+  // Padrão: Mensal (mês atual) — o usuário pode trocar para "Geral" quando quiser
+  const [tipoFiltroData, setTipoFiltroData] = useState('mensal'); 
   const [filtroMes, setFiltroMes] = useState(format(new Date(), 'MM'));
   const [filtroAno, setFiltroAno] = useState(format(new Date(), 'yyyy'));
 

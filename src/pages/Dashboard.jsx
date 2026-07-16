@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { 
   LayoutDashboard, Map, Wheat, TrendingUp, 
-  DollarSign, PieChart, Activity, Wallet, Sprout, Calendar, ArrowRight, Tractor, CheckCircle2, BarChart2, X, Copy, FileText 
+  DollarSign, PieChart, Activity, Wallet, Sprout, Calendar, ArrowRight, Tractor, CheckCircle2, BarChart2, X, Copy, FileText, Bell 
 } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
@@ -17,8 +17,10 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { format, subMonths, startOfMonth, endOfMonth, eachMonthOfInterval, isAfter, parseISO, isBefore } from 'date-fns';
+import { format, subMonths, startOfMonth, endOfMonth, eachMonthOfInterval, isAfter, parseISO, isBefore, isSameMonth, addMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { Link } from 'react-router-dom';
+import { calcularFolha } from './Funcionarios';
 
 const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6'];
 
@@ -37,10 +39,11 @@ const getAreaTalhao = (t) => {
 export default function Dashboard() {
   
   // --- ESTADOS DE FILTRO NOVO ---
-  const [filterType, setFilterType] = useState('geral'); // 'geral', 'periodo', 'safra'
+  const [filterType, setFilterType] = useState('mes'); // 'mes' (padrão), 'geral', 'talhao', 'periodo', 'safra'
   const [dateStart, setDateStart] = useState('');
   const [dateEnd, setDateEnd] = useState('');
   const [selectedSafra, setSelectedSafra] = useState('nenhuma');
+  const [selectedTalhao, setSelectedTalhao] = useState('nenhum');
 
   // Estado para o Modal de Detalhes Financeiros (Drill Down)
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -103,13 +106,47 @@ export default function Dashboard() {
     let fCustos = custos;
     let fAtividades = atividades;
     let areaAnalise = 0;
+    const areaTotalFazenda = talhoes.reduce((acc, t) => acc + getAreaTalhao(t), 0);
 
-    if (filterType === 'periodo' && dateStart && dateEnd) {
+    if (filterType === 'mes') {
+        // Padrão do Dashboard: mostra apenas o mês corrente
+        const inicioMes = format(startOfMonth(new Date()), 'yyyy-MM-dd');
+        const fimMes = format(endOfMonth(new Date()), 'yyyy-MM-dd');
+        fColheitas = colheitas.filter(c => c.data && c.data >= inicioMes && c.data <= fimMes);
+        fCustos = custos.filter(c => c.data && c.data >= inicioMes && c.data <= fimMes);
+        fAtividades = atividades.filter(a => { const d = a.data_realizada || a.data_programada; return d && d >= inicioMes && d <= fimMes; });
+        areaAnalise = areaTotalFazenda;
+    }
+    else if (filterType === 'periodo' && dateStart && dateEnd) {
         fColheitas = colheitas.filter(c => c.data && c.data >= dateStart && c.data <= dateEnd);
         fCustos = custos.filter(c => c.data && c.data >= dateStart && c.data <= dateEnd);
-        fAtividades = atividades.filter(a => a.data_programada && a.data_programada >= dateStart && a.data_programada <= dateEnd);
-        areaAnalise = talhoes.reduce((acc, t) => acc + getAreaTalhao(t), 0);
-    } 
+        fAtividades = atividades.filter(a => { const d = a.data_realizada || a.data_programada; return d && d >= dateStart && d <= dateEnd; });
+        areaAnalise = areaTotalFazenda;
+    }
+    else if (filterType === 'talhao' && selectedTalhao && selectedTalhao !== 'nenhum') {
+        const talhaoId = String(selectedTalhao);
+        const talhaoObj = talhoes.find(t => String(t.id) === talhaoId);
+        const areaTalhao = getAreaTalhao(talhaoObj);
+        const proporcaoArea = areaTotalFazenda > 0 ? (areaTalhao / areaTotalFazenda) : 0;
+        areaAnalise = areaTalhao;
+
+        // 1. Custos Diretos do talhão
+        const custosDiretos = custos.filter(c => String(c.talhao_id) === talhaoId);
+
+        // 2. Custos Globais (Folha e Gerais) Rateados pela proporção de área do talhão
+        const custosGlobais = custos.filter(c => {
+            const isGlobal = !c.talhao_id || String(c.talhao_id).trim() === '' || String(c.talhao_id).toLowerCase() === 'geral' || String(c.talhao_id).toLowerCase() === 'todos' || c.talhao_id === 'null';
+            return isGlobal;
+        }).map(c => ({
+            ...c,
+            valor: parseNumber(c.valor) * proporcaoArea,
+            isRateio: true
+        }));
+
+        fCustos = [...custosDiretos, ...custosGlobais];
+        fColheitas = colheitas.filter(c => String(c.talhao_id) === talhaoId);
+        fAtividades = atividades.filter(a => String(a.talhao_id) === talhaoId);
+    }
     else if (filterType === 'safra' && selectedSafra && selectedSafra !== 'nenhuma') {
         const safra = safras.find(s => s.id === selectedSafra);
         if (safra) {
@@ -120,7 +157,6 @@ export default function Dashboard() {
             // Calcula proporção para o rateio
             const talhaoSafra = talhoes.find(t => String(t.id) === talhaoId);
             const areaTalhao = getAreaTalhao(talhaoSafra);
-            const areaTotalFazenda = talhoes.reduce((acc, t) => acc + getAreaTalhao(t), 0);
             const proporcaoArea = areaTotalFazenda > 0 ? (areaTalhao / areaTotalFazenda) : 0;
             areaAnalise = areaTalhao;
 
@@ -143,14 +179,18 @@ export default function Dashboard() {
             fCustos = [...custosDiretos, ...custosGlobais];
 
             fColheitas = colheitas.filter(c => String(c.talhao_id) === talhaoId && c.data && c.data >= start && c.data <= end);
-            fAtividades = atividades.filter(a => String(a.talhao_id) === talhaoId && a.data_programada && a.data_programada >= start && a.data_programada <= end);
+            fAtividades = atividades.filter(a => {
+                if (a.safra_id) return String(a.safra_id) === String(safra.id);
+                const d = a.data_realizada || a.data_programada;
+                return String(a.talhao_id) === talhaoId && d && d >= start && d <= end;
+            });
         }
     } else {
-        areaAnalise = talhoes.reduce((acc, t) => acc + getAreaTalhao(t), 0);
+        areaAnalise = areaTotalFazenda;
     }
 
     return { colheitas: fColheitas, custos: fCustos, atividades: fAtividades, areaAnalise };
-  }, [colheitas, custos, atividades, safras, talhoes, filterType, dateStart, dateEnd, selectedSafra]);
+  }, [colheitas, custos, atividades, safras, talhoes, filterType, dateStart, dateEnd, selectedSafra, selectedTalhao]);
 
 
   const generateActivityRecommendationText = (activity) => {
@@ -226,7 +266,7 @@ export default function Dashboard() {
             }));
 
         const operacionaisRaw = filteredData.atividades
-            .filter(a => a.data_programada && a.data_programada.startsWith(mesReferencia) && a.status === 'concluida');
+            .filter(a => (a.data_realizada || a.data_programada || '').startsWith(mesReferencia) && a.status === 'concluida');
 
         operacionaisRaw.forEach(ativ => {
             const talhao = talhoes.find(t => t.id === ativ.talhao_id);
@@ -280,7 +320,7 @@ export default function Dashboard() {
         .reduce((acc, c) => acc + parseNumber(c.valor), 0);
       
       const despAtiv = filteredData.atividades
-        .filter(a => a.data_programada && a.data_programada.startsWith(mesStr) && a.status === 'concluida')
+        .filter(a => (a.data_realizada || a.data_programada || '').startsWith(mesStr) && a.status === 'concluida')
         .reduce((acc, a) => acc + parseNumber(a.custo_total), 0);
       
       return { name: label, rawDate: mesStr, Receita: rec, Despesa: despFin + despAtiv };
@@ -300,8 +340,14 @@ export default function Dashboard() {
   const proximasAtividades = useMemo(() => {
       const hoje = new Date();
       return filteredData.atividades
-        .filter(a => (a.status === 'pendente' || a.status === 'programada') && a.data_programada && isAfter(parseISO(a.data_programada), subMonths(hoje, 1))) 
-        .sort((a, b) => new Date(a.data_programada) - new Date(b.data_programada))
+        .filter(a => (a.status === 'pendente' || a.status === 'programada') && (!a.data_programada || isAfter(parseISO(a.data_programada), subMonths(hoje, 1))))
+        .sort((a, b) => {
+            // Etapas sem data (modo Livre) sobem pro topo, na ordem da etapa
+            if (!a.data_programada && !b.data_programada) return (a.ordem_etapa ?? 0) - (b.ordem_etapa ?? 0);
+            if (!a.data_programada) return -1;
+            if (!b.data_programada) return 1;
+            return new Date(a.data_programada) - new Date(b.data_programada);
+        })
         .slice(0, 5);
   }, [filteredData]);
 
@@ -320,6 +366,37 @@ export default function Dashboard() {
   const custoTotalGlobal = totalFinanceiroPago + totalCustoAtividades;
   const lucroReal = receitaTotal - custoTotalGlobal;
   const produtividadeMedia = areaTotalExibida > 0 ? (totalColheitaTon / areaTotalExibida) : 0;
+
+  // --- LEMBRETE DE PAGAMENTO DE FOLHA (mesma lógica de Funcionarios.jsx) ---
+  // Salário do mês anterior vence no 5º dia útil do mês atual (ex: folha de maio vence em junho)
+  const lembretesFolha = useMemo(() => {
+    const hoje = new Date();
+    const fimMesAtual = endOfMonth(hoje);
+    const limiteAntigo = addMonths(fimMesAtual, -3);
+    let count = 0;
+    let total = 0;
+
+    funcionarios.filter(f => f.status === 'ativo').forEach(func => {
+      const dataCorte = func.data_inicio_contabil ? parseISO(func.data_inicio_contabil) : null;
+      const eventos = calcularFolha(func).filter(e => e.tipo === 'Salário Mensal' && !isAfter(e.data_pagamento, fimMesAtual));
+
+      eventos.forEach(evt => {
+        if (dataCorte && isBefore(evt.data_pagamento, dataCorte)) return;
+        if (isBefore(evt.data_pagamento, limiteAntigo)) return;
+
+        const custo = custos.find(c =>
+          c.categoria === 'funcionario' && c.data &&
+          isSameMonth(parseISO(c.data), evt.data_pagamento) &&
+          c.descricao?.includes(func.nome) && c.descricao?.includes(evt.tipo)
+        );
+
+        const pago = custo && custo.status_pagamento === 'pago';
+        if (!pago) { count++; total += evt.valor; }
+      });
+    });
+
+    return { count, total };
+  }, [funcionarios, custos]);
 
   if (l1 || l2 || l3 || l4 || l5 || l6) return <PageSkeleton />;
 
@@ -413,6 +490,19 @@ export default function Dashboard() {
         </DialogContent>
       </Dialog>
 
+      {lembretesFolha.count > 0 && (
+        <Link to="/Funcionarios" className="flex items-center justify-between gap-4 bg-amber-50 border border-amber-200 rounded-[1.5rem] p-4 hover:bg-amber-100 transition-colors">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-amber-100 rounded-xl"><Bell className="w-5 h-5 text-amber-700" /></div>
+            <div>
+              <p className="font-bold text-amber-900 text-sm">Lembrete: {lembretesFolha.count} pagamento{lembretesFolha.count > 1 ? 's' : ''} de folha pendente{lembretesFolha.count > 1 ? 's' : ''}</p>
+              <p className="text-xs text-amber-700">Total a lançar/pagar: R$ {lembretesFolha.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} — clique para ir em Funcionários</p>
+            </div>
+          </div>
+          <ArrowRight className="w-4 h-4 text-amber-600 flex-shrink-0" />
+        </Link>
+      )}
+
       {/* Header + BARRA DE FILTROS */}
       <div className="flex flex-col gap-4 bg-white p-6 rounded-[2rem] border border-stone-100 shadow-sm">
         
@@ -434,11 +524,27 @@ export default function Dashboard() {
                     <SelectValue placeholder="Filtrar dados..." />
                 </SelectTrigger>
                 <SelectContent>
+                    <SelectItem value="mes">Mês Atual</SelectItem>
                     <SelectItem value="geral">Visão Geral (Tudo)</SelectItem>
+                    <SelectItem value="talhao">Por Talhão</SelectItem>
                     <SelectItem value="periodo">Período Específico</SelectItem>
                     <SelectItem value="safra">Por Safra (Gestão)</SelectItem>
                 </SelectContent>
             </Select>
+
+            {filterType === 'talhao' && (
+                <Select value={selectedTalhao} onValueChange={setSelectedTalhao}>
+                    <SelectTrigger className="w-full sm:w-[280px] rounded-xl bg-stone-50 font-bold border-stone-200">
+                        <SelectValue placeholder="Escolha o Talhão..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="nenhum">Selecione um talhão...</SelectItem>
+                        {talhoes.map(t => (
+                            <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+            )}
 
             {filterType === 'periodo' && (
                 <div className="flex items-center gap-2 w-full sm:w-auto bg-stone-50 p-1 px-3 rounded-xl border border-stone-200">
@@ -554,7 +660,7 @@ export default function Dashboard() {
                                             {getTalhaoNome(ativ.talhao_id)}
                                         </Badge>
                                         <p className="text-xs text-stone-500 flex items-center gap-1">
-                                            <Calendar className="w-3 h-3" /> {format(parseISO(ativ.data_programada), 'dd/MM/yyyy')}
+                                            <Calendar className="w-3 h-3" /> {ativ.data_programada ? format(parseISO(ativ.data_programada), 'dd/MM/yyyy') : 'Sem data — etapa livre'}
                                         </p>
                                     </div>
                                 </div>

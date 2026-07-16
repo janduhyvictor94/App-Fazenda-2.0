@@ -26,7 +26,7 @@ import Metas from "./Metas"; // Novo import
 
 import Safras from "./Safras"; // Nova página Safras
 
-import Planejamentos from "./Planejamentos"; // Novo import para as planilhas
+import Planejamentos from "./Planejamentos"; // Planejamento de Ciclos por Cultura
 
 import { BrowserRouter as Router, Route, Routes, useLocation } from 'react-router-dom';
 
@@ -46,7 +46,7 @@ const PAGES = {
 
     Safras: Safras, // Novo registro Safras
 
-    Planejamentos: Planejamentos, // Registo da nova página
+    Planejamentos: Planejamentos, // Planejamento de Ciclos por Cultura
     
     Calendario: Calendario,
     
@@ -101,7 +101,7 @@ function PagesContent() {
 
                 <Route path="/Safras" element={<Safras />} /> {/* Nova Rota Safras */}
 
-                <Route path="/Planejamentos" element={<Planejamentos />} /> {/* Rota para as Planilhas */}
+                <Route path="/Planejamentos" element={<Planejamentos />} /> {/* Planejamento de Ciclos por Cultura */}
                 
                 <Route path="/Calendario" element={<Calendario />} />
                 
