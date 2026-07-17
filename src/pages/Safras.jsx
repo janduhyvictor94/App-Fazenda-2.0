@@ -13,7 +13,7 @@ import { Plus, Sprout, Calendar, ArrowRight, DollarSign, TrendingUp, PieChart as
 import EmptyState from '@/components/ui/EmptyState';
 import StatCard from '@/components/ui/StatCard';
 import PageSkeleton from '@/components/ui/PageSkeleton';
-import { format, parseISO, differenceInDays, isWithinInterval, startOfDay, endOfDay } from 'date-fns';
+import { format, parseISO, differenceInDays, isWithinInterval, startOfDay, endOfDay, isBefore } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 
@@ -73,6 +73,11 @@ export default function Safras() {
     queryFn: async () => { const { data } = await supabase.from('atividades').select('*'); return data || []; }
   });
 
+  const { data: funcionarios = [] } = useQuery({
+    queryKey: ['funcionarios'],
+    queryFn: async () => { const { data } = await supabase.from('funcionarios').select('*'); return data || []; }
+  });
+
   // --- MUTAÇÕES ---
   const createMutation = useMutation({
     mutationFn: async (newSafra) => {
@@ -83,7 +88,8 @@ export default function Safras() {
         queryClient.invalidateQueries({ queryKey: ['safras'] });
         setCreateOpen(false);
         setFormData({ nome: '', talhao_id: '', data_inicio: format(new Date(), 'yyyy-MM-dd'), data_fim: '', status: 'ativo' });
-    }
+    },
+    onError: (error) => { alert(`Não foi possível criar a safra.\n\nMotivo: ${error.message || 'Erro desconhecido'}`); console.error('Erro ao criar safra:', error); }
   });
 
   const updateMutation = useMutation({
@@ -95,7 +101,8 @@ export default function Safras() {
         queryClient.invalidateQueries({ queryKey: ['safras'] });
         setEditOpen(false);
         setEditingSafra(null);
-    }
+    },
+    onError: (error) => { alert(`Não foi possível salvar as alterações.\n\nMotivo: ${error.message || 'Erro desconhecido'}`); console.error('Erro ao atualizar safra:', error); }
   });
 
   const deleteMutation = useMutation({
@@ -104,9 +111,13 @@ export default function Safras() {
         if(error) throw error;
     },
     onSuccess: () => {
+        // Atividades ligadas a esta safra (safra_id) ficam com safra_id nulo automaticamente (ON DELETE SET NULL) —
+        // por isso também invalidamos a lista de atividades, pra refletir isso na tela sem precisar recarregar.
         queryClient.invalidateQueries({ queryKey: ['safras'] });
+        queryClient.invalidateQueries({ queryKey: ['atividades'] });
         if (view === 'detail') setView('list');
-    }
+    },
+    onError: (error) => { alert(`Não foi possível excluir a safra.\n\nMotivo: ${error.message || 'Erro desconhecido'}`); console.error('Erro ao excluir safra:', error); }
   });
 
   const finalizarMutation = useMutation({
@@ -114,7 +125,8 @@ export default function Safras() {
         const { error } = await supabase.from('safras').update({ status: 'concluido', data_fim: format(new Date(), 'yyyy-MM-dd') }).eq('id', safra.id);
         if(error) throw error;
     },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['safras'] }); }
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['safras'] }); },
+    onError: (error) => { alert(`Não foi possível finalizar a safra.\n\nMotivo: ${error.message || 'Erro desconhecido'}`); console.error('Erro ao finalizar safra:', error); }
   });
 
   // --- LÓGICA DE CÁLCULO ---
@@ -130,17 +142,36 @@ export default function Safras() {
         return isWithinInterval(d, { start: startOfDay(dataInicio), end: endOfDay(dataFim) });
     };
 
+    // Mesma regra usada no Dashboard/Relatórios: ignora custo de funcionário lançado antes
+    // da data de início contábil dele (evita contar histórico anterior ao início do controle).
+    const shouldIgnoreCost = (custo) => {
+        if (custo.categoria !== 'funcionario') return false;
+        const funcionario = funcionarios.find(f => custo.descricao && custo.descricao.includes(f.nome));
+        if (funcionario && funcionario.data_inicio_contabil) {
+            const dataCusto = parseISO(custo.data);
+            const dataInicioContabil = parseISO(funcionario.data_inicio_contabil);
+            return isBefore(dataCusto, dataInicioContabil);
+        }
+        return false;
+    };
+
     // Receitas
     const receitas = colheitas.filter(c => c.talhao_id === selectedSafra.talhao_id && isInPeriod(c.data));
     const totalReceita = receitas.reduce((acc, c) => acc + (c.valor_total || 0), 0);
     const totalProducaoTon = receitas.reduce((acc, c) => acc + ((c.quantidade_kg || 0) / 1000), 0);
 
     // Custos Diretos
-    const custosDiretosFin = custos.filter(c => c.talhao_id === selectedSafra.talhao_id && c.tipo_lancamento === 'despesa' && c.status_pagamento === 'pago' && isInPeriod(c.data));
+    const custosDiretosFin = custos.filter(c => c.talhao_id === selectedSafra.talhao_id && c.tipo_lancamento === 'despesa' && c.status_pagamento === 'pago' && !shouldIgnoreCost(c) && isInPeriod(c.data));
     const totalCustoDiretoFin = custosDiretosFin.reduce((acc, c) => acc + (c.valor || 0), 0);
 
-    // Atividades
-    const atividadesSafra = atividades.filter(a => a.talhao_id === selectedSafra.talhao_id && a.status === 'concluida' && isInPeriod(a.data_programada));
+    // Atividades — prioriza o vínculo direto por safra_id (funciona mesmo sem data, caso do modo "Livre/Etapas"
+    // do Planejamento de Ciclos); cai para o filtro antigo por talhão+período só em registros antigos sem safra_id
+    const atividadesSafra = atividades.filter(a => {
+        if (a.status !== 'concluida') return false;
+        if (a.safra_id) return String(a.safra_id) === String(selectedSafra.id);
+        const dataEfetiva = a.data_realizada || a.data_programada;
+        return a.talhao_id === selectedSafra.talhao_id && isInPeriod(dataEfetiva);
+    });
     const totalCustoAtividades = atividadesSafra.reduce((acc, a) => acc + (a.custo_total || 0), 0);
 
     // Rateio
@@ -148,7 +179,7 @@ export default function Safras() {
     const areaTalhao = selectedSafra.talhoes?.area_hectares || 0;
     const fatorRateio = areaTotalFazenda > 0 ? (areaTalhao / areaTotalFazenda) : 0;
 
-    const custosSemTalhao = custos.filter(c => !c.talhao_id && c.tipo_lancamento === 'despesa' && c.status_pagamento === 'pago' && isInPeriod(c.data));
+    const custosSemTalhao = custos.filter(c => !c.talhao_id && c.tipo_lancamento === 'despesa' && c.status_pagamento === 'pago' && !shouldIgnoreCost(c) && isInPeriod(c.data));
     const folhaGeral = custosSemTalhao.filter(c => c.categoria === 'funcionario');
     const totalFolhaGeral = folhaGeral.reduce((acc, c) => acc + (c.valor || 0), 0);
     const custoFolhaRateio = totalFolhaGeral * fatorRateio;
@@ -180,7 +211,7 @@ export default function Safras() {
         custoFolhaRateio, custoGeralRateio, custoTotalSafra, lucro, custoPorHa, lucroPorHa,
         areaTalhao, composicaoCusto, graficoBarras, diasCiclo: differenceInDays(dataFim, dataInicio)
     };
-  }, [selectedSafra, custos, colheitas, talhoes, atividades]);
+  }, [selectedSafra, custos, colheitas, talhoes, atividades, funcionarios]);
 
   // --- HANDLERS ---
   const handleCreate = (e) => {

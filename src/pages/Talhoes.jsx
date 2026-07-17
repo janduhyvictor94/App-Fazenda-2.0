@@ -62,7 +62,8 @@ export default function Talhoes() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['talhoes'] });
       resetForm();
-    }
+    },
+    onError: (error) => { alert(`Não foi possível cadastrar o talhão.\n\nMotivo: ${error.message || 'Erro desconhecido'}`); console.error('Erro ao criar talhão:', error); }
   });
 
   const updateMutation = useMutation({
@@ -74,7 +75,8 @@ export default function Talhoes() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['talhoes'] });
       resetForm();
-    }
+    },
+    onError: (error) => { alert(`Não foi possível salvar as alterações.\n\nMotivo: ${error.message || 'Erro desconhecido'}`); console.error('Erro ao atualizar talhão:', error); }
   });
 
   const deleteMutation = useMutation({

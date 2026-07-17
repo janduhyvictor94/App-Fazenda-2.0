@@ -70,7 +70,8 @@ export default function Consultorias() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['consultorias'] });
       resetForm();
-    }
+    },
+    onError: (error) => { alert(`Não foi possível salvar a consultoria.\n\nMotivo: ${error.message || 'Erro desconhecido'}`); console.error('Erro ao criar consultoria:', error); }
   });
 
   const updateMutation = useMutation({
@@ -82,7 +83,8 @@ export default function Consultorias() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['consultorias'] });
       resetForm();
-    }
+    },
+    onError: (error) => { alert(`Não foi possível salvar as alterações.\n\nMotivo: ${error.message || 'Erro desconhecido'}`); console.error('Erro ao atualizar consultoria:', error); }
   });
 
   const deleteMutation = useMutation({
@@ -92,7 +94,8 @@ export default function Consultorias() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['consultorias'] });
-    }
+    },
+    onError: (error) => { alert(`Não foi possível excluir a consultoria.\n\nMotivo: ${error.message || 'Erro desconhecido'}`); console.error('Erro ao excluir consultoria:', error); }
   });
 
   const resetForm = () => {
@@ -467,7 +470,7 @@ export default function Consultorias() {
                         variant="ghost" 
                         size="sm"
                         className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                        onClick={() => deleteMutation.mutate(consultoria.id)}
+                        onClick={() => { if (confirm("Excluir este registro de consultoria? Essa ação não pode ser desfeita.")) deleteMutation.mutate(consultoria.id) }}
                       >
                         <Trash2 className="w-4 h-4" />
                       </Button>

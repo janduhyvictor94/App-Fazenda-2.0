@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, Edit, Trash2, Wheat, Filter, Package, TrendingUp, Calendar, FileText, CheckCircle2, Clock } from 'lucide-react';
+import { Plus, Edit, Trash2, Wheat, Filter, Package, TrendingUp, Calendar, FileText } from 'lucide-react';
 import EmptyState from '@/components/ui/EmptyState';
 import StatCard from '@/components/ui/StatCard';
 import { format } from 'date-fns';
@@ -53,7 +53,6 @@ export default function Colheitas() {
     unidade_preco: 'kg',
     custo_colheita: '',
     unidade_custo: 'kg',
-    status_pagamento_custo: 'pago',
     observacoes: ''
   });
 
@@ -84,80 +83,40 @@ export default function Colheitas() {
     }
   });
 
-  // Funções auxiliares para buscar nomes
-  const getTalhaoNome = (id) => talhoes.find(t => t.id === id)?.nome || '-';
-  const tipoColheitaLabel = (tipo) => {
-    const allTipos = [...tiposColheitaManga, ...tiposColheitaGoiaba];
-    const padrao = allTipos.find(t => t.value === tipo);
-    if (padrao) return padrao.label;
-    const customizado = tiposCustomizados.find(t => t.nome === tipo);
-    return customizado ? customizado.nome : tipo;
-  };
-
   // --- MUTATIONS ---
   const createMutation = useMutation({
     mutationFn: async (data) => {
       const { data: result, error } = await supabase.from('colheitas').insert(data).select();
       if (error) throw error; return result;
-    }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['colheitas'] });
+      resetForm();
+    },
+    onError: (error) => { alert(`Não foi possível salvar a colheita.\n\nMotivo: ${error.message || 'Erro desconhecido'}`); console.error('Erro ao criar colheita:', error); }
   });
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }) => {
       const { data: result, error } = await supabase.from('colheitas').update(data).eq('id', id).select();
       if (error) throw error; return result;
-    }
-  });
-
-  const markAsPaidMutation = useMutation({
-      mutationFn: async (colheita) => {
-          const { error: err1 } = await supabase.from('colheitas').update({ status_pagamento_custo: 'pago' }).eq('id', colheita.id);
-          if (err1) throw err1;
-
-          const qtd = colheita.unidade_custo === 'kg' ? (colheita.quantidade_kg || 0) : (colheita.quantidade_caixas || 0);
-          const custoTotal = qtd * (colheita.custo_colheita || 0);
-          
-          if (custoTotal > 0) {
-              const { error: err2 } = await supabase.from('custos').insert({
-                  descricao: `Colheita - ${tipoColheitaLabel(colheita.tipo_colheita)} - ${getTalhaoNome(colheita.talhao_id)}`,
-                  categoria: 'terceirizado',
-                  talhao_id: colheita.talhao_id,
-                  valor: custoTotal,
-                  data: colheita.data,
-                  status_pagamento: 'pago',
-                  tipo_lancamento: 'despesa',
-                  observacoes: `Custo de colheita: R$ ${colheita.custo_colheita}/${colheita.unidade_custo}`
-              });
-              if (err2) throw err2;
-          }
-      },
-      onSuccess: () => {
-          queryClient.invalidateQueries({ queryKey: ['colheitas'] });
-          queryClient.invalidateQueries({ queryKey: ['custos'] });
-      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['colheitas'] });
+      resetForm();
+    },
+    onError: (error) => { alert(`Não foi possível salvar as alterações.\n\nMotivo: ${error.message || 'Erro desconhecido'}`); console.error('Erro ao atualizar colheita:', error); }
   });
 
   const deleteMutation = useMutation({
     mutationFn: async (id) => {
-      const colheitaToDelete = colheitas.find(c => c.id === id);
-      
       const { error } = await supabase.from('colheitas').delete().eq('id', id);
       if (error) throw error;
-
-      // Remove do financeiro se estava PAGO
-      if (colheitaToDelete && colheitaToDelete.status_pagamento_custo === 'pago') {
-        const oldQtd = colheitaToDelete.unidade_custo === 'kg' ? (colheitaToDelete.quantidade_kg || 0) : (colheitaToDelete.quantidade_caixas || 0);
-        const oldCustoTotal = oldQtd * (colheitaToDelete.custo_colheita || 0);
-        if (oldCustoTotal > 0) {
-          const oldDesc = `Colheita - ${tipoColheitaLabel(colheitaToDelete.tipo_colheita)} - ${getTalhaoNome(colheitaToDelete.talhao_id)}`;
-          await supabase.from('custos').delete().eq('descricao', oldDesc).eq('data', colheitaToDelete.data).eq('valor', oldCustoTotal);
-        }
-      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['colheitas'] });
-      queryClient.invalidateQueries({ queryKey: ['custos'] });
-    }
+    },
+    onError: (error) => { alert(`Não foi possível excluir a colheita.\n\nMotivo: ${error.message || 'Erro desconhecido'}`); console.error('Erro ao excluir colheita:', error); }
   });
 
   const createTipoMutation = useMutation({
@@ -169,7 +128,8 @@ export default function Colheitas() {
       queryClient.invalidateQueries({ queryKey: ['tipos-colheita'] });
       setNovoTipoColheita({ nome: '', cultura: '' });
       setOpenTipoDialog(false);
-    }
+    },
+    onError: (error) => { alert(`Não foi possível criar o tipo de colheita.\n\nMotivo: ${error.message || 'Erro desconhecido'}`); console.error('Erro ao criar tipo de colheita:', error); }
   });
 
   // --- LÓGICA ---
@@ -177,7 +137,7 @@ export default function Colheitas() {
     setFormData({
       talhao_id: '', data: format(new Date(), 'yyyy-MM-dd'), cultura: '', tipo_colheita: '',
       quantidade_kg: '', quantidade_caixas: '', preco_unitario: '', unidade_preco: 'kg',
-      custo_colheita: '', unidade_custo: 'kg', status_pagamento_custo: 'pago', observacoes: ''
+      custo_colheita: '', unidade_custo: 'kg', observacoes: ''
     });
     setEditingColheita(null);
     setOpen(false);
@@ -196,7 +156,6 @@ export default function Colheitas() {
       unidade_preco: colheita.unidade_preco || 'kg',
       custo_colheita: colheita.custo_colheita || '',
       unidade_custo: colheita.unidade_custo || 'kg',
-      status_pagamento_custo: colheita.status_pagamento_custo || 'pago',
       observacoes: colheita.observacoes || ''
     });
     setOpen(true);
@@ -225,54 +184,26 @@ export default function Colheitas() {
       quantidade_caixas: formData.quantidade_caixas ? parseFloat(formData.quantidade_caixas) : null,
       preco_unitario: formData.preco_unitario ? parseFloat(formData.preco_unitario) : null,
       custo_colheita: formData.custo_colheita ? parseFloat(formData.custo_colheita) : null,
-      valor_total: valorTotal,
-      status_pagamento_custo: formData.status_pagamento_custo
+      valor_total: valorTotal
     };
 
     if (editingColheita) {
       await updateMutation.mutateAsync({ id: editingColheita.id, data });
-      
-      // Remove o lançamento antigo se ele estava como PAGO para evitar duplicatas ou manter se virou PENDENTE
-      const oldQtd = editingColheita.unidade_custo === 'kg' ? (editingColheita.quantidade_kg || 0) : (editingColheita.quantidade_caixas || 0);
-      const oldCustoTotal = oldQtd * (editingColheita.custo_colheita || 0);
-      
-      if (editingColheita.status_pagamento_custo === 'pago' && oldCustoTotal > 0) {
-        const oldDesc = `Colheita - ${tipoColheitaLabel(editingColheita.tipo_colheita)} - ${getTalhaoNome(editingColheita.talhao_id)}`;
-        await supabase.from('custos').delete().eq('descricao', oldDesc).eq('data', editingColheita.data).eq('valor', oldCustoTotal);
-      }
-      
-      // Insere o novo somente se o status atualizado for PAGO
-      if (custoTotal > 0 && formData.status_pagamento_custo === 'pago') {
-        await supabase.from('custos').insert({
-          descricao: `Colheita - ${tipoColheitaLabel(formData.tipo_colheita)} - ${getTalhaoNome(formData.talhao_id)}`,
-          categoria: 'terceirizado',
-          talhao_id: formData.talhao_id,
-          valor: custoTotal,
-          data: formData.data,
-          status_pagamento: 'pago',
-          tipo_lancamento: 'despesa',
-          observacoes: `Custo de colheita: R$ ${formData.custo_colheita}/${formData.unidade_custo}`
-        });
-      }
     } else {
       await createMutation.mutateAsync(data);
-      if (custoTotal > 0 && formData.status_pagamento_custo === 'pago') {
-        await supabase.from('custos').insert({
-          descricao: `Colheita - ${tipoColheitaLabel(formData.tipo_colheita)} - ${getTalhaoNome(formData.talhao_id)}`,
-          categoria: 'terceirizado',
-          talhao_id: formData.talhao_id,
-          valor: custoTotal,
-          data: formData.data,
-          status_pagamento: 'pago',
-          tipo_lancamento: 'despesa',
-          observacoes: `Custo de colheita: R$ ${formData.custo_colheita}/${formData.unidade_custo}`
-        });
-      }
     }
 
-    queryClient.invalidateQueries({ queryKey: ['colheitas'] });
-    queryClient.invalidateQueries({ queryKey: ['custos'] });
-    resetForm();
+    if (custoTotal > 0) {
+      await supabase.from('custos').insert({
+        descricao: `Colheita - ${tipoColheitaLabel(formData.tipo_colheita)} - ${getTalhaoNome(formData.talhao_id)}`,
+        categoria: 'terceirizado',
+        talhao_id: formData.talhao_id,
+        valor: custoTotal,
+        data: formData.data,
+        observacoes: `Custo de colheita: R$ ${formData.custo_colheita}/${formData.unidade_custo}`
+      });
+      queryClient.invalidateQueries({ queryKey: ['custos'] });
+    }
   };
 
   const tiposColheitaPadrao = formData.cultura === 'manga' ? tiposColheitaManga : formData.cultura === 'goiaba' ? tiposColheitaGoiaba : [];
@@ -298,6 +229,16 @@ export default function Colheitas() {
   const totalKg = colheitasFiltradas.reduce((acc, c) => acc + (c.quantidade_kg || 0), 0);
   const totalCaixas = colheitasFiltradas.reduce((acc, c) => acc + (c.quantidade_caixas || 0), 0);
   const totalReceita = colheitasFiltradas.reduce((acc, c) => acc + (c.valor_total || 0), 0);
+
+  const getTalhaoNome = (id) => talhoes.find(t => t.id === id)?.nome || '-';
+
+  const tipoColheitaLabel = (tipo) => {
+    const allTipos = [...tiposColheitaManga, ...tiposColheitaGoiaba];
+    const padrao = allTipos.find(t => t.value === tipo);
+    if (padrao) return padrao.label;
+    const customizado = tiposCustomizados.find(t => t.nome === tipo);
+    return customizado ? customizado.nome : tipo;
+  };
 
   return (
     <div className="space-y-6">
@@ -392,7 +333,7 @@ export default function Colheitas() {
 
                     <div className="p-4 bg-red-50/50 rounded-xl space-y-3 border border-red-100">
                         <Label className="text-red-800 font-medium">Custo da Colheita (Terceirizado)</Label>
-                        <div className="grid grid-cols-3 gap-4">
+                        <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2">
                                 <Label className="text-xs text-red-700">Custo Unit.</Label>
                                 <Input type="number" step="0.01" value={formData.custo_colheita || ""} onChange={(e) => setFormData({ ...formData, custo_colheita: e.target.value })} placeholder="R$" className="rounded-xl bg-white border-red-200" />
@@ -402,16 +343,6 @@ export default function Colheitas() {
                                 <Select value={formData.unidade_custo || ""} onValueChange={(value) => setFormData({ ...formData, unidade_custo: value })}>
                                     <SelectTrigger className="rounded-xl bg-white border-red-200"><SelectValue /></SelectTrigger>
                                     <SelectContent><SelectItem value="kg">Por kg</SelectItem><SelectItem value="caixa">Por caixa</SelectItem></SelectContent>
-                                </Select>
-                            </div>
-                            <div className="space-y-2">
-                                <Label className="text-xs text-red-700">Status Pgto.</Label>
-                                <Select value={formData.status_pagamento_custo || "pago"} onValueChange={(value) => setFormData({ ...formData, status_pagamento_custo: value })}>
-                                    <SelectTrigger className="rounded-xl bg-white border-red-200"><SelectValue /></SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="pago">Pago</SelectItem>
-                                        <SelectItem value="pendente">Pendente</SelectItem>
-                                    </SelectContent>
                                 </Select>
                             </div>
                         </div>
@@ -512,16 +443,11 @@ export default function Colheitas() {
                     <TableHead>Tipo</TableHead>
                     <TableHead className="text-right">Quantidade</TableHead>
                     <TableHead className="text-right">Venda Total</TableHead>
-                    <TableHead className="text-right w-[160px]">Custo Colheita</TableHead>
                     <TableHead className="text-right pr-6 w-[120px]">Ações</TableHead>
                 </TableRow>
                 </TableHeader>
                 <TableBody>
-                {colheitasFiltradas.map((colheita) => {
-                    const qtd = colheita.unidade_custo === 'kg' ? (colheita.quantidade_kg || 0) : (colheita.quantidade_caixas || 0);
-                    const custoTotal = qtd * (colheita.custo_colheita || 0);
-
-                    return (
+                {colheitasFiltradas.map((colheita) => (
                     <TableRow key={colheita.id} className="hover:bg-stone-50 transition-colors">
                         <TableCell className="pl-6 font-medium text-stone-600">
                             {colheita.data ? format(new Date(colheita.data + 'T12:00:00'), 'dd/MM/yyyy') : '-'}
@@ -546,41 +472,14 @@ export default function Colheitas() {
                                 <span className="text-[10px] text-stone-400 font-medium mt-0.5">R$ {colheita.preco_unitario?.toFixed(2)}/{colheita.unidade_preco}</span>
                             </div>
                         </TableCell>
-
-                        <TableCell className="text-right">
-                            {custoTotal > 0 ? (
-                                <div className="flex flex-col items-end gap-1">
-                                    <span className="font-bold text-red-600">R$ {custoTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                                    {colheita.status_pagamento_custo === 'pendente' ? (
-                                        <Button 
-                                            variant="outline" 
-                                            size="sm" 
-                                            className="h-6 text-[10px] font-bold text-amber-600 border-amber-200 hover:bg-amber-50 rounded-md px-2 mt-1"
-                                            onClick={() => { if(confirm("Confirmar pagamento e lançar na despesa?")) markAsPaidMutation.mutate(colheita); }}
-                                            disabled={markAsPaidMutation.isPending}
-                                        >
-                                            <Clock className="w-3 h-3 mr-1" /> Marcar Pago
-                                        </Button>
-                                    ) : (
-                                        <Badge variant="outline" className="text-[10px] bg-emerald-50 text-emerald-700 border-emerald-200 scale-90 mt-1">
-                                            <CheckCircle2 className="w-3 h-3 mr-1" /> PAGO
-                                        </Badge>
-                                    )}
-                                </div>
-                            ) : (
-                                <span className="text-stone-400">-</span>
-                            )}
-                        </TableCell>
-
                         <TableCell className="text-right pr-6">
                             <div className="flex justify-end gap-1">
                                 <Button variant="ghost" size="icon" className="h-8 w-8 text-stone-400 hover:text-stone-700 hover:bg-stone-100 rounded-lg" onClick={() => handleEdit(colheita)}><Edit className="w-4 h-4" /></Button>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-red-300 hover:text-red-500 hover:bg-red-50 rounded-lg" onClick={() => { if(confirm("Excluir colheita?")) deleteMutation.mutate(colheita.id) }}><Trash2 className="w-4 h-4" /></Button>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-red-300 hover:text-red-500 hover:bg-red-50 rounded-lg" onClick={() => { if (confirm("Excluir esta colheita? Essa ação não pode ser desfeita.")) deleteMutation.mutate(colheita.id) }}><Trash2 className="w-4 h-4" /></Button>
                             </div>
                         </TableCell>
                     </TableRow>
-                    );
-                })}
+                ))}
                 </TableBody>
             </Table>
             </div>

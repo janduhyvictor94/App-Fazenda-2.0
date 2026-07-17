@@ -80,7 +80,8 @@ export default function Metas() {
       queryClient.invalidateQueries({ queryKey: ['metas_talhoes'] });
       setOpen(false);
       resetForm();
-    }
+    },
+    onError: (error) => { alert(`Não foi possível salvar a meta.\n\nMotivo: ${error.message || 'Erro desconhecido'}`); console.error('Erro ao salvar meta:', error); }
   });
 
   const deleteMutation = useMutation({
@@ -88,7 +89,8 @@ export default function Metas() {
       const { error } = await supabase.from('metas_talhoes').delete().eq('id', id);
       if (error) throw error;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['metas_talhoes'] })
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['metas_talhoes'] }),
+    onError: (error) => { alert(`Não foi possível excluir a meta.\n\nMotivo: ${error.message || 'Erro desconhecido'}`); console.error('Erro ao excluir meta:', error); }
   });
 
   // Handlers
@@ -242,7 +244,7 @@ export default function Metas() {
             <TableCell className={`text-right font-medium ${d.pStat === STATUS_PROD_BAIXA ? 'text-amber-600' : 'text-emerald-600'}`}>{d.pHa.toFixed(1)} ton</TableCell>
             <TableCell><div className="flex gap-1">
               <Button variant="ghost" size="sm" onClick={() => handleEdit(d.meta)}><Edit className="w-4 h-4" /></Button>
-              <Button variant="ghost" size="sm" className="text-red-600" onClick={() => deleteMutation.mutate(d.meta.id)}><Trash2 className="w-4 h-4" /></Button>
+              <Button variant="ghost" size="sm" className="text-red-600" onClick={() => { if (confirm("Excluir esta meta? Essa ação não pode ser desfeita.")) deleteMutation.mutate(d.meta.id) }}><Trash2 className="w-4 h-4" /></Button>
             </div></TableCell>
           </TableRow>
         ))}</TableBody></Table></Card>

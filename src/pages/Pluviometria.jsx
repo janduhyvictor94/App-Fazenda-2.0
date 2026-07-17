@@ -53,7 +53,8 @@ export default function Pluviometria() {
       queryClient.invalidateQueries({ queryKey: ['pluviometria'] });
       setOpen(false);
       setFormData({ data: format(new Date(), 'yyyy-MM-dd'), quantidade_mm: '', talhao_id: '', observacoes: '' });
-    }
+    },
+    onError: (error) => { alert(`Não foi possível salvar o registro de chuva.\n\nMotivo: ${error.message || 'Erro desconhecido'}`); console.error('Erro ao criar registro de pluviometria:', error); }
   });
 
   const deleteMutation = useMutation({
@@ -63,7 +64,8 @@ export default function Pluviometria() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['pluviometria'] });
-    }
+    },
+    onError: (error) => { alert(`Não foi possível excluir o registro de chuva.\n\nMotivo: ${error.message || 'Erro desconhecido'}`); console.error('Erro ao excluir registro de pluviometria:', error); }
   });
 
   const handleSubmit = (e) => {
@@ -178,7 +180,7 @@ export default function Pluviometria() {
                     </div>
                   </TableCell>
                   <TableCell className="text-right pr-8">
-                    <Button variant="ghost" size="sm" className="rounded-xl text-red-400 hover:bg-red-50 hover:text-red-600" onClick={() => deleteMutation.mutate(chuva.id)}>
+                    <Button variant="ghost" size="sm" className="rounded-xl text-red-400 hover:bg-red-50 hover:text-red-600" onClick={() => { if (confirm("Excluir este registro de chuva? Essa ação não pode ser desfeita.")) deleteMutation.mutate(chuva.id) }}>
                       <Trash2 className="w-4 h-4" />
                     </Button>
                   </TableCell>

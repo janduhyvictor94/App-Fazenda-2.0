@@ -153,10 +153,15 @@ export default function Financeiro({ showMessage }) {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async (id) => { await supabase.from('custos').delete().eq('id', id); },
+    mutationFn: async (id) => { const { error } = await supabase.from('custos').delete().eq('id', id); if (error) throw error; },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['custos'] });
       if (showMessage) showMessage("Lançamento excluído", "error");
+    },
+    onError: (error) => {
+      console.error("Erro ao excluir lançamento:", error);
+      if (showMessage) showMessage(`Não foi possível excluir: ${error.message}`, "error");
+      else alert(`Não foi possível excluir o lançamento.\n\nMotivo: ${error.message || 'Erro desconhecido'}`);
     }
   });
 

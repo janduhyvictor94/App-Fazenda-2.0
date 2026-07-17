@@ -280,7 +280,7 @@ export default function Atividades() {
   const handleSubmitForm = (e) => {
       e.preventDefault();
       const payload = { ...formData, valor_terceirizado: formData.valor_terceirizado ? parseFloat(formData.valor_terceirizado) : null, custo_total: calcularCustoTotal(), data_realizada: formData.status === 'concluida' ? (formData.data_realizada || format(new Date(), 'yyyy-MM-dd')) : null };
-      if (editingAtividade) updateMutation.mutate({ id: editingAtividade.id, data: payload }); else createMutation.mutate(payload);
+      if (editingAtividade) updateMutation.mutate({ id: editingAtividade.id, data: payload }); else createBatchMutation.mutate([payload]);
   };
 
   const atividadesFiltradas = atividades.filter(a => {

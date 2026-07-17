@@ -189,7 +189,8 @@ export default function Funcionarios() {
       const { error } = await supabase.from('funcionarios').insert([payload]);
       if (error) throw error;
     },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['funcionarios'] }); resetForm(); }
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['funcionarios'] }); resetForm(); },
+    onError: (error) => { alert(`Não foi possível cadastrar o funcionário.\n\nMotivo: ${error.message || 'Erro desconhecido'}`); console.error('Erro ao criar funcionário:', error); }
   });
 
   const updateMutation = useMutation({
@@ -203,7 +204,8 @@ export default function Funcionarios() {
       const { error } = await supabase.from('funcionarios').update(payload).eq('id', id);
       if (error) throw error;
     },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['funcionarios'] }); resetForm(); }
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['funcionarios'] }); resetForm(); },
+    onError: (error) => { alert(`Não foi possível salvar as alterações.\n\nMotivo: ${error.message || 'Erro desconhecido'}`); console.error('Erro ao atualizar funcionário:', error); }
   });
 
   const reajusteMutation = useMutation({
@@ -223,13 +225,17 @@ export default function Funcionarios() {
         const updatedFunc = { ...selectedFuncionario, salario: parseFloat(reajusteData.novo_salario) };
         setSelectedFuncionario(updatedFunc);
         alert("Salário reajustado com sucesso!");
-    }
+    },
+    onError: (error) => { alert(`Não foi possível reajustar o salário.\n\nMotivo: ${error.message || 'Erro desconhecido'}`); console.error('Erro ao reajustar salário:', error); }
   });
 
   const deleteMutation = useMutation({
     mutationFn: async (id) => {
       const { data: func } = await supabase.from('funcionarios').select('nome').eq('id', id).single();
-      if (func?.nome) await supabase.from('custos').delete().eq('categoria', 'funcionario').ilike('descricao', `%${func.nome}%`);
+      // Usa "- Nome" como sufixo exato da descrição (formato usado ao lançar: "Folha: Tipo - Nome"),
+      // em vez de "%nome%" solto — isso evita apagar custos de OUTRO funcionário cujo nome
+      // contenha este como substring (ex: excluir "Maria Silva" não deve afetar "Ana Maria Silva").
+      if (func?.nome) await supabase.from('custos').delete().eq('categoria', 'funcionario').ilike('descricao', `%- ${func.nome}`);
       const { error } = await supabase.from('funcionarios').delete().eq('id', id);
       if (error) throw error;
     },
@@ -237,7 +243,8 @@ export default function Funcionarios() {
         queryClient.invalidateQueries({ queryKey: ['funcionarios'] }); 
         queryClient.invalidateQueries({ queryKey: ['custos'] }); 
         queryClient.invalidateQueries({ queryKey: ['todos_custos_funcionarios'] });
-    }
+    },
+    onError: (error) => { alert(`Não foi possível excluir o funcionário.\n\nMotivo: ${error.message || 'Erro desconhecido'}`); console.error('Erro ao excluir funcionário:', error); }
   });
 
   const lancarCustoMutation = useMutation({
@@ -255,7 +262,8 @@ export default function Funcionarios() {
     onSuccess: () => { 
         queryClient.invalidateQueries({ queryKey: ['todos_custos_funcionarios'] }); 
         queryClient.invalidateQueries({ queryKey: ['custos'] });
-    }
+    },
+    onError: (error) => { alert(`Não foi possível lançar o custo.\n\nMotivo: ${error.message || 'Erro desconhecido'}`); console.error('Erro ao lançar custo de funcionário:', error); }
   });
 
   const atualizarStatusCustoMutation = useMutation({
@@ -266,7 +274,8 @@ export default function Funcionarios() {
     onSuccess: () => { 
         queryClient.invalidateQueries({ queryKey: ['todos_custos_funcionarios'] });
         queryClient.invalidateQueries({ queryKey: ['custos'] });
-    }
+    },
+    onError: (error) => { alert(`Não foi possível atualizar o status do pagamento.\n\nMotivo: ${error.message || 'Erro desconhecido'}`); console.error('Erro ao atualizar status de custo:', error); }
   });
 
   const resetForm = () => {
