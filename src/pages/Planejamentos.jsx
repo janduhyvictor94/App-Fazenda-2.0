@@ -27,8 +27,8 @@ const cicloLabels = {
 };
 
 const metodoConfig = {
-  foliar: { label: 'Foliar', icon: Droplets, color: 'text-blue-500', bg: 'bg-blue-50 border-blue-200' },
-  adubacao: { label: 'Adubação', icon: Leaf, color: 'text-emerald-500', bg: 'bg-emerald-50 border-emerald-200' },
+  foliar: { label: 'Foliar', icon: Droplets, color: 'text-blue-600', bg: 'bg-blue-50 border-blue-200' },
+  adubacao: { label: 'Adubação', icon: Leaf, color: 'text-teal-600', bg: 'bg-teal-50 border-teal-200' },
   terceirizado: { label: 'Terceirizado', icon: Briefcase, color: 'text-amber-600', bg: 'bg-amber-50 border-amber-200' }
 };
 
@@ -585,7 +585,7 @@ export default function Planejamentos() {
                                           <div className="text-[10px] font-bold uppercase text-stone-400 tracking-wider">
                                               {planTipoCiclo === 'livre' ? 'Etapa' : cicloLabels[planTipoCiclo]}
                                           </div>
-                                          <div className="text-xl font-black text-emerald-600">{fase.momento}</div>
+                                          <div className="text-xl font-black text-stone-800">{fase.momento}</div>
                                           {fase.nome_etapa && <div className="text-xs font-bold text-stone-500 mt-1 max-w-[80px] truncate ml-auto" title={fase.nome_etapa}>{fase.nome_etapa}</div>}
                                       </div>
                                       <div className="w-12 h-12 rounded-full bg-white border-4 border-emerald-100 shadow-sm flex items-center justify-center relative md:-mr-6 z-10">
@@ -648,7 +648,7 @@ export default function Planejamentos() {
                                                                   </SelectTrigger>
                                                                   <SelectContent>
                                                                       <SelectItem value="foliar"><div className="flex items-center gap-2"><Droplets className="w-3 h-3 text-blue-500"/> Foliar</div></SelectItem>
-                                                                      <SelectItem value="adubacao"><div className="flex items-center gap-2"><Leaf className="w-3 h-3 text-emerald-500"/> Adubação</div></SelectItem>
+                                                                      <SelectItem value="adubacao"><div className="flex items-center gap-2"><Leaf className="w-3 h-3 text-teal-600"/> Adubação</div></SelectItem>
                                                                       <SelectItem value="terceirizado"><div className="flex items-center gap-2"><Briefcase className="w-3 h-3 text-amber-600"/> Terceirizado</div></SelectItem>
                                                                   </SelectContent>
                                                               </Select>
@@ -700,9 +700,9 @@ export default function Planejamentos() {
                                                                           </Select>
 
                                                                           {pesoCalculado > 0 && (
-                                                                            <div className="flex flex-col items-center justify-center bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-lg">
-                                                                              <span className="text-[8px] font-black text-emerald-700 uppercase leading-none mb-1">Uso Total</span>
-                                                                              <span className="text-[11px] font-black text-emerald-600 leading-none whitespace-nowrap">{pesoCalculado.toLocaleString('pt-BR', {minimumFractionDigits: 1})} <span className="text-[8px]">kg</span></span>
+                                                                            <div className="flex flex-col items-center justify-center bg-stone-100 border border-stone-200 px-2 py-0.5 rounded-lg">
+                                                                              <span className="text-[8px] font-black text-stone-500 uppercase leading-none mb-1">Uso Total</span>
+                                                                              <span className="text-[11px] font-black text-stone-800 leading-none whitespace-nowrap">{pesoCalculado.toLocaleString('pt-BR', {minimumFractionDigits: 1})} <span className="text-[8px]">kg</span></span>
                                                                             </div>
                                                                           )}
 
@@ -725,32 +725,31 @@ export default function Planejamentos() {
 
               <div className="lg:col-span-1">
                   <div className="sticky top-24">
-                      <Card className="border-emerald-100 rounded-[2rem] shadow-md shadow-emerald-100/50 bg-gradient-to-br from-emerald-600 to-teal-700 overflow-hidden">
-                          <CardHeader className="border-b border-emerald-500/30 pb-4 bg-black/10">
-                              <CardTitle className="flex items-center gap-2 text-lg text-white font-bold">
-                                  <ShoppingCart className="w-5 h-5 text-emerald-200" /> Resumo do Ciclo
-                              </CardTitle>
-                          </CardHeader>
+                      <Card className="border-stone-200 rounded-[2rem] shadow-lg overflow-hidden">
                           <CardContent className="p-0">
-                              <div className="p-6 text-center text-white">
-                                  <p className="text-emerald-100/80 text-xs uppercase font-bold tracking-widest mb-1">Custo Total Estimado</p>
-                                  <div className="text-3xl font-black tracking-tight">
+                              <div className="p-6 text-center text-white bg-stone-900">
+                                  <div className="flex items-center justify-center gap-2 mb-4 text-stone-400">
+                                      <ShoppingCart className="w-4 h-4" />
+                                      <span className="text-xs uppercase font-bold tracking-widest">Resumo do Ciclo</span>
+                                  </div>
+                                  <p className="text-stone-400 text-xs uppercase font-bold tracking-widest mb-1">Custo Total Estimado</p>
+                                  <div className="text-3xl font-black tracking-tight text-emerald-400">
                                       R$ {resumoCompras.custoGeralEstimado.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
                                   </div>
-                                  <div className="flex justify-center gap-4 mt-2 text-[10px] text-emerald-100/70 font-medium">
+                                  <div className="flex justify-center gap-4 mt-3 text-[10px] text-stone-400 font-medium">
                                       <span>Insumos: R$ {resumoCompras.custoTotalInsumos.toLocaleString('pt-BR')}</span>
                                       <span>Mão de Obra: R$ {resumoCompras.custoTerceirizadoEstimado.toLocaleString('pt-BR')}</span>
                                   </div>
                                   {(!planPlantas || planPlantas === '0') && planFases.some(f => f.aplicacoes.some(a => a.modo_aplicacao === 'g/planta')) && (
-                                      <div className="mt-3 bg-red-500/20 border border-red-500/30 text-red-100 text-xs py-1.5 px-3 rounded-lg inline-block">
+                                      <div className="mt-3 bg-red-500/15 border border-red-500/30 text-red-300 text-xs py-1.5 px-3 rounded-lg inline-block">
                                           Informe a Qtd de Plantas para calcular "g/planta"
                                       </div>
                                   )}
                               </div>
                               
-                              <div className="bg-white/95 rounded-t-3xl p-5 min-h-[300px]">
+                              <div className="bg-white p-5 min-h-[300px]">
                                   <h3 className="text-sm font-bold text-stone-700 mb-4 flex items-center gap-2">
-                                      <Calculator className="w-4 h-4 text-emerald-600"/> Lista de Compras Necessária
+                                      <Calculator className="w-4 h-4 text-stone-500"/> Lista de Compras Necessária
                                   </h3>
                                   
                                   {resumoCompras.itens.length === 0 ? (
@@ -760,19 +759,19 @@ export default function Planejamentos() {
                                   ) : (
                                       <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2 scrollbar-thin">
                                           {resumoCompras.itens.map((item, idx) => (
-                                              <div key={idx} className="bg-stone-50 rounded-xl p-3 border border-stone-100 flex items-center justify-between group hover:border-emerald-200 transition-colors">
+                                              <div key={idx} className="bg-stone-50 rounded-xl p-3 border border-stone-100 flex items-center justify-between group hover:border-stone-300 transition-colors">
                                                   <div className="flex-1 truncate pr-2">
                                                       <p className="font-bold text-stone-800 text-sm truncate" title={item.nome}>{item.nome}</p>
                                                       <p className="text-[10px] text-stone-400 font-medium">Ref: R$ {item.preco_unitario?.toFixed(2)} por embalagem</p>
                                                   </div>
                                                   <div className="text-right shrink-0">
-                                                      <p className="text-sm font-black text-emerald-600">
-                                                          {item.quantidadeTotalBase.toLocaleString('pt-BR', {maximumFractionDigits: 2})} <span className="text-[10px] text-emerald-600/60 font-bold uppercase">{item.unidadeCalculada}</span>
+                                                      <p className="text-sm font-black text-stone-800">
+                                                          {item.quantidadeTotalBase.toLocaleString('pt-BR', {maximumFractionDigits: 2})} <span className="text-[10px] text-stone-500 font-bold uppercase">{item.unidadeCalculada}</span>
                                                       </p>
                                                       <div className="text-[10px] text-stone-500 font-medium">
                                                         Comprar <b className="text-stone-700">{Math.ceil(item.qtdEmbalagens)}</b> un.
                                                       </div>
-                                                      <p className="text-[10px] font-bold text-emerald-700 mt-1">R$ {item.custoEstimado.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
+                                                      <p className="text-[10px] font-bold text-stone-600 mt-1">R$ {item.custoEstimado.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
                                                   </div>
                                               </div>
                                           ))}
