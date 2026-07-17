@@ -139,11 +139,11 @@ export default function Calendario() {
                         {/* Infos Principais */}
                         <div className="grid grid-cols-2 gap-4">
                             <div className="bg-stone-50 p-3 rounded-xl border border-stone-100">
-                                <Label className="text-[10px] uppercase tracking-wider text-stone-400 font-bold flex items-center gap-1 mb-1"><MapPin className="w-3 h-3"/> Válvula</Label>
+                                <Label className="text-xs uppercase tracking-wider text-stone-400 font-bold flex items-center gap-1 mb-1"><MapPin className="w-3 h-3"/> Válvula</Label>
                                 <p className="font-bold text-stone-800 text-sm">{getTalhaoNome(selectedActivity.talhao_id)}</p>
                             </div>
                             <div className="bg-stone-50 p-3 rounded-xl border border-stone-100">
-                                <Label className="text-[10px] uppercase tracking-wider text-stone-400 font-bold flex items-center gap-1 mb-1"><User className="w-3 h-3"/> Responsável</Label>
+                                <Label className="text-xs uppercase tracking-wider text-stone-400 font-bold flex items-center gap-1 mb-1"><User className="w-3 h-3"/> Responsável</Label>
                                 <p className="font-bold text-stone-800 text-sm">{selectedActivity.responsavel || '-'}</p>
                             </div>
                         </div>
@@ -151,12 +151,12 @@ export default function Calendario() {
                         {/* Insumos */}
                         {selectedActivity.insumos_utilizados && selectedActivity.insumos_utilizados.length > 0 && (
                             <div className="bg-stone-50 p-4 rounded-xl border border-stone-100">
-                                <Label className="text-[10px] uppercase tracking-wider text-stone-400 font-bold flex items-center gap-1 mb-3"><Package className="w-3 h-3"/> Insumos Definidos</Label>
+                                <Label className="text-xs uppercase tracking-wider text-stone-400 font-bold flex items-center gap-1 mb-3"><Package className="w-3 h-3"/> Insumos Definidos</Label>
                                 <div className="space-y-2">
                                     {selectedActivity.insumos_utilizados.map((ins, idx) => (
                                         <div key={idx} className="flex justify-between items-center text-sm border-b border-stone-200/50 last:border-0 pb-1 last:pb-0">
                                             <span className="text-stone-700 font-medium">{ins.nome}</span>
-                                            <span className="text-stone-500">{ins.quantidade} {ins.unidade} <span className="text-[10px] bg-stone-200 px-1 rounded ml-1 text-stone-600">{ins.metodo_aplicacao}</span></span>
+                                            <span className="text-stone-500">{ins.quantidade} {ins.unidade} <span className="text-xs bg-stone-200 px-1 rounded ml-1 text-stone-600">{ins.metodo_aplicacao}</span></span>
                                         </div>
                                     ))}
                                 </div>
@@ -165,7 +165,7 @@ export default function Calendario() {
                         
                         {/* Observações */}
                         <div className="bg-stone-50 p-4 rounded-xl border border-stone-100">
-                            <Label className="text-[10px] uppercase tracking-wider text-stone-400 font-bold flex items-center gap-1 mb-2"><FileText className="w-3 h-3"/> Recomendação / Obs</Label>
+                            <Label className="text-xs uppercase tracking-wider text-stone-400 font-bold flex items-center gap-1 mb-2"><FileText className="w-3 h-3"/> Recomendação / Obs</Label>
                             {selectedActivity.observacoes ? (
                                 <p className="text-sm text-stone-700 whitespace-pre-wrap leading-relaxed font-medium">{selectedActivity.observacoes}</p>
                             ) : (
@@ -195,7 +195,7 @@ export default function Calendario() {
           <p className="text-stone-500 font-medium">Cronograma detalhado de manejo e atividades</p>
         </div>
         <div className="flex items-center gap-3">
-          <Label className="font-medium text-stone-400 uppercase text-[11px] tracking-wider">Filtrar Válvula:</Label>
+          <Label className="font-medium text-stone-400 uppercase text-xs tracking-wider">Filtrar Válvula:</Label>
           <Select value={filtroTalhao} onValueChange={setFiltroTalhao}>
             <SelectTrigger className="w-56 rounded-xl border-stone-200 bg-white shadow-sm h-11 font-medium text-stone-600">
               <SelectValue placeholder="Selecione..." />
@@ -230,7 +230,7 @@ export default function Calendario() {
           <CardContent className="p-8">
             <div className="grid grid-cols-7 mb-6">
               {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map(day => (
-                <div key={day} className="text-center font-bold text-stone-400 text-[11px] uppercase tracking-widest">{day}</div>
+                <div key={day} className="text-center font-bold text-stone-400 text-xs uppercase tracking-widest">{day}</div>
               ))}
             </div>
             
@@ -271,7 +271,7 @@ export default function Calendario() {
                           <div 
                             key={i} 
                             className={cn(
-                              "text-[10px] px-2 py-1 rounded-lg font-medium truncate transition-colors flex items-center gap-1.5",
+                              "text-xs px-2 py-1 rounded-lg font-medium truncate transition-colors flex items-center gap-1.5",
                               isSel ? "bg-white/20 text-white backdrop-blur-sm" : "bg-stone-50 text-stone-600 border border-stone-100"
                             )}
                           >
@@ -281,7 +281,7 @@ export default function Calendario() {
                         );
                       })}
                       {dayAtivs.length > 3 && (
-                        <p className={cn("text-[9px] font-semibold pl-1 mt-1", isSel ? "text-white/80" : "text-stone-400")}>
+                        <p className={cn("text-[11px] font-semibold pl-1 mt-1", isSel ? "text-white/80" : "text-stone-400")}>
                           +{dayAtivs.length - 3} mais
                         </p>
                       )}
@@ -318,12 +318,12 @@ export default function Calendario() {
                       <div className={cn("absolute left-0 top-0 bottom-0 w-2", config.color)} />
                       
                       <div className="flex items-center justify-between mb-3 pl-3">
-                        <Badge className={cn("rounded-lg px-2 py-0.5 font-semibold uppercase text-[10px] border-none shadow-none bg-stone-100 text-stone-500 tracking-wide")}>
+                        <Badge className={cn("rounded-lg px-2 py-0.5 font-semibold uppercase text-xs border-none shadow-none bg-stone-100 text-stone-500 tracking-wide")}>
                           {config.label}
                         </Badge>
                         {a.status && (
                            <span className={cn(
-                               "text-[9px] font-bold uppercase px-2 py-0.5 rounded-lg",
+                               "text-[11px] font-bold uppercase px-2 py-0.5 rounded-lg",
                                a.status === 'concluida' ? "bg-emerald-100 text-emerald-700" : "bg-blue-50 text-blue-600"
                            )}>
                                {a.status}
@@ -336,7 +336,7 @@ export default function Calendario() {
                           <p className="text-sm font-bold text-stone-700 tracking-tight">Válvula: {getTalhaoNome(a.talhao_id)}</p>
                         </div>
                         <div className="flex items-center justify-between mt-3">
-                            <p className="text-[10px] text-stone-400 font-medium flex items-center gap-1">
+                            <p className="text-xs text-stone-400 font-medium flex items-center gap-1">
                                 <FileText className="w-3 h-3"/> Ver recomendação
                             </p>
                             <ArrowRight className="w-4 h-4 text-stone-300 group-hover:text-emerald-500 transition-colors" />
@@ -362,12 +362,12 @@ export default function Calendario() {
       {/* Legenda Estilizada */}
       <Card className="border-none shadow-sm rounded-3xl bg-white p-6 overflow-hidden">
         <div className="flex flex-col lg:flex-row lg:items-center gap-6">
-          <span className="text-[11px] font-bold text-stone-400 uppercase tracking-widest lg:border-r pr-6 border-stone-100">Legenda:</span>
+          <span className="text-xs font-bold text-stone-400 uppercase tracking-widest lg:border-r pr-6 border-stone-100">Legenda:</span>
           <div className="flex flex-wrap items-center gap-3">
             {Object.entries(tiposAtividadeLabels).map(([key, { label, color }]) => (
               <div key={key} className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-stone-50 border border-stone-100">
                 <div className={cn("w-2 h-2 rounded-full shadow-sm", color)} />
-                <span className="text-[10px] font-medium text-stone-600 uppercase tracking-wide">{label}</span>
+                <span className="text-xs font-medium text-stone-600 uppercase tracking-wide">{label}</span>
               </div>
             ))}
           </div>

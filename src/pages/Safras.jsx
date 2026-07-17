@@ -324,7 +324,7 @@ export default function Safras() {
                             <CardHeader className="pb-2">
                                 <div className="flex justify-between items-start">
                                     <div>
-                                        <Badge variant="secondary" className="mb-2 bg-stone-100 text-stone-600 font-bold rounded-lg uppercase text-[10px] tracking-wider">
+                                        <Badge variant="secondary" className="mb-2 bg-stone-100 text-stone-600 font-bold rounded-lg uppercase text-xs tracking-wider">
                                             {safra.talhoes?.nome}
                                         </Badge>
                                         <CardTitle className="text-lg font-bold text-stone-800 group-hover:text-emerald-700 transition-colors">

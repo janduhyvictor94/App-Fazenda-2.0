@@ -472,7 +472,7 @@ export default function Financeiro({ showMessage }) {
                                     </TableCell>
                                     <TableCell>
                                         <div className="font-bold text-blue-900">{item.descricao}</div>
-                                        <div className="text-[10px] text-blue-600 font-bold uppercase tracking-wider flex items-center gap-1">
+                                        <div className="text-xs text-blue-600 font-bold uppercase tracking-wider flex items-center gap-1">
                                             <Users className="w-3 h-3" /> {item.itens.length} lançamentos agrupados
                                         </div>
                                     </TableCell>
@@ -480,7 +480,7 @@ export default function Financeiro({ showMessage }) {
                                         R$ {item.total.toLocaleString('pt-BR')}
                                     </TableCell>
                                     <TableCell className="text-center">
-                                        <Badge variant="secondary" className="bg-white border border-blue-200 text-blue-600 text-[10px]">AGRUPADO (PAGOS)</Badge>
+                                        <Badge variant="secondary" className="bg-white border border-blue-200 text-blue-600 text-xs">AGRUPADO (PAGOS)</Badge>
                                     </TableCell>
                                     <TableCell className="text-right pr-6"><span className="text-xs text-blue-400">Ver itens</span></TableCell>
                                 </TableRow>
@@ -513,10 +513,10 @@ export default function Financeiro({ showMessage }) {
                         <TableCell>
                         <div className="font-medium text-stone-800">{item.descricao}</div>
                         <div className="flex gap-2 items-center mt-0.5">
-                            <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-medium uppercase tracking-wider ${categoriaLabels[item.categoria]?.color || 'bg-stone-100 text-stone-500'}`}>
+                            <span className={`text-xs px-1.5 py-0.5 rounded-md font-medium uppercase tracking-wider ${categoriaLabels[item.categoria]?.color || 'bg-stone-100 text-stone-500'}`}>
                                 {categoriaLabels[item.categoria]?.label || item.categoria}
                             </span>
-                            {item.tipo_lancamento === 'receita' && <span className="text-[10px] text-blue-600 font-bold uppercase tracking-wider bg-blue-50 px-1.5 py-0.5 rounded-md">Receita</span>}
+                            {item.tipo_lancamento === 'receita' && <span className="text-xs text-blue-600 font-bold uppercase tracking-wider bg-blue-50 px-1.5 py-0.5 rounded-md">Receita</span>}
                         </div>
                         </TableCell>
                         <TableCell className={`text-right font-bold ${item.tipo_lancamento === 'receita' ? 'text-blue-600' : 'text-red-600'} ${item.status_pagamento === 'pendente' ? 'opacity-50' : ''}`}>

@@ -402,9 +402,9 @@ export default function Planejamentos() {
                     <Label>Data Base de Início {planTipoCiclo === 'livre' && <span className="text-stone-400 font-normal">(opcional)</span>}</Label>
                     <Input type="date" value={applyStartDate} onChange={e => setApplyStartDate(e.target.value)} className="rounded-xl" />
                     {planTipoCiclo === 'livre' ? (
-                        <p className="text-[10px] text-stone-500">As etapas nascem <b>sem data</b> em Atividades, na ordem certa. Você escolhe a data real de cada uma só quando marcar como concluída — e é aí que o custo entra no financeiro daquele talhão.</p>
+                        <p className="text-xs text-stone-500">As etapas nascem <b>sem data</b> em Atividades, na ordem certa. Você escolhe a data real de cada uma só quando marcar como concluída — e é aí que o custo entra no financeiro daquele talhão.</p>
                     ) : (
-                        <p className="text-[10px] text-stone-500">As {cicloLabels[planTipoCiclo]}s serão calculadas a partir desta data.</p>
+                        <p className="text-xs text-stone-500">As {cicloLabels[planTipoCiclo]}s serão calculadas a partir desta data.</p>
                     )}
                 </div>
             </div>
@@ -568,7 +568,7 @@ export default function Planejamentos() {
                       </Dialog>
                   </div>
 
-                  <div className="space-y-6 relative before:absolute before:inset-0 before:ml-6 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-stone-200 before:via-emerald-200 before:to-stone-100">
+                  <div className="space-y-6 relative before:absolute before:inset-0 before:ml-6 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-stone-200 before:via-emerald-200 before:to-stone-100 dark:before:from-stone-700 dark:before:via-emerald-800 dark:before:to-stone-800">
                       {planFases.length === 0 ? (
                           <div className="relative z-10 text-center py-10">
                               <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-stone-100 border-4 border-white shadow-sm mb-3">
@@ -582,7 +582,7 @@ export default function Planejamentos() {
                               <div key={fase.id} className="relative z-10 flex items-start flex-col md:flex-row gap-4 group">
                                   <div className="flex items-center md:justify-end w-12 md:w-32 pt-3 shrink-0">
                                       <div className="hidden md:block mr-4 text-right">
-                                          <div className="text-[10px] font-bold uppercase text-stone-400 tracking-wider">
+                                          <div className="text-xs font-bold uppercase text-stone-400 tracking-wider">
                                               {planTipoCiclo === 'livre' ? 'Etapa' : cicloLabels[planTipoCiclo]}
                                           </div>
                                           <div className="text-xl font-black text-stone-800">{fase.momento}</div>
@@ -662,7 +662,7 @@ export default function Planejamentos() {
                                                                           className="flex-1 h-9 text-xs rounded-lg bg-white border-stone-200"
                                                                       />
                                                                       <div className="flex items-center justify-between md:justify-end gap-2 w-full md:w-auto shrink-0 mt-2 md:mt-0">
-                                                                          <Label className="text-[10px] text-stone-500 font-bold whitespace-nowrap">R$ Est.</Label>
+                                                                          <Label className="text-xs text-stone-500 font-bold whitespace-nowrap">R$ Est.</Label>
                                                                           <Input 
                                                                               type="number" 
                                                                               placeholder="Opcional" 
@@ -701,8 +701,8 @@ export default function Planejamentos() {
 
                                                                           {pesoCalculado > 0 && (
                                                                             <div className="flex flex-col items-center justify-center bg-stone-100 border border-stone-200 px-2 py-0.5 rounded-lg">
-                                                                              <span className="text-[8px] font-black text-stone-500 uppercase leading-none mb-1">Uso Total</span>
-                                                                              <span className="text-[11px] font-black text-stone-800 leading-none whitespace-nowrap">{pesoCalculado.toLocaleString('pt-BR', {minimumFractionDigits: 1})} <span className="text-[8px]">kg</span></span>
+                                                                              <span className="text-[11px] font-black text-stone-500 uppercase leading-none mb-1">Uso Total</span>
+                                                                              <span className="text-xs font-black text-stone-800 leading-none whitespace-nowrap">{pesoCalculado.toLocaleString('pt-BR', {minimumFractionDigits: 1})} <span className="text-[11px]">kg</span></span>
                                                                             </div>
                                                                           )}
 
@@ -736,7 +736,7 @@ export default function Planejamentos() {
                                   <div className="text-3xl font-black tracking-tight text-emerald-400">
                                       R$ {resumoCompras.custoGeralEstimado.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
                                   </div>
-                                  <div className="flex justify-center gap-4 mt-3 text-[10px] text-stone-400 font-medium">
+                                  <div className="flex justify-center gap-4 mt-3 text-xs text-stone-400 font-medium">
                                       <span>Insumos: R$ {resumoCompras.custoTotalInsumos.toLocaleString('pt-BR')}</span>
                                       <span>Mão de Obra: R$ {resumoCompras.custoTerceirizadoEstimado.toLocaleString('pt-BR')}</span>
                                   </div>
@@ -762,16 +762,16 @@ export default function Planejamentos() {
                                               <div key={idx} className="bg-stone-50 rounded-xl p-3 border border-stone-100 flex items-center justify-between group hover:border-stone-300 transition-colors">
                                                   <div className="flex-1 truncate pr-2">
                                                       <p className="font-bold text-stone-800 text-sm truncate" title={item.nome}>{item.nome}</p>
-                                                      <p className="text-[10px] text-stone-400 font-medium">Ref: R$ {item.preco_unitario?.toFixed(2)} por embalagem</p>
+                                                      <p className="text-xs text-stone-400 font-medium">Ref: R$ {item.preco_unitario?.toFixed(2)} por embalagem</p>
                                                   </div>
                                                   <div className="text-right shrink-0">
                                                       <p className="text-sm font-black text-stone-800">
-                                                          {item.quantidadeTotalBase.toLocaleString('pt-BR', {maximumFractionDigits: 2})} <span className="text-[10px] text-stone-500 font-bold uppercase">{item.unidadeCalculada}</span>
+                                                          {item.quantidadeTotalBase.toLocaleString('pt-BR', {maximumFractionDigits: 2})} <span className="text-xs text-stone-500 font-bold uppercase">{item.unidadeCalculada}</span>
                                                       </p>
-                                                      <div className="text-[10px] text-stone-500 font-medium">
+                                                      <div className="text-xs text-stone-500 font-medium">
                                                         Comprar <b className="text-stone-700">{Math.ceil(item.qtdEmbalagens)}</b> un.
                                                       </div>
-                                                      <p className="text-[10px] font-bold text-stone-600 mt-1">R$ {item.custoEstimado.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
+                                                      <p className="text-xs font-bold text-stone-600 mt-1">R$ {item.custoEstimado.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
                                                   </div>
                                               </div>
                                           ))}

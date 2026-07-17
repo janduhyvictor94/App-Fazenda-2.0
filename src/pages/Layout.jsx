@@ -58,7 +58,7 @@ export default function Layout({ children, currentPageName }) {
               </div>
               <div className="flex flex-col">
                 <span className="text-lg font-black tracking-tight text-stone-800 leading-none">Fazenda</span>
-                <span className="text-[10px] uppercase tracking-[0.25em] text-emerald-600 font-bold mt-1">Cassiano's</span>
+                <span className="text-xs uppercase tracking-[0.25em] text-emerald-600 font-bold mt-1">Cassiano's</span>
               </div>
             </div>
           </div>
@@ -122,7 +122,7 @@ export default function Layout({ children, currentPageName }) {
                 <p className="text-sm font-bold text-stone-800">Administrador</p>
                 <div className="flex items-center gap-1.5">
                     <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse shadow-sm shadow-emerald-500/50" />
-                    <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">Online</p>
+                    <p className="text-xs font-bold text-emerald-600 uppercase tracking-wider">Online</p>
                 </div>
               </div>
               <div className="w-10 h-10 bg-white rounded-full border border-stone-100 shadow-sm flex items-center justify-center text-stone-400 hover:text-emerald-600 hover:border-emerald-100 transition-all cursor-pointer">

@@ -271,9 +271,9 @@ export default function Insumos({ showMessage }) {
                         <TableCell className="pl-6">
                         <div className="flex items-center gap-2">
                             <span className="font-bold text-stone-800">{insumo.nome}</span>
-                            {isBaixo && <Badge variant="destructive" className="text-[9px] h-4 bg-red-500 hover:bg-red-600">CRÍTICO</Badge>}
+                            {isBaixo && <Badge variant="destructive" className="text-[11px] h-4 bg-red-500 hover:bg-red-600">CRÍTICO</Badge>}
                         </div>
-                        <div className="text-[10px] text-stone-400 uppercase tracking-tight">{insumo.fornecedor || 'Fornecedor N/A'}</div>
+                        <div className="text-xs text-stone-400 uppercase tracking-tight">{insumo.fornecedor || 'Fornecedor N/A'}</div>
                         </TableCell>
                         <TableCell>
                         <Badge className={`${categoriaLabels[insumo.categoria]?.color || 'bg-stone-100 text-stone-600 border-stone-200'} border`}>
@@ -286,7 +286,7 @@ export default function Insumos({ showMessage }) {
                             {insumo.estoque_atual} {insumo.unidade}
                         </div>
                         {insumo.estoque_minimo && (
-                            <div className="text-[10px] text-stone-400">mín: {insumo.estoque_minimo}</div>
+                            <div className="text-xs text-stone-400">mín: {insumo.estoque_minimo}</div>
                         )}
                         </TableCell>
                         <TableCell className="text-right pr-6">

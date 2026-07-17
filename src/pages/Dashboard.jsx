@@ -656,7 +656,7 @@ export default function Dashboard() {
                                         {ativ.tipo === 'outro' ? ativ.tipo_personalizado : ativ.tipo}
                                     </p>
                                     <div className="flex items-center gap-2 mt-1">
-                                        <Badge variant="outline" className="h-5 px-1.5 text-[10px] bg-white border-stone-200 text-stone-600 font-medium">
+                                        <Badge variant="outline" className="h-5 px-1.5 text-xs bg-white border-stone-200 text-stone-600 font-medium">
                                             {getTalhaoNome(ativ.talhao_id)}
                                         </Badge>
                                         <p className="text-xs text-stone-500 flex items-center gap-1">

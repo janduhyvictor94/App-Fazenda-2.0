@@ -469,7 +469,7 @@ export default function Colheitas() {
                         <TableCell className="text-right">
                             <div className="flex flex-col items-end">
                                 <span className="font-bold text-emerald-600">R$ {colheita.valor_total?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                                <span className="text-[10px] text-stone-400 font-medium mt-0.5">R$ {colheita.preco_unitario?.toFixed(2)}/{colheita.unidade_preco}</span>
+                                <span className="text-xs text-stone-400 font-medium mt-0.5">R$ {colheita.preco_unitario?.toFixed(2)}/{colheita.unidade_preco}</span>
                             </div>
                         </TableCell>
                         <TableCell className="text-right pr-6">

@@ -379,7 +379,7 @@ export default function Atividades() {
                             {/* Etiqueta Visual de Finalizada */}
                             {isFinalizada && (
                                 <div className="absolute top-3 right-3">
-                                    <Badge className="bg-stone-300 text-stone-700 hover:bg-stone-400 border-none shadow-none text-[9px] uppercase tracking-wider font-bold">Finalizada</Badge>
+                                    <Badge className="bg-stone-300 text-stone-700 hover:bg-stone-400 border-none shadow-none text-[11px] uppercase tracking-wider font-bold">Finalizada</Badge>
                                 </div>
                             )}
 
@@ -466,8 +466,8 @@ export default function Atividades() {
                         <div className="p-4 border-b border-stone-100 flex justify-between items-center bg-stone-50/50"><h3 className="font-bold text-stone-800 text-lg">{area.nome}</h3><div className="text-xs font-semibold text-stone-500 bg-white px-2 py-1 rounded-lg border border-stone-200">{area.cultura || 'Diversos'}</div></div>
                         <div className="p-4 space-y-4">
                             <div className="grid grid-cols-2 gap-2 text-center">
-                                <div className="bg-amber-50 rounded-lg p-2 border border-amber-100"><div className="text-xl font-bold text-amber-600">{area.qtdPendentes}</div><div className="text-[10px] uppercase font-bold text-amber-700/60">Programadas</div></div>
-                                <div className="bg-emerald-50 rounded-lg p-2 border border-emerald-100"><div className="text-xl font-bold text-emerald-600">{area.qtdConcluidas}</div><div className="text-[10px] uppercase font-bold text-emerald-700/60">Concluídas</div></div>
+                                <div className="bg-amber-50 rounded-lg p-2 border border-amber-100"><div className="text-xl font-bold text-amber-600">{area.qtdPendentes}</div><div className="text-xs uppercase font-bold text-amber-700/60">Programadas</div></div>
+                                <div className="bg-emerald-50 rounded-lg p-2 border border-emerald-100"><div className="text-xl font-bold text-emerald-600">{area.qtdConcluidas}</div><div className="text-xs uppercase font-bold text-emerald-700/60">Concluídas</div></div>
                             </div>
                             <div>
                                 <p className="text-xs font-bold text-stone-400 mb-2 uppercase tracking-wide">Próximas Atividades</p>
@@ -604,8 +604,8 @@ export default function Atividades() {
                                                 <div className="font-bold text-emerald-700">{item.talhao_nome}</div>
                                                 <div className="font-medium text-stone-700">{item.tipo === 'outro' ? item.tipo_personalizado : getTipoLabel(item.tipo)}</div>
                                                 <div className="text-xs text-stone-500 mt-1 flex items-center gap-1"><CalendarIcon className="w-3 h-3"/> {format(parseISO(item.data_programada), 'dd/MM/yyyy')}</div>
-                                                {item.terceirizada && <div className="text-[10px] text-blue-600 font-bold mt-1">Terceirizado: R$ {parseFloat(item.valor_terceirizado || 0).toLocaleString('pt-BR')}</div>}
-                                                {item.insumos_utilizados.length > 0 && (<div className="mt-2 pt-2 border-t border-stone-50 flex gap-1 flex-wrap">{item.insumos_utilizados.map((i, k) => (<span key={k} className="text-[10px] bg-stone-100 px-1 rounded text-stone-500">{i.nome} - <span className="capitalize">{i.metodo_aplicacao}</span></span>))}</div>)}
+                                                {item.terceirizada && <div className="text-xs text-blue-600 font-bold mt-1">Terceirizado: R$ {parseFloat(item.valor_terceirizado || 0).toLocaleString('pt-BR')}</div>}
+                                                {item.insumos_utilizados.length > 0 && (<div className="mt-2 pt-2 border-t border-stone-50 flex gap-1 flex-wrap">{item.insumos_utilizados.map((i, k) => (<span key={k} className="text-xs bg-stone-100 px-1 rounded text-stone-500">{i.nome} - <span className="capitalize">{i.metodo_aplicacao}</span></span>))}</div>)}
                                             </div>
                                         ))
                                     )}
@@ -709,7 +709,7 @@ export default function Atividades() {
                     <TableCell>
                         <div className="font-bold text-stone-800">{atividade.tipo === 'outro' ? atividade.tipo_personalizado : getTipoLabel(atividade.tipo)}</div>
                         <div className="text-xs text-stone-400">{atividade.responsavel && `Resp: ${atividade.responsavel}`}</div>
-                        {atividade.terceirizada && <Badge variant="outline" className="text-[10px] border-blue-200 text-blue-600 mt-1">Terceirizado</Badge>}
+                        {atividade.terceirizada && <Badge variant="outline" className="text-xs border-blue-200 text-blue-600 mt-1">Terceirizado</Badge>}
                     </TableCell>
                     <TableCell><Badge variant="outline" className="bg-white border-stone-200 text-stone-600">{getTalhaoNome(atividade.talhao_id)}</Badge></TableCell>
                     <TableCell className="text-right font-medium text-stone-700">R$ {(atividade.custo_total || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</TableCell>
