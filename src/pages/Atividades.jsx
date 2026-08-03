@@ -197,7 +197,7 @@ export default function Atividades() {
       const talhaoNome = talhoes.find(t => String(t.id) === String(formData.talhao_id))?.nome || 'Válvula';
       const custoCalc = calcularCustoTotal();
       const safraIdAtual = filtroSafra !== 'todas' ? filtroSafra : null;
-      const newItem = { ...formData, safra_id: safraIdAtual, valor_terceirizado: formData.valor_terceirizado ? parseFloat(formData.valor_terceirizado) : null, custo_total: custoCalc, data_realizada: formData.status === 'concluida' ? (formData.data_realizada || formData.data_programada) : null, talhao_nome: talhaoNome, tempId: Date.now() };
+      const newItem = { ...formData, safra_id: safraIdAtual, valor_terceirizado: formData.valor_terceirizado ? parseFloat(formData.valor_terceirizado) : null, custo_total: custoCalc, data_realizada: formData.status === 'concluida' ? formData.data_programada : null, talhao_nome: talhaoNome, tempId: Date.now() };
       setActivityQueue([...activityQueue, newItem]);
       setFormData(prev => ({ ...prev, talhao_id: formData.talhao_id, observacoes: '', insumos_utilizados: [], custo_total: 0, terceirizada: false, valor_terceirizado: '' }));
   };
@@ -279,7 +279,7 @@ export default function Atividades() {
 
   const handleSubmitForm = (e) => {
       e.preventDefault();
-      const payload = { ...formData, valor_terceirizado: formData.valor_terceirizado ? parseFloat(formData.valor_terceirizado) : null, custo_total: calcularCustoTotal(), data_realizada: formData.status === 'concluida' ? (formData.data_realizada || formData.data_programada) : null };
+      const payload = { ...formData, valor_terceirizado: formData.valor_terceirizado ? parseFloat(formData.valor_terceirizado) : null, custo_total: calcularCustoTotal(), data_realizada: formData.status === 'concluida' ? formData.data_programada : null };
       if (editingAtividade) updateMutation.mutate({ id: editingAtividade.id, data: payload }); else createBatchMutation.mutate([payload]);
   };
 
@@ -551,13 +551,6 @@ export default function Atividades() {
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2"><Label>Data Programada</Label><Input type="date" value={formData.data_programada || ""} onChange={(e) => setFormData({ ...formData, data_programada: e.target.value })} className="rounded-xl" /></div>
                             <div className="space-y-2"><Label>Status</Label><Select value={formData.status || ""} onValueChange={(value) => setFormData({ ...formData, status: value })}><SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="programada">Programada</SelectItem><SelectItem value="em_andamento">Em Andamento</SelectItem><SelectItem value="concluida">Concluída</SelectItem></SelectContent></Select></div>
-                            {formData.status === 'concluida' && (
-                                <div className="space-y-2 col-span-2 animate-in fade-in slide-in-from-top-2">
-                                    <Label>Data em que foi Realizada</Label>
-                                    <Input type="date" value={formData.data_realizada || formData.data_programada || ""} onChange={(e) => setFormData({ ...formData, data_realizada: e.target.value })} className="rounded-xl" />
-                                    <p className="text-xs text-stone-500">É essa data que conta pro financeiro do mês. Por padrão, vem igual à Data Programada — mude aqui se ela foi feita em outro dia.</p>
-                                </div>
-                            )}
                         </div>
 
                         <div className="space-y-2"><Label>Responsável</Label><Input value={formData.responsavel || ""} onChange={(e) => setFormData({ ...formData, responsavel: e.target.value })} className="rounded-xl" /></div>
