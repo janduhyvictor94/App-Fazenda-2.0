@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, Edit, Trash2, Package, AlertTriangle, Search, History, Archive } from 'lucide-react';
+import { Plus, Edit, Trash2, Package, AlertTriangle, Search, History, Archive, Info } from 'lucide-react';
 import EmptyState from '@/components/ui/EmptyState';
 import StatCard from '@/components/ui/StatCard';
 
@@ -31,6 +31,7 @@ export default function Insumos({ showMessage }) {
     categoria: 'outro',
     unidade: 'kg',
     preco_unitario: '',
+    tamanho_embalagem: '',
     estoque_atual: '',
     estoque_minimo: '',
     fornecedor: '',
@@ -91,7 +92,7 @@ export default function Insumos({ showMessage }) {
 
   const resetForm = () => {
     setFormData({
-      nome: '', categoria: 'outro', unidade: 'kg', preco_unitario: '',
+      nome: '', categoria: 'outro', unidade: 'kg', preco_unitario: '', tamanho_embalagem: '',
       estoque_atual: '', estoque_minimo: '', fornecedor: '', observacoes: ''
     });
     setEditingInsumo(null);
@@ -105,6 +106,7 @@ export default function Insumos({ showMessage }) {
       categoria: insumo.categoria || 'outro',
       unidade: insumo.unidade || 'kg',
       preco_unitario: insumo.preco_unitario || '',
+      tamanho_embalagem: insumo.tamanho_embalagem || '',
       estoque_atual: insumo.estoque_atual || '',
       estoque_minimo: insumo.estoque_minimo || '',
       fornecedor: insumo.fornecedor || '',
@@ -118,6 +120,7 @@ export default function Insumos({ showMessage }) {
     const data = {
       ...formData,
       preco_unitario: parseFloat(formData.preco_unitario) || 0,
+      tamanho_embalagem: formData.tamanho_embalagem ? parseFloat(formData.tamanho_embalagem) : null,
       estoque_atual: parseFloat(formData.estoque_atual) || 0,
       estoque_minimo: formData.estoque_minimo ? parseFloat(formData.estoque_minimo) : null
     };
@@ -131,6 +134,7 @@ export default function Insumos({ showMessage }) {
 
   const totalPatrimonio = insumos.reduce((acc, i) => acc + ((i.estoque_atual || 0) * (i.preco_unitario || 0)), 0);
   const itensAbaixoMinimo = insumos.filter(i => i.estoque_minimo && i.estoque_atual <= i.estoque_minimo).length;
+  const insumosSemEmbalagem = insumos.filter(i => !i.tamanho_embalagem);
 
   return (
     <div className="space-y-6">
@@ -207,9 +211,22 @@ export default function Insumos({ showMessage }) {
                                 <Input type="number" step="0.01" value={formData.estoque_minimo} onChange={(e) => setFormData({...formData, estoque_minimo: e.target.value})} className="rounded-xl" />
                             </div>
                             <div className="space-y-2">
-                                <Label>Preço Unit. (R$)</Label>
+                                <Label>Preço da Embalagem (R$)</Label>
                                 <Input type="number" step="0.01" value={formData.preco_unitario} onChange={(e) => setFormData({...formData, preco_unitario: e.target.value})} placeholder="0,00" className="rounded-xl" />
                             </div>
+                        </div>
+
+                        <div className="space-y-2 p-3 bg-stone-50 rounded-xl border border-stone-100">
+                            <Label>Quantidade por Embalagem <span className="text-stone-400 font-normal">(quantos {formData.unidade} vêm em cada embalagem comprada)</span></Label>
+                            <Input type="number" step="0.01" value={formData.tamanho_embalagem} onChange={(e) => setFormData({...formData, tamanho_embalagem: e.target.value})} placeholder={`Ex: 50 (para um saco de 50${formData.unidade})`} className="rounded-xl bg-white" />
+                            {formData.preco_unitario && formData.tamanho_embalagem && parseFloat(formData.tamanho_embalagem) > 0 && (
+                                <p className="text-xs font-bold text-emerald-700">
+                                    ≈ R$ {(parseFloat(formData.preco_unitario) / parseFloat(formData.tamanho_embalagem)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} por {formData.unidade}
+                                </p>
+                            )}
+                            {!formData.tamanho_embalagem && (
+                                <p className="text-[11px] text-stone-400">Deixe em branco se cada embalagem já é 1 {formData.unidade} (ex: 1 saco = 1 unidade sem fracionar).</p>
+                            )}
                         </div>
 
                         <div className="space-y-2">
@@ -241,6 +258,25 @@ export default function Insumos({ showMessage }) {
         <StatCard title="Valor em Estoque" value={`R$ ${totalPatrimonio.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} icon={History} color="text-emerald-600" />
       </div>
 
+      {insumosSemEmbalagem.length > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-[1.5rem] p-4 space-y-2">
+          <div className="flex items-center gap-2 font-bold text-amber-800">
+            <Info className="w-5 h-5" />
+            {insumosSemEmbalagem.length} insumo{insumosSemEmbalagem.length > 1 ? 's' : ''} sem "Quantidade por Embalagem" informada
+          </div>
+          <p className="text-xs text-amber-700">
+            Sem isso, o app assume que cada embalagem já é 1 {insumosSemEmbalagem[0]?.unidade || 'unidade'} ao calcular custo de uso em atividades — o que pode estar errado se você compra em sacos/embalagens maiores. Edite cada um abaixo pra corrigir:
+          </p>
+          <div className="flex flex-wrap gap-2 pt-1">
+            {insumosSemEmbalagem.map(i => (
+              <button key={i.id} onClick={() => handleEdit(i)} className="text-xs font-bold bg-white border border-amber-200 text-amber-800 px-3 py-1.5 rounded-lg hover:bg-amber-100 transition-colors">
+                {i.nome}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Tabela Padronizada */}
       {insumosFiltrados.length === 0 ? (
         <EmptyState 
@@ -258,7 +294,7 @@ export default function Insumos({ showMessage }) {
                 <TableRow>
                     <TableHead className="pl-6">Insumo</TableHead>
                     <TableHead>Categoria</TableHead>
-                    <TableHead className="text-right">Preço Unit.</TableHead>
+                    <TableHead className="text-right">Preço</TableHead>
                     <TableHead className="text-right">Estoque</TableHead>
                     <TableHead className="text-right pr-6">Ações</TableHead>
                 </TableRow>
@@ -266,6 +302,7 @@ export default function Insumos({ showMessage }) {
                 <TableBody>
                 {insumosFiltrados.map((insumo) => {
                     const isBaixo = insumo.estoque_minimo && insumo.estoque_atual <= insumo.estoque_minimo;
+                    const precoPorUnidade = insumo.tamanho_embalagem ? (insumo.preco_unitario || 0) / insumo.tamanho_embalagem : null;
                     return (
                     <TableRow key={insumo.id} className="hover:bg-stone-50 transition-colors">
                         <TableCell className="pl-6">
@@ -280,7 +317,14 @@ export default function Insumos({ showMessage }) {
                             {categoriaLabels[insumo.categoria]?.label || insumo.categoria}
                         </Badge>
                         </TableCell>
-                        <TableCell className="text-right font-medium text-stone-600">R$ {insumo.preco_unitario?.toFixed(2)}</TableCell>
+                        <TableCell className="text-right font-medium text-stone-600">
+                            <div>R$ {insumo.preco_unitario?.toFixed(2)} <span className="text-xs text-stone-400">/ embalagem</span></div>
+                            {precoPorUnidade !== null ? (
+                                <div className="text-xs text-stone-500">≈ R$ {precoPorUnidade.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} / {insumo.unidade}</div>
+                            ) : (
+                                <div className="text-xs text-amber-600 font-bold">falta embalagem</div>
+                            )}
+                        </TableCell>
                         <TableCell className="text-right">
                         <div className={isBaixo ? "text-red-600 font-bold" : "text-stone-700 font-bold"}>
                             {insumo.estoque_atual} {insumo.unidade}

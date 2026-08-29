@@ -264,8 +264,13 @@ export default function Atividades() {
 
   const addInsumo = () => {
     if (!insumoTemp.insumo_id || !insumoTemp.quantidade) return; const insumoSelecionado = insumos.find(i => i.id === insumoTemp.insumo_id); if (!insumoSelecionado) return;
-    const quantidade = parseFloat(insumoTemp.quantidade); const valorTotal = quantidade * (insumoSelecionado.preco_unitario || 0); const metodoFinal = (insumoTemp.metodo_aplicacao === 'outro' ? novoMetodo : insumoTemp.metodo_aplicacao) || 'foliar';
-    const novosInsumos = [...formData.insumos_utilizados, { insumo_id: insumoSelecionado.id, nome: insumoSelecionado.nome, quantidade, unidade: insumoSelecionado.unidade, valor_unitario: insumoSelecionado.preco_unitario || 0, valor_total: valorTotal, metodo_aplicacao: metodoFinal }];
+    const quantidade = parseFloat(insumoTemp.quantidade);
+    // Preço por unidade de uso (kg/L/un) = preço da embalagem ÷ quantidade que vem em cada embalagem.
+    // Se a embalagem não foi informada no cadastro, assume 1 (ou seja, trata a "quantidade" como embalagens inteiras, como antes).
+    const precoPorUnidade = (insumoSelecionado.preco_unitario || 0) / (insumoSelecionado.tamanho_embalagem || 1);
+    const valorTotal = quantidade * precoPorUnidade;
+    const metodoFinal = (insumoTemp.metodo_aplicacao === 'outro' ? novoMetodo : insumoTemp.metodo_aplicacao) || 'foliar';
+    const novosInsumos = [...formData.insumos_utilizados, { insumo_id: insumoSelecionado.id, nome: insumoSelecionado.nome, quantidade, unidade: insumoSelecionado.unidade, valor_unitario: precoPorUnidade, valor_total: valorTotal, metodo_aplicacao: metodoFinal }];
     setFormData({ ...formData, insumos_utilizados: novosInsumos, custo_total: novosInsumos.reduce((acc, i) => acc + (i.valor_total || 0), 0) + (formData.terceirizada ? parseFloat(formData.valor_terceirizado || 0) : 0) });
     setInsumoTemp({ insumo_id: '', quantidade: '', metodo_aplicacao: 'foliar' }); setNovoMetodo(''); setMostrarNovoMetodo(false);
   };
@@ -564,11 +569,23 @@ export default function Atividades() {
                             <Label className="text-sm font-bold text-stone-700">Insumos (Opcional)</Label>
                             <div className="flex gap-2">
                                 <Select value={insumoTemp.insumo_id || ""} onValueChange={(value) => setInsumoTemp({ ...insumoTemp, insumo_id: value })}><SelectTrigger className="w-full rounded-xl bg-white h-9 text-xs"><SelectValue placeholder="Insumo" /></SelectTrigger><SelectContent>{insumos.map((i) => (<SelectItem key={i.id} value={i.id}>{i.nome}</SelectItem>))}</SelectContent></Select>
-                                <Input type="number" placeholder="Qtd" className="w-20 rounded-xl bg-white h-9 text-xs" value={insumoTemp.quantidade || ""} onChange={(e) => setInsumoTemp({ ...insumoTemp, quantidade: e.target.value })} />
+                                <Input type="number" placeholder={insumos.find(i => i.id === insumoTemp.insumo_id)?.unidade ? `Qtd (${insumos.find(i => i.id === insumoTemp.insumo_id).unidade})` : "Qtd"} className="w-24 rounded-xl bg-white h-9 text-xs" value={insumoTemp.quantidade || ""} onChange={(e) => setInsumoTemp({ ...insumoTemp, quantidade: e.target.value })} />
                                 <Select value={insumoTemp.metodo_aplicacao || "foliar"} onValueChange={(value) => { setInsumoTemp({ ...insumoTemp, metodo_aplicacao: value }); setMostrarNovoMetodo(value === 'outro'); }}><SelectTrigger className="w-32 rounded-xl bg-white h-9 text-xs"><SelectValue placeholder="Método" /></SelectTrigger><SelectContent><SelectItem value="foliar">Foliar</SelectItem><SelectItem value="adubacao">Adubação</SelectItem><SelectItem value="solo">Solo</SelectItem><SelectItem value="fertirrigacao">Fertirrigação</SelectItem><SelectItem value="outro">Outro...</SelectItem></SelectContent></Select>
                                 {mostrarNovoMetodo && <Input placeholder="Nome" className="w-24 rounded-xl bg-white h-9 text-xs" value={novoMetodo || ""} onChange={(e) => setNovoMetodo(e.target.value)} />}
                                 <Button type="button" onClick={addInsumo} size="sm" className="rounded-xl bg-white hover:bg-emerald-50 text-emerald-600 border border-emerald-200"><Plus className="w-4 h-4" /></Button>
                             </div>
+                            {insumoTemp.insumo_id && (() => {
+                                const ins = insumos.find(i => i.id === insumoTemp.insumo_id);
+                                if (!ins) return null;
+                                const precoPorUnidade = (ins.preco_unitario || 0) / (ins.tamanho_embalagem || 1);
+                                return (
+                                    <p className="text-[11px] text-stone-500 -mt-1">
+                                        Registrado como <b className="text-stone-700">{ins.unidade}</b> · R$ {precoPorUnidade.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} / {ins.unidade}
+                                        {!ins.tamanho_embalagem && <span className="text-amber-600 font-bold"> (embalagem não informada — cadastre em Insumos pra dar mais precisão)</span>}
+                                        · Digite quanto foi realmente usado em {ins.unidade}.
+                                    </p>
+                                );
+                            })()}
                             
                             {formData.insumos_utilizados.length > 0 && (
                                 <div className="flex flex-wrap gap-2">

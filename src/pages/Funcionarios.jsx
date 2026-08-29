@@ -18,7 +18,7 @@ import { ptBR } from 'date-fns/locale';
 
 const statusLabels = {
   ativo: { label: 'Ativo', color: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
-  inativo: { label: 'Inativo', color: 'bg-stone-50 text-stone-700 border-stone-200' },
+  inativo: { label: 'Desligado', color: 'bg-stone-50 text-stone-700 border-stone-200' },
   ferias: { label: 'Férias', color: 'bg-blue-50 text-blue-700 border-blue-200' }
 };
 
@@ -146,7 +146,7 @@ export default function Funcionarios() {
   const [formData, setFormData] = useState({
     nome: '', cargo: '', salario: '', data_admissao: '',
     data_inicio_contabil: '', // NOVO CAMPO
-    status: 'ativo', telefone: '', talhao_principal: '', observacoes: ''
+    status: 'ativo', data_desligamento: '', telefone: '', talhao_principal: '', observacoes: ''
   });
 
   const [reajusteData, setReajusteData] = useState({
@@ -281,7 +281,7 @@ export default function Funcionarios() {
   const resetForm = () => {
     setFormData({ 
         nome: '', cargo: '', salario: '', data_admissao: '', data_inicio_contabil: '',
-        status: 'ativo', telefone: '', talhao_principal: '', observacoes: '' 
+        status: 'ativo', data_desligamento: '', telefone: '', talhao_principal: '', observacoes: '' 
     });
     setEditingFuncionario(null);
     setOpen(false);
@@ -299,7 +299,7 @@ export default function Funcionarios() {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    const data = { ...formData, salario: formData.salario ? parseFloat(formData.salario) : null };
+    const data = { ...formData, salario: formData.salario ? parseFloat(formData.salario) : null, data_desligamento: formData.status === 'inativo' ? (formData.data_desligamento || null) : null };
     if (editingFuncionario) updateMutation.mutate({ id: editingFuncionario.id, data });
     else createMutation.mutate(data);
   };
@@ -517,10 +517,21 @@ export default function Funcionarios() {
                     <div className="space-y-2"><Label>Talhão</Label><Select value={formData.talhao_principal || "none"} onValueChange={(v) => setFormData({ ...formData, talhao_principal: v === "none" ? null : v })}><SelectTrigger className="rounded-xl"><SelectValue placeholder="Selecione" /></SelectTrigger><SelectContent><SelectItem value="none">Nenhum (Rateio Geral)</SelectItem>{talhoes.map((t) => <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>)}</SelectContent></Select></div>
                 </div>
                 
-                <div className="space-y-2">
-                    <Label>Status</Label>
-                    <Select value={formData.status} onValueChange={(v) => setFormData({ ...formData, status: v })}><SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ativo">Ativo</SelectItem><SelectItem value="inativo">Inativo</SelectItem><SelectItem value="ferias">Férias</SelectItem></SelectContent></Select>
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                        <Label>Status</Label>
+                        <Select value={formData.status} onValueChange={(v) => setFormData({ ...formData, status: v })}><SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ativo">Ativo</SelectItem><SelectItem value="inativo">Desligado</SelectItem><SelectItem value="ferias">Férias</SelectItem></SelectContent></Select>
+                    </div>
+                    {formData.status === 'inativo' && (
+                        <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
+                            <Label>Data de Desligamento</Label>
+                            <Input type="date" value={formData.data_desligamento || ''} onChange={(e) => setFormData({ ...formData, data_desligamento: e.target.value })} className="rounded-xl" />
+                        </div>
+                    )}
                 </div>
+                {formData.status === 'inativo' && (
+                    <p className="text-xs text-stone-500 -mt-2">Funcionários desligados deixam de entrar nos lembretes e cálculos de folha a partir de agora. O histórico de pagamentos já feitos é mantido.</p>
+                )}
 
                 <div className="flex justify-end gap-3 pt-4"><Button type="button" variant="outline" onClick={resetForm} className="rounded-xl">Cancelar</Button><Button type="submit" className="bg-emerald-600 hover:bg-emerald-700 rounded-xl px-8" disabled={createMutation.isPending || updateMutation.isPending}>Salvar</Button></div>
                 </form>

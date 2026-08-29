@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, Edit, Trash2, Wheat, Filter, Package, TrendingUp, Calendar, FileText } from 'lucide-react';
+import { Plus, Edit, Trash2, Wheat, Filter, Package, TrendingUp, Calendar, FileText, ListPlus, ClipboardList, X } from 'lucide-react';
 import EmptyState from '@/components/ui/EmptyState';
 import StatCard from '@/components/ui/StatCard';
 import { format } from 'date-fns';
@@ -32,6 +32,7 @@ const tiposColheitaGoiaba = [
 export default function Colheitas() {
   const [open, setOpen] = useState(false);
   const [editingColheita, setEditingColheita] = useState(null);
+  const [colheitaQueue, setColheitaQueue] = useState([]);
   
   // Filtros
   const [filtroTalhao, setFiltroTalhao] = useState('todos');
@@ -84,16 +85,35 @@ export default function Colheitas() {
   });
 
   // --- MUTATIONS ---
-  const createMutation = useMutation({
-    mutationFn: async (data) => {
-      const { data: result, error } = await supabase.from('colheitas').insert(data).select();
-      if (error) throw error; return result;
+  const createBatchMutation = useMutation({
+    mutationFn: async (itens) => {
+      const payloadColheitas = itens.map(({ tempId, custoTotalCalc, ...rest }) => rest);
+      const { error } = await supabase.from('colheitas').insert(payloadColheitas);
+      if (error) throw error;
+
+      const custosParaInserir = itens
+        .filter(item => item.custoTotalCalc > 0)
+        .map(item => ({
+          descricao: `Colheita - ${tipoColheitaLabel(item.tipo_colheita)} - ${getTalhaoNome(item.talhao_id)}`,
+          categoria: 'terceirizado',
+          talhao_id: item.talhao_id,
+          valor: item.custoTotalCalc,
+          data: item.data,
+          observacoes: `Custo de colheita: R$ ${item.custo_colheita}/${item.unidade_custo}`
+        }));
+
+      if (custosParaInserir.length > 0) {
+        const { error: errCustos } = await supabase.from('custos').insert(custosParaInserir);
+        if (errCustos) throw errCustos;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['colheitas'] });
+      queryClient.invalidateQueries({ queryKey: ['custos'] });
+      setColheitaQueue([]);
       resetForm();
     },
-    onError: (error) => { alert(`Não foi possível salvar a colheita.\n\nMotivo: ${error.message || 'Erro desconhecido'}`); console.error('Erro ao criar colheita:', error); }
+    onError: (error) => { alert(`Não foi possível salvar as colheitas.\n\nMotivo: ${error.message || 'Erro desconhecido'}`); console.error('Erro ao salvar lote de colheitas:', error); }
   });
 
   const updateMutation = useMutation({
@@ -140,6 +160,7 @@ export default function Colheitas() {
       custo_colheita: '', unidade_custo: 'kg', observacoes: ''
     });
     setEditingColheita(null);
+    setColheitaQueue([]);
     setOpen(false);
   };
 
@@ -173,38 +194,34 @@ export default function Colheitas() {
     return qtd * custo;
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+
+  const handleAddToQueue = () => {
+    if (!formData.talhao_id || !formData.data || !formData.cultura || !formData.tipo_colheita) {
+      return alert("Preencha Talhão, Data, Cultura e Tipo para adicionar.");
+    }
     const valorTotal = calcularValorTotal();
     const custoTotal = calcularCustoTotal();
-    
-    const data = {
+    const item = {
       ...formData,
       quantidade_kg: formData.quantidade_kg ? parseFloat(formData.quantidade_kg) : null,
       quantidade_caixas: formData.quantidade_caixas ? parseFloat(formData.quantidade_caixas) : null,
       preco_unitario: formData.preco_unitario ? parseFloat(formData.preco_unitario) : null,
       custo_colheita: formData.custo_colheita ? parseFloat(formData.custo_colheita) : null,
-      valor_total: valorTotal
+      valor_total: valorTotal,
+      custoTotalCalc: custoTotal,
+      tempId: Date.now()
     };
-
-    if (editingColheita) {
-      await updateMutation.mutateAsync({ id: editingColheita.id, data });
-    } else {
-      await createMutation.mutateAsync(data);
-    }
-
-    if (custoTotal > 0) {
-      await supabase.from('custos').insert({
-        descricao: `Colheita - ${tipoColheitaLabel(formData.tipo_colheita)} - ${getTalhaoNome(formData.talhao_id)}`,
-        categoria: 'terceirizado',
-        talhao_id: formData.talhao_id,
-        valor: custoTotal,
-        data: formData.data,
-        observacoes: `Custo de colheita: R$ ${formData.custo_colheita}/${formData.unidade_custo}`
-      });
-      queryClient.invalidateQueries({ queryKey: ['custos'] });
-    }
+    setColheitaQueue([...colheitaQueue, item]);
+    // Mantém Talhão, Data e Cultura (comum registrar várias colheitas da mesma área/dia em seguida), limpa o resto
+    setFormData(prev => ({
+      ...prev,
+      quantidade_kg: '', quantidade_caixas: '', preco_unitario: '',
+      custo_colheita: '', observacoes: ''
+    }));
   };
+
+  const handleRemoveFromQueue = (tempId) => setColheitaQueue(colheitaQueue.filter(item => item.tempId !== tempId));
+  const handleSaveAll = () => { if (colheitaQueue.length > 0) createBatchMutation.mutate(colheitaQueue); };
 
   const tiposColheitaPadrao = formData.cultura === 'manga' ? tiposColheitaManga : formData.cultura === 'goiaba' ? tiposColheitaGoiaba : [];
   const tiposCustomizadosFiltrados = tiposCustomizados.filter(t => t.cultura === formData.cultura);
@@ -255,12 +272,14 @@ export default function Colheitas() {
                 <Plus className="w-4 h-4 mr-2" /> Registrar Colheita
                 </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto rounded-[2rem]">
+            <DialogContent className="sm:max-w-5xl max-h-[90vh] overflow-y-auto rounded-[2rem]">
                 <DialogHeader>
-                <DialogTitle>{editingColheita ? 'Editar Colheita' : 'Nova Colheita'}</DialogTitle>
-                <DialogDescription>Dados de produção colhida.</DialogDescription>
+                <DialogTitle>{editingColheita ? 'Editar Colheita' : 'Registrar Colheitas'}</DialogTitle>
+                <DialogDescription>{editingColheita ? 'Dados de produção colhida.' : 'Adicione várias colheitas à lista e salve tudo de uma vez.'}</DialogDescription>
                 </DialogHeader>
-                <form onSubmit={handleSubmit} className="space-y-4 pt-2">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pt-2">
+                <div className="lg:col-span-2 space-y-4 border-r border-stone-100 pr-0 lg:pr-6">
+                <form onSubmit={(e) => e.preventDefault()} className="space-y-4">
                     <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
                             <Label>Talhão</Label>
@@ -357,13 +376,56 @@ export default function Colheitas() {
                         <Textarea value={formData.observacoes || ""} onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })} placeholder="Detalhes..." rows={2} className="rounded-xl" />
                     </div>
 
-                    <div className="flex justify-end gap-3 pt-2">
-                        <Button type="button" variant="outline" onClick={resetForm} className="rounded-xl border-stone-200">Cancelar</Button>
-                        <Button type="submit" className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl px-6" disabled={createMutation.isPending || updateMutation.isPending}>
-                            {editingColheita ? 'Salvar' : 'Registrar'}
+                    {editingColheita ? (
+                        <div className="flex justify-end gap-3 pt-2">
+                            <Button type="button" variant="outline" onClick={resetForm} className="rounded-xl border-stone-200">Cancelar</Button>
+                            <Button type="button" onClick={async () => { await updateMutation.mutateAsync({ id: editingColheita.id, data: { ...formData, quantidade_kg: formData.quantidade_kg ? parseFloat(formData.quantidade_kg) : null, quantidade_caixas: formData.quantidade_caixas ? parseFloat(formData.quantidade_caixas) : null, preco_unitario: formData.preco_unitario ? parseFloat(formData.preco_unitario) : null, custo_colheita: formData.custo_colheita ? parseFloat(formData.custo_colheita) : null, valor_total: calcularValorTotal() } }); }} className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl px-6" disabled={updateMutation.isPending}>
+                                Salvar Alterações
+                            </Button>
+                        </div>
+                    ) : (
+                        <Button type="button" onClick={handleAddToQueue} className="w-full rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold h-12">
+                            <ListPlus className="w-5 h-5 mr-2" /> Adicionar à Lista
                         </Button>
-                    </div>
+                    )}
                 </form>
+                </div>
+
+                <div className="lg:col-span-1 bg-stone-50 rounded-2xl border border-stone-200 p-4 flex flex-col h-full min-h-[300px]">
+                    <h4 className="text-sm font-bold text-stone-700 mb-3 flex items-center gap-2"><ClipboardList className="w-4 h-4" /> Lista de Colheitas ({colheitaQueue.length})</h4>
+                    {editingColheita ? (
+                        <div className="flex-1 flex items-center justify-center text-center text-stone-400 text-xs italic">Modo de edição individual.<br/>A lista está desabilitada.</div>
+                    ) : (
+                        <>
+                            <div className="flex-1 overflow-y-auto space-y-2 max-h-[500px] pr-1 scrollbar-thin">
+                                {colheitaQueue.length === 0 ? (
+                                    <div className="text-center text-stone-400 text-xs py-10 italic">Preencha o formulário e clique em "Adicionar à Lista".</div>
+                                ) : (
+                                    colheitaQueue.map((item) => (
+                                        <div key={item.tempId} className="bg-white p-3 rounded-xl border border-stone-100 shadow-sm text-sm relative group animate-in slide-in-from-left-2">
+                                            <button onClick={() => handleRemoveFromQueue(item.tempId)} className="absolute top-2 right-2 text-stone-300 hover:text-red-500 transition-colors"><X className="w-4 h-4" /></button>
+                                            <div className="font-bold text-emerald-700">{getTalhaoNome(item.talhao_id)}</div>
+                                            <div className="font-medium text-stone-700">{tipoColheitaLabel(item.tipo_colheita)}</div>
+                                            <div className="text-xs text-stone-500 mt-1">{item.data ? format(new Date(item.data + 'T12:00:00'), 'dd/MM/yyyy') : '-'}</div>
+                                            <div className="flex gap-2 mt-1">
+                                                {item.quantidade_kg > 0 && <span className="text-[11px] bg-stone-100 px-1.5 py-0.5 rounded text-stone-600 font-bold">{item.quantidade_kg} kg</span>}
+                                                {item.quantidade_caixas > 0 && <span className="text-[11px] bg-blue-50 px-1.5 py-0.5 rounded text-blue-600 font-bold">{item.quantidade_caixas} cx</span>}
+                                            </div>
+                                            <div className="text-xs font-bold text-emerald-600 mt-1">Receita: R$ {item.valor_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
+                                            {item.custoTotalCalc > 0 && <div className="text-[11px] text-red-600">Custo: R$ {item.custoTotalCalc.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>}
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                            <div className="mt-4 pt-4 border-t border-stone-200">
+                                <Button onClick={handleSaveAll} disabled={colheitaQueue.length === 0 || createBatchMutation.isPending} className="w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-11 shadow-lg shadow-emerald-100">
+                                    {createBatchMutation.isPending ? 'Salvando...' : `Confirmar (${colheitaQueue.length})`}
+                                </Button>
+                            </div>
+                        </>
+                    )}
+                </div>
+                </div>
             </DialogContent>
         </Dialog>
 
