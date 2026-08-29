@@ -33,6 +33,10 @@ export default function Colheitas() {
   const [open, setOpen] = useState(false);
   const [editingColheita, setEditingColheita] = useState(null);
   const [colheitaQueue, setColheitaQueue] = useState([]);
+  const [lotesCusto, setLotesCusto] = useState([]);
+  const [modoRapido, setModoRapido] = useState(false);
+  const [linhasRapidas, setLinhasRapidas] = useState([{ tipo_colheita: '', quantidade_kg: '', quantidade_caixas: '', preco_unitario: '', unidade_preco: 'kg' }]);
+  const [custoRapido, setCustoRapido] = useState({ valor: '', unidade: 'kg' });
   
   // Filtros
   const [filtroTalhao, setFiltroTalhao] = useState('todos');
@@ -86,13 +90,14 @@ export default function Colheitas() {
 
   // --- MUTATIONS ---
   const createBatchMutation = useMutation({
-    mutationFn: async (itens) => {
-      const payloadColheitas = itens.map(({ tempId, custoTotalCalc, ...rest }) => rest);
+    mutationFn: async ({ itens, lotes }) => {
+      const payloadColheitas = itens.map(({ tempId, custoTotalCalc, loteId, ...rest }) => rest);
       const { error } = await supabase.from('colheitas').insert(payloadColheitas);
       if (error) throw error;
 
-      const custosParaInserir = itens
-        .filter(item => item.custoTotalCalc > 0)
+      // Custos de itens avulsos (modo padrão, um por registro)
+      const custosIndividuais = itens
+        .filter(item => !item.loteId && item.custoTotalCalc > 0)
         .map(item => ({
           descricao: `Colheita - ${tipoColheitaLabel(item.tipo_colheita)} - ${getTalhaoNome(item.talhao_id)}`,
           categoria: 'terceirizado',
@@ -102,6 +107,17 @@ export default function Colheitas() {
           observacoes: `Custo de colheita: R$ ${item.custo_colheita}/${item.unidade_custo}`
         }));
 
+      // Custos de lote (modo rápido: vários tipos no mesmo dia, um único custo combinado)
+      const custosDeLotes = (lotes || []).filter(l => l.valor > 0).map(lote => ({
+        descricao: `Colheita - ${lote.resumoTipos} - ${getTalhaoNome(lote.talhao_id)}`,
+        categoria: 'terceirizado',
+        talhao_id: lote.talhao_id,
+        valor: lote.valor,
+        data: lote.data,
+        observacoes: `Custo de colheita (lote, vários tipos): R$ ${lote.custoUnit}/${lote.unidade}`
+      }));
+
+      const custosParaInserir = [...custosIndividuais, ...custosDeLotes];
       if (custosParaInserir.length > 0) {
         const { error: errCustos } = await supabase.from('custos').insert(custosParaInserir);
         if (errCustos) throw errCustos;
@@ -111,6 +127,7 @@ export default function Colheitas() {
       queryClient.invalidateQueries({ queryKey: ['colheitas'] });
       queryClient.invalidateQueries({ queryKey: ['custos'] });
       setColheitaQueue([]);
+      setLotesCusto([]);
       resetForm();
     },
     onError: (error) => { alert(`Não foi possível salvar as colheitas.\n\nMotivo: ${error.message || 'Erro desconhecido'}`); console.error('Erro ao salvar lote de colheitas:', error); }
@@ -161,6 +178,10 @@ export default function Colheitas() {
     });
     setEditingColheita(null);
     setColheitaQueue([]);
+    setLotesCusto([]);
+    setModoRapido(false);
+    setLinhasRapidas([{ tipo_colheita: '', quantidade_kg: '', quantidade_caixas: '', preco_unitario: '', unidade_preco: 'kg' }]);
+    setCustoRapido({ valor: '', unidade: 'kg' });
     setOpen(false);
   };
 
@@ -220,8 +241,72 @@ export default function Colheitas() {
     }));
   };
 
-  const handleRemoveFromQueue = (tempId) => setColheitaQueue(colheitaQueue.filter(item => item.tempId !== tempId));
-  const handleSaveAll = () => { if (colheitaQueue.length > 0) createBatchMutation.mutate(colheitaQueue); };
+  const handleRemoveFromQueue = (tempId) => {
+    const item = colheitaQueue.find(i => i.tempId === tempId);
+    const novaFila = colheitaQueue.filter(i => i.tempId !== tempId);
+    setColheitaQueue(novaFila);
+    // Se era o último item de um lote, remove também o custo combinado daquele lote (não faz mais sentido sozinho)
+    if (item?.loteId && !novaFila.some(i => i.loteId === item.loteId)) {
+      setLotesCusto(lotesCusto.filter(l => l.loteId !== item.loteId));
+    }
+  };
+  const handleSaveAll = () => { if (colheitaQueue.length > 0) createBatchMutation.mutate({ itens: colheitaQueue, lotes: lotesCusto }); };
+
+  // --- Modo Rápido: vários tipos (caixa verde, madura, polpa...) no mesmo dia, com um custo único combinado ---
+  const addLinhaRapida = () => setLinhasRapidas([...linhasRapidas, { tipo_colheita: '', quantidade_kg: '', quantidade_caixas: '', preco_unitario: '', unidade_preco: 'kg' }]);
+  const removeLinhaRapida = (index) => setLinhasRapidas(linhasRapidas.filter((_, i) => i !== index));
+  const updateLinhaRapida = (index, campo, valor) => setLinhasRapidas(linhasRapidas.map((linha, i) => i === index ? { ...linha, [campo]: valor } : linha));
+
+  const handleAddLoteToQueue = () => {
+    if (!formData.talhao_id || !formData.data || !formData.cultura) {
+      return alert("Preencha Talhão, Data e Cultura para adicionar.");
+    }
+    const linhasValidas = linhasRapidas.filter(l => l.tipo_colheita && (parseFloat(l.quantidade_kg) > 0 || parseFloat(l.quantidade_caixas) > 0));
+    if (linhasValidas.length === 0) {
+      return alert("Preencha ao menos um tipo com quantidade colhida.");
+    }
+
+    const loteId = Date.now();
+    const novosItens = linhasValidas.map((linha, idx) => {
+      const qtd = linha.unidade_preco === 'kg' ? parseFloat(linha.quantidade_kg) || 0 : parseFloat(linha.quantidade_caixas) || 0;
+      const preco = parseFloat(linha.preco_unitario) || 0;
+      return {
+        talhao_id: formData.talhao_id,
+        data: formData.data,
+        cultura: formData.cultura,
+        tipo_colheita: linha.tipo_colheita,
+        quantidade_kg: linha.quantidade_kg ? parseFloat(linha.quantidade_kg) : null,
+        quantidade_caixas: linha.quantidade_caixas ? parseFloat(linha.quantidade_caixas) : null,
+        preco_unitario: preco || null,
+        unidade_preco: linha.unidade_preco,
+        custo_colheita: null,
+        unidade_custo: custoRapido.unidade,
+        observacoes: formData.observacoes || '',
+        valor_total: qtd * preco,
+        loteId,
+        tempId: Date.now() + idx
+      };
+    });
+
+    // Custo único do lote: preço por caixa/kg (igual pra todos os tipos) × soma das quantidades de todos os tipos
+    const custoUnitValor = parseFloat(custoRapido.valor) || 0;
+    let custoLoteTotal = 0;
+    if (custoUnitValor > 0) {
+      const somaQtd = linhasValidas.reduce((acc, l) => acc + (custoRapido.unidade === 'kg' ? (parseFloat(l.quantidade_kg) || 0) : (parseFloat(l.quantidade_caixas) || 0)), 0);
+      custoLoteTotal = somaQtd * custoUnitValor;
+    }
+
+    setColheitaQueue([...colheitaQueue, ...novosItens]);
+    if (custoLoteTotal > 0) {
+      const resumoTipos = linhasValidas.map(l => tipoColheitaLabel(l.tipo_colheita)).join(' + ');
+      setLotesCusto([...lotesCusto, { loteId, talhao_id: formData.talhao_id, data: formData.data, valor: custoLoteTotal, custoUnit: custoUnitValor, unidade: custoRapido.unidade, resumoTipos }]);
+    }
+
+    // Mantém Talhão, Data e Cultura, limpa as linhas de tipo e o custo
+    setLinhasRapidas([{ tipo_colheita: '', quantidade_kg: '', quantidade_caixas: '', preco_unitario: '', unidade_preco: 'kg' }]);
+    setCustoRapido({ valor: '', unidade: 'kg' });
+    setFormData(prev => ({ ...prev, observacoes: '' }));
+  };
 
   const tiposColheitaPadrao = formData.cultura === 'manga' ? tiposColheitaManga : formData.cultura === 'goiaba' ? tiposColheitaGoiaba : [];
   const tiposCustomizadosFiltrados = tiposCustomizados.filter(t => t.cultura === formData.cultura);
@@ -246,6 +331,11 @@ export default function Colheitas() {
   const totalKg = colheitasFiltradas.reduce((acc, c) => acc + (c.quantidade_kg || 0), 0);
   const totalCaixas = colheitasFiltradas.reduce((acc, c) => acc + (c.quantidade_caixas || 0), 0);
   const totalReceita = colheitasFiltradas.reduce((acc, c) => acc + (c.valor_total || 0), 0);
+  const totalCustoColheita = colheitasFiltradas.reduce((acc, c) => {
+    if (!c.custo_colheita) return acc;
+    const qtdBase = c.unidade_custo === 'kg' ? (c.quantidade_kg || 0) : (c.quantidade_caixas || 0);
+    return acc + (qtdBase * c.custo_colheita);
+  }, 0);
 
   const getTalhaoNome = (id) => talhoes.find(t => t.id === id)?.nome || '-';
 
@@ -296,6 +386,18 @@ export default function Colheitas() {
                         </div>
                     </div>
 
+                    {!editingColheita && (
+                        <div className="flex items-center gap-1 bg-stone-50 p-1 rounded-xl border border-stone-200 w-fit">
+                            <button type="button" onClick={() => setModoRapido(false)} className={`px-3 h-8 rounded-lg text-sm font-bold transition-all ${!modoRapido ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}>Padrão</button>
+                            <button type="button" onClick={() => setModoRapido(true)} className={`px-3 h-8 rounded-lg text-sm font-bold transition-all ${modoRapido ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}>Rápido (Vários Tipos)</button>
+                        </div>
+                    )}
+                    {modoRapido && !editingColheita && (
+                        <p className="text-xs text-stone-500 -mt-1">Pra dias com mais de um tipo de colheita (ex: caixa verde + madura + polpa) no mesmo talhão. O custo de colheita é o mesmo por caixa/kg pra todos, então você informa uma vez só e ele soma tudo.</p>
+                    )}
+
+                    {(!modoRapido || editingColheita) && (
+                    <>
                     <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
                             <Label>Cultura</Label>
@@ -370,6 +472,63 @@ export default function Colheitas() {
                             <span className="text-lg font-bold text-red-600">R$ {calcularCustoTotal().toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
                         </div>
                     </div>
+                    </>
+                    )}
+
+                    {modoRapido && !editingColheita && (
+                    <>
+                    <div className="space-y-2">
+                        <Label>Cultura</Label>
+                        <Select value={formData.cultura || ""} onValueChange={(value) => setFormData({ ...formData, cultura: value })}>
+                            <SelectTrigger className="rounded-xl"><SelectValue placeholder="Selecione" /></SelectTrigger>
+                            <SelectContent><SelectItem value="manga">Manga</SelectItem><SelectItem value="goiaba">Goiaba</SelectItem></SelectContent>
+                        </Select>
+                    </div>
+
+                    <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                            <Label className="text-stone-700 font-medium">Tipos Colhidos Nesse Dia</Label>
+                            <Button type="button" variant="outline" size="sm" onClick={addLinhaRapida} disabled={!formData.cultura} className="h-7 text-xs rounded-lg border-blue-200 text-blue-600 hover:bg-blue-50"><Plus className="w-3 h-3 mr-1" /> Adicionar Tipo</Button>
+                        </div>
+                        {linhasRapidas.map((linha, index) => (
+                            <div key={index} className="p-3 bg-stone-50 rounded-xl border border-stone-100 flex flex-col md:flex-row gap-2 md:items-center">
+                                <Select value={linha.tipo_colheita || ""} onValueChange={(value) => updateLinhaRapida(index, 'tipo_colheita', value)} disabled={!formData.cultura}>
+                                    <SelectTrigger className="w-full md:flex-1 rounded-lg bg-white h-9 text-xs"><SelectValue placeholder="Tipo" /></SelectTrigger>
+                                    <SelectContent>{tiposColheita.map((tipo) => (<SelectItem key={tipo.value} value={tipo.value}>{tipo.label}</SelectItem>))}</SelectContent>
+                                </Select>
+                                <Input type="number" step="0.01" placeholder="Qtd (kg)" className="w-full md:w-24 rounded-lg bg-white h-9 text-xs" value={linha.quantidade_kg} onChange={(e) => updateLinhaRapida(index, 'quantidade_kg', e.target.value)} />
+                                <Input type="number" placeholder="Qtd (cx)" className="w-full md:w-24 rounded-lg bg-white h-9 text-xs" value={linha.quantidade_caixas} onChange={(e) => updateLinhaRapida(index, 'quantidade_caixas', e.target.value)} />
+                                <Input type="number" step="0.01" placeholder="Preço venda" className="w-full md:w-24 rounded-lg bg-white h-9 text-xs" value={linha.preco_unitario} onChange={(e) => updateLinhaRapida(index, 'preco_unitario', e.target.value)} />
+                                <Select value={linha.unidade_preco} onValueChange={(value) => updateLinhaRapida(index, 'unidade_preco', value)}>
+                                    <SelectTrigger className="w-full md:w-28 rounded-lg bg-white h-9 text-xs"><SelectValue /></SelectTrigger>
+                                    <SelectContent><SelectItem value="kg">R$/kg</SelectItem><SelectItem value="caixa">R$/caixa</SelectItem></SelectContent>
+                                </Select>
+                                {linhasRapidas.length > 1 && (
+                                    <Button type="button" variant="ghost" size="icon" onClick={() => removeLinhaRapida(index)} className="h-9 w-9 shrink-0 text-stone-300 hover:text-red-500"><Trash2 className="w-4 h-4" /></Button>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+
+                    <div className="p-4 bg-red-50/50 rounded-xl space-y-3 border border-red-100">
+                        <Label className="text-red-800 font-medium">Custo de Colheita do Dia (Terceirizado)</Label>
+                        <p className="text-[11px] text-stone-500 -mt-1">Um valor só, aplicado sobre a soma de {custoRapido.unidade === 'kg' ? 'kg' : 'caixas'} de todos os tipos acima.</p>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <Label className="text-xs text-red-700">Custo Unit.</Label>
+                                <Input type="number" step="0.01" value={custoRapido.valor} onChange={(e) => setCustoRapido({ ...custoRapido, valor: e.target.value })} placeholder="R$" className="rounded-xl bg-white border-red-200" />
+                            </div>
+                            <div className="space-y-2">
+                                <Label className="text-xs text-red-700">Unidade</Label>
+                                <Select value={custoRapido.unidade} onValueChange={(value) => setCustoRapido({ ...custoRapido, unidade: value })}>
+                                    <SelectTrigger className="rounded-xl bg-white border-red-200"><SelectValue /></SelectTrigger>
+                                    <SelectContent><SelectItem value="kg">Por kg</SelectItem><SelectItem value="caixa">Por caixa</SelectItem></SelectContent>
+                                </Select>
+                            </div>
+                        </div>
+                    </div>
+                    </>
+                    )}
 
                     <div className="space-y-2">
                         <Label>Observações</Label>
@@ -383,6 +542,10 @@ export default function Colheitas() {
                                 Salvar Alterações
                             </Button>
                         </div>
+                    ) : modoRapido ? (
+                        <Button type="button" onClick={handleAddLoteToQueue} className="w-full rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold h-12">
+                            <ListPlus className="w-5 h-5 mr-2" /> Adicionar Todos os Tipos à Lista
+                        </Button>
                     ) : (
                         <Button type="button" onClick={handleAddToQueue} className="w-full rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold h-12">
                             <ListPlus className="w-5 h-5 mr-2" /> Adicionar à Lista
@@ -410,6 +573,7 @@ export default function Colheitas() {
                                             <div className="flex gap-2 mt-1">
                                                 {item.quantidade_kg > 0 && <span className="text-[11px] bg-stone-100 px-1.5 py-0.5 rounded text-stone-600 font-bold">{item.quantidade_kg} kg</span>}
                                                 {item.quantidade_caixas > 0 && <span className="text-[11px] bg-blue-50 px-1.5 py-0.5 rounded text-blue-600 font-bold">{item.quantidade_caixas} cx</span>}
+                                                {item.loteId && <span className="text-[11px] bg-purple-50 px-1.5 py-0.5 rounded text-purple-600 font-bold">lote</span>}
                                             </div>
                                             <div className="text-xs font-bold text-emerald-600 mt-1">Receita: R$ {item.valor_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
                                             {item.custoTotalCalc > 0 && <div className="text-[11px] text-red-600">Custo: R$ {item.custoTotalCalc.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>}
@@ -417,6 +581,17 @@ export default function Colheitas() {
                                     ))
                                 )}
                             </div>
+                            {lotesCusto.length > 0 && (
+                                <div className="mt-3 pt-3 border-t border-stone-200 space-y-1">
+                                    <p className="text-[11px] font-bold text-stone-500 uppercase">Custos de Lote (combinados)</p>
+                                    {lotesCusto.map((lote) => (
+                                        <div key={lote.loteId} className="text-[11px] text-red-600 flex justify-between">
+                                            <span className="truncate pr-2">{lote.resumoTipos} ({getTalhaoNome(lote.talhao_id)})</span>
+                                            <span className="font-bold shrink-0">R$ {lote.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                             <div className="mt-4 pt-4 border-t border-stone-200">
                                 <Button onClick={handleSaveAll} disabled={colheitaQueue.length === 0 || createBatchMutation.isPending} className="w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-11 shadow-lg shadow-emerald-100">
                                     {createBatchMutation.isPending ? 'Salvando...' : `Confirmar (${colheitaQueue.length})`}
@@ -458,10 +633,11 @@ export default function Colheitas() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <StatCard title="Total Colhido (Kg)" value={`${(totalKg / 1000).toFixed(1)} ton`} icon={Wheat} color="text-amber-600" />
         <StatCard title="Total Colhido (Cx)" value={`${totalCaixas.toLocaleString('pt-BR')} cx`} icon={Package} color="text-blue-600" />
         <StatCard title="Receita Total" value={`R$ ${totalReceita.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} icon={TrendingUp} color="text-emerald-600" />
+        <StatCard title="Custo de Colheita" value={`R$ ${totalCustoColheita.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} icon={Package} color="text-red-600" />
         <StatCard title="Registros" value={colheitasFiltradas.length} icon={FileText} color="text-stone-600" />
       </div>
 
@@ -505,6 +681,7 @@ export default function Colheitas() {
                     <TableHead>Tipo</TableHead>
                     <TableHead className="text-right">Quantidade</TableHead>
                     <TableHead className="text-right">Venda Total</TableHead>
+                    <TableHead className="text-right">Custo Colheita</TableHead>
                     <TableHead className="text-right pr-6 w-[120px]">Ações</TableHead>
                 </TableRow>
                 </TableHeader>
@@ -533,6 +710,18 @@ export default function Colheitas() {
                                 <span className="font-bold text-emerald-600">R$ {colheita.valor_total?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
                                 <span className="text-xs text-stone-400 font-medium mt-0.5">R$ {colheita.preco_unitario?.toFixed(2)}/{colheita.unidade_preco}</span>
                             </div>
+                        </TableCell>
+                        <TableCell className="text-right">
+                            {colheita.custo_colheita ? (() => {
+                                const qtdBase = colheita.unidade_custo === 'kg' ? (colheita.quantidade_kg || 0) : (colheita.quantidade_caixas || 0);
+                                const custoTotalLinha = qtdBase * colheita.custo_colheita;
+                                return (
+                                    <div className="flex flex-col items-end">
+                                        <span className="font-bold text-red-600">R$ {custoTotalLinha.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                                        <span className="text-xs text-stone-400 font-medium mt-0.5">R$ {colheita.custo_colheita.toFixed(2)}/{colheita.unidade_custo}</span>
+                                    </div>
+                                );
+                            })() : <span className="text-stone-300">-</span>}
                         </TableCell>
                         <TableCell className="text-right pr-6">
                             <div className="flex justify-end gap-1">
