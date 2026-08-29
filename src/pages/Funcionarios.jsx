@@ -78,11 +78,21 @@ export const calcularFolha = (funcionario) => {
   const admissao = new Date(funcionario.data_admissao + 'T12:00:00');
   const hoje = new Date();
   const limiteFuturo = addMonths(hoje, 60);
+
+  // Se o funcionário foi desligado, a projeção não pode continuar gerando salário/13º/férias
+  // pra frente — ela para no mês da saída. Mesma convenção do cálculo de 13º proporcional logo
+  // abaixo: saiu até dia 15, o mês da saída não conta como trabalhado; depois do dia 15, conta.
+  let dataLimite = limiteFuturo;
+  if (funcionario.status === 'inativo' && funcionario.data_desligamento) {
+    const desligamento = new Date(funcionario.data_desligamento + 'T12:00:00');
+    dataLimite = desligamento.getDate() > 15 ? endOfMonth(desligamento) : startOfMonth(desligamento);
+  }
+
   let eventos = [];
   let cursor = new Date(admissao);
   cursor.setDate(1); 
 
-  while (isBefore(cursor, limiteFuturo)) {
+  while (isBefore(cursor, dataLimite)) {
     const salarioVigente = getSalarioNaData(funcionario.historico_salarial, funcionario.salario, cursor);
     const dataPagamentoSalario = getQuintoDiaUtil(cursor);
     
@@ -126,6 +136,69 @@ export const calcularFolha = (funcionario) => {
     cursor = addMonths(cursor, 1);
   }
   return eventos.sort((a, b) => a.data_pagamento - b.data_pagamento);
+};
+
+// Calcula o resumo de rescisão de um funcionário desligado: o que já foi pago no histórico,
+// e o 13º e as férias que ainda faltam receber pra fechar a conta, na data da saída.
+// Convenção: se tem um período de férias ou 13º já vencido e ainda não pago, conta ele inteiro
+// ("em aberto"); senão, calcula só o proporcional desde o último período completo até a saída.
+// Obs: não inclui aviso prévio nem multa de FGTS — o app não tem esses dados pra calcular.
+export const calcularRescisao = (funcionario, todosCustosFuncionarios) => {
+  if (funcionario.status !== 'inativo' || !funcionario.data_desligamento || !funcionario.data_admissao || !funcionario.salario) return null;
+
+  const admissao = new Date(funcionario.data_admissao + 'T12:00:00');
+  const desligamento = new Date(funcionario.data_desligamento + 'T12:00:00');
+  const salarioNaSaida = getSalarioNaData(funcionario.historico_salarial, funcionario.salario, desligamento);
+
+  const eventos = calcularFolha(funcionario);
+  const eventosComStatus = eventos.map(evento => {
+    const custo = todosCustosFuncionarios.find(c => {
+      const dataCusto = parseISO(c.data);
+      return isSameMonth(dataCusto, evento.data_pagamento) && c.descricao.includes(funcionario.nome) && c.descricao.includes(evento.tipo);
+    });
+    return { ...evento, pago: custo?.status_pagamento === 'pago' };
+  });
+
+  // O que já foi efetivamente pago no histórico
+  const totalRecebidoHistorico = eventosComStatus.filter(e => e.pago).reduce((acc, e) => acc + e.valor, 0);
+  const totalSalariosRecebidos = eventosComStatus.filter(e => e.pago && e.tipo === 'Salário Mensal').reduce((acc, e) => acc + e.valor, 0);
+  const totalFeriasRecebidas = eventosComStatus.filter(e => e.pago && e.tipo.includes('Férias')).reduce((acc, e) => acc + e.valor, 0);
+  const totalDecimoRecebido = eventosComStatus.filter(e => e.pago && e.tipo.includes('13º')).reduce((acc, e) => acc + e.valor, 0);
+
+  // 13º a receber na saída
+  const decimosGerados = eventosComStatus.filter(e => e.tipo === '13º Salário').sort((a, b) => b.data_pagamento - a.data_pagamento);
+  const ultimoDecimo = decimosGerados[0];
+  let decimoRescisao;
+  if (ultimoDecimo && !ultimoDecimo.pago) {
+    decimoRescisao = { valor: ultimoDecimo.valor, detalhe: `${ultimoDecimo.referencia} (em aberto, não pago)` };
+  } else {
+    const anoDesligamento = desligamento.getFullYear();
+    const inicioContagem = admissao.getFullYear() === anoDesligamento ? admissao : new Date(anoDesligamento, 0, 1);
+    let mesesTrabalhados = (desligamento.getFullYear() - inicioContagem.getFullYear()) * 12 + (desligamento.getMonth() - inicioContagem.getMonth()) + 1;
+    if (desligamento.getDate() <= 15) mesesTrabalhados -= 1;
+    if (mesesTrabalhados < 0) mesesTrabalhados = 0;
+    decimoRescisao = { valor: (salarioNaSaida / 12) * mesesTrabalhados, detalhe: `Proporcional: ${mesesTrabalhados}/12 avos de ${anoDesligamento}` };
+  }
+
+  // Férias a receber na saída
+  const feriasGeradas = eventosComStatus.filter(e => e.tipo.includes('Férias')).sort((a, b) => b.data_pagamento - a.data_pagamento);
+  const ultimasFerias = feriasGeradas[0];
+  const dataBaseFerias = ultimasFerias ? new Date(ultimasFerias.data_pagamento) : admissao;
+  let mesesDesdeBase = differenceInMonths(desligamento, dataBaseFerias);
+  if (mesesDesdeBase < 0) mesesDesdeBase = 0;
+  const valorProporcionalFerias = ((salarioNaSaida * (1 + 1/3)) / 12) * mesesDesdeBase;
+
+  let feriasRescisao;
+  if (ultimasFerias && !ultimasFerias.pago) {
+    feriasRescisao = { valor: ultimasFerias.valor + valorProporcionalFerias, detalhe: `${ultimasFerias.referencia} (vencidas, em aberto) + ${mesesDesdeBase}/12 avos proporcionais` };
+  } else {
+    feriasRescisao = { valor: valorProporcionalFerias, detalhe: `Proporcional: ${mesesDesdeBase}/12 avos` };
+  }
+
+  return {
+    salarioNaSaida, totalRecebidoHistorico, totalSalariosRecebidos, totalFeriasRecebidas, totalDecimoRecebido,
+    decimoRescisao, feriasRescisao, totalRescisao: decimoRescisao.valor + feriasRescisao.valor
+  };
 };
 
 export default function Funcionarios() {
@@ -384,6 +457,11 @@ export default function Funcionarios() {
   const totalGeralPeriodo = relatorioGeral.filter(e => e.status !== 'HISTÓRICO').reduce((acc, curr) => acc + curr.valor, 0);
   const custoTotalPeriodoInd = eventosFolhaIndividual.filter(e => e.status !== 'ignorado').reduce((acc, e) => acc + e.valor, 0);
 
+  const rescisaoInd = useMemo(() => {
+    if (!selectedFuncionario) return null;
+    return calcularRescisao(selectedFuncionario, todosCustosFuncionarios);
+  }, [selectedFuncionario, todosCustosFuncionarios]);
+
   // --- LEMBRETE DE PAGAMENTO DE FOLHA ---
   // Todo mês, o salário do mês anterior vence no 5º dia útil (ex: folha de maio vence em junho).
   // Aqui listamos quem ainda não foi lançado como "pago" até o mês atual, pra virar um lembrete visual.
@@ -562,6 +640,37 @@ export default function Funcionarios() {
                     <div className="flex items-center gap-2 text-stone-600"><CalendarRange className="w-5 h-5 text-stone-400" /><span className="text-sm font-bold uppercase tracking-wide">Período de Apuração:</span></div>
                     <div className="flex flex-wrap items-center gap-3"><div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl border border-stone-200 shadow-sm"><span className="text-xs text-stone-400 font-bold">DE</span><Input type="date" value={filtroInicio} onChange={(e) => setFiltroInicio(e.target.value)} className="h-8 w-32 border-none p-0 text-sm font-semibold text-stone-700 focus-visible:ring-0" /></div><div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl border border-stone-200 shadow-sm"><span className="text-xs text-stone-400 font-bold">ATÉ</span><Input type="date" value={filtroFim} onChange={(e) => setFiltroFim(e.target.value)} className="h-8 w-32 border-none p-0 text-sm font-semibold text-stone-700 focus-visible:ring-0" /></div></div>
                 </div>
+                {rescisaoInd && (
+                    <div className="bg-red-50 border border-red-200 rounded-2xl p-5 space-y-4">
+                        <div className="flex items-center justify-between flex-wrap gap-2">
+                            <h3 className="font-bold text-red-800 flex items-center gap-2"><Lock className="w-4 h-4" /> Resumo de Rescisão — Funcionário Desligado</h3>
+                            <p className="text-xs text-red-600">Salário base na saída: <b>R$ {rescisaoInd.salarioNaSaida.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</b></p>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div className="bg-white rounded-xl p-3 border border-red-100">
+                                <p className="text-[11px] font-bold text-stone-400 uppercase">Já recebido (histórico)</p>
+                                <p className="text-lg font-black text-stone-800">R$ {rescisaoInd.totalRecebidoHistorico.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                                <p className="text-[11px] text-stone-400">Salários: R$ {rescisaoInd.totalSalariosRecebidos.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} · Férias: R$ {rescisaoInd.totalFeriasRecebidas.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} · 13º: R$ {rescisaoInd.totalDecimoRecebido.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                            </div>
+                            <div className="bg-white rounded-xl p-3 border border-red-100">
+                                <p className="text-[11px] font-bold text-stone-400 uppercase">13º a receber na saída</p>
+                                <p className="text-lg font-black text-emerald-700">R$ {rescisaoInd.decimoRescisao.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                                <p className="text-[11px] text-stone-500">{rescisaoInd.decimoRescisao.detalhe}</p>
+                            </div>
+                            <div className="bg-white rounded-xl p-3 border border-red-100">
+                                <p className="text-[11px] font-bold text-stone-400 uppercase">Férias a receber na saída</p>
+                                <p className="text-lg font-black text-emerald-700">R$ {rescisaoInd.feriasRescisao.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                                <p className="text-[11px] text-stone-500">{rescisaoInd.feriasRescisao.detalhe}</p>
+                            </div>
+                        </div>
+                        <div className="flex items-center justify-between pt-2 border-t border-red-200">
+                            <span className="text-sm font-bold text-red-800">Total a acertar na rescisão (13º + Férias)</span>
+                            <span className="text-xl font-black text-red-700">R$ {rescisaoInd.totalRescisao.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                        </div>
+                        <p className="text-[11px] text-stone-500">Não inclui aviso prévio, multa de FGTS ou outros itens que o app não tem dados pra calcular — só salário, 13º e férias proporcionais/em aberto.</p>
+                    </div>
+                )}
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                     <div className="bg-emerald-50 p-5 rounded-2xl border border-emerald-100 relative overflow-hidden group"><p className="text-xs font-bold text-emerald-600 uppercase tracking-widest mb-1">Total Salários</p><p className="text-xl font-black text-emerald-700">R$ {totalSalariosInd.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p><p className="text-xs text-emerald-600/60 mt-1 font-medium">No período selecionado</p></div>
                     <div className="bg-amber-50 p-5 rounded-2xl border border-amber-100 relative overflow-hidden group"><p className="text-xs font-bold text-amber-600 uppercase tracking-widest mb-1">Total 13º Salário</p><p className="text-xl font-black text-amber-700">R$ {totalDecimoInd.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p><p className="text-xs text-amber-600/60 mt-1 font-medium">No período selecionado</p></div>
