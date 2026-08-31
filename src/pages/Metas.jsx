@@ -219,7 +219,7 @@ export default function Metas() {
       </div>
 
       <Card className="border-stone-100"><CardContent className="pt-4 flex items-center gap-4">
-        <Filter className="w-4 h-4 text-stone-400" />
+        <Filter className="w-4 h-4 text-stone-500" />
         <Select value={anoFiltro} onValueChange={setAnoFiltro}>
           <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
           <SelectContent>{anosDisponiveis.map(ano => <SelectItem key={ano} value={ano}>{ano}</SelectItem>)}</SelectContent>
