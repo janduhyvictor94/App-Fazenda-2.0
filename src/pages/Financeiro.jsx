@@ -18,6 +18,7 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recha
 const categoriaLabels = {
   funcionario: { label: 'Funcionário', color: 'bg-blue-100 text-blue-700' },
   insumo: { label: 'Insumo', color: 'bg-green-100 text-green-700' },
+  colheita: { label: 'Colheita', color: 'bg-lime-100 text-lime-700' },
   manutencao: { label: 'Manutenção', color: 'bg-amber-100 text-amber-700' },
   energia: { label: 'Energia', color: 'bg-yellow-100 text-yellow-700' },
   agua: { label: 'Água', color: 'bg-cyan-100 text-cyan-700' },
@@ -278,7 +279,7 @@ export default function Financeiro({ showMessage }) {
             if (custo.status_pagamento === 'pago') {
                 mapMeses[mesAnoKey].total += custo.valor || 0;
             }
-        } else if (custo.categoria === 'terceirizado' && custo.descricao?.startsWith('Colheita')) {
+        } else if (custo.descricao?.startsWith('Colheita')) {
             // Agrupa custos de colheita por talhão + mês, igual à Folha de Pagamento —
             // senão cada tipo colhido (caixa verde, madura, polpa...) vira uma linha solta na lista.
             const mesAnoKey = custo.data.substring(0, 7);
