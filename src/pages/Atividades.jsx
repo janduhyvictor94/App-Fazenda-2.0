@@ -344,7 +344,7 @@ export default function Atividades() {
                     className="cursor-pointer hover:border-emerald-500 hover:shadow-md transition-all border border-stone-200 bg-stone-50 group"
                 >
                     <CardHeader className="text-center py-8">
-                        <LayoutGrid className="w-10 h-10 mx-auto mb-3 text-stone-400 group-hover:text-emerald-500 transition-colors" />
+                        <LayoutGrid className="w-10 h-10 mx-auto mb-3 text-stone-500 group-hover:text-emerald-500 transition-colors" />
                         <CardTitle className="text-lg text-stone-700 group-hover:text-emerald-700">Todas as Atividades</CardTitle>
                         <Badge variant="outline" className="mx-auto mt-2 bg-white text-stone-500">Histórico Completo</Badge>
                     </CardHeader>
@@ -390,7 +390,7 @@ export default function Atividades() {
 
                             <CardHeader className="text-center py-8">
                                 {isFinalizada ? (
-                                    <Archive className="w-10 h-10 mx-auto mb-3 text-stone-400 group-hover:text-stone-500 transition-colors" />
+                                    <Archive className="w-10 h-10 mx-auto mb-3 text-stone-500 group-hover:text-stone-500 transition-colors" />
                                 ) : (
                                     <CalendarIcon className="w-10 h-10 mx-auto mb-3 text-emerald-600/50 group-hover:text-emerald-500 transition-colors" />
                                 )}
@@ -475,10 +475,10 @@ export default function Atividades() {
                                 <div className="bg-emerald-50 rounded-lg p-2 border border-emerald-100"><div className="text-xl font-bold text-emerald-600">{area.qtdConcluidas}</div><div className="text-xs uppercase font-bold text-emerald-700/60">Concluídas</div></div>
                             </div>
                             <div>
-                                <p className="text-xs font-bold text-stone-400 mb-2 uppercase tracking-wide">Próximas Atividades</p>
+                                <p className="text-xs font-bold text-stone-500 mb-2 uppercase tracking-wide">Próximas Atividades</p>
                                 {area.proximas.length > 0 ? (
-                                    <div className="space-y-1">{area.proximas.map(a => (<div key={a.id} className="flex justify-between items-center text-xs p-2 bg-stone-50 rounded-lg"><span className="font-medium text-stone-700">{getTipoLabel(a.tipo)}</span><span className="text-stone-400">{format(parseISO(a.data_programada), 'dd/MM')}</span></div>))}</div>
-                                ) : (<div className="text-xs text-stone-300 italic text-center py-2 bg-stone-50 rounded-lg">Nenhuma atividade programada</div>)}
+                                    <div className="space-y-1">{area.proximas.map(a => (<div key={a.id} className="flex justify-between items-center text-xs p-2 bg-stone-50 rounded-lg"><span className="font-medium text-stone-700">{getTipoLabel(a.tipo)}</span><span className="text-stone-500">{format(parseISO(a.data_programada), 'dd/MM')}</span></div>))}</div>
+                                ) : (<div className="text-xs text-stone-500 italic text-center py-2 bg-stone-50 rounded-lg">Nenhuma atividade programada</div>)}
                             </div>
                             <div className="pt-2 border-t border-stone-100 flex justify-between items-center"><span className="text-xs font-medium text-stone-500">Custo Total Acumulado</span><span className="font-bold text-stone-800">R$ {area.totalCusto.toLocaleString('pt-BR', {minimumFractionDigits: 0})}</span></div>
                         </div>
@@ -608,12 +608,12 @@ export default function Atividades() {
                     <div className="lg:col-span-1 bg-stone-50 rounded-2xl border border-stone-200 p-4 flex flex-col h-full min-h-[300px]">
                         <h4 className="text-sm font-bold text-stone-700 mb-3 flex items-center gap-2"><ClipboardList className="w-4 h-4" /> Lista de Programação ({activityQueue.length})</h4>
                         {editingAtividade ? (
-                            <div className="flex-1 flex items-center justify-center text-center text-stone-400 text-xs italic">Modo de edição individual.<br/>A lista está desabilitada.</div>
+                            <div className="flex-1 flex items-center justify-center text-center text-stone-500 text-xs italic">Modo de edição individual.<br/>A lista está desabilitada.</div>
                         ) : (
                             <>
                                 <div className="flex-1 overflow-y-auto space-y-2 max-h-[400px] pr-1 scrollbar-thin">
                                     {activityQueue.length === 0 ? (
-                                        <div className="text-center text-stone-400 text-xs py-10 italic">Preencha o formulário e clique em "Adicionar à Lista".</div>
+                                        <div className="text-center text-stone-500 text-xs py-10 italic">Preencha o formulário e clique em "Adicionar à Lista".</div>
                                     ) : (
                                         activityQueue.map((item) => (
                                             <div key={item.tempId} className="bg-white p-3 rounded-xl border border-stone-100 shadow-sm text-sm relative group animate-in slide-in-from-left-2">
@@ -719,13 +719,13 @@ export default function Atividades() {
                     <TableCell className="pl-6 font-medium text-stone-600">
                         {(() => {
                             const dataExibir = atividade.data_realizada || atividade.data_programada;
-                            if (!dataExibir) return <span className="text-stone-300 italic text-xs">Sem data</span>;
+                            if (!dataExibir) return <span className="text-stone-500 italic text-xs">Sem data</span>;
                             return format(new Date(dataExibir + 'T12:00:00'), 'dd/MM/yy');
                         })()}
                     </TableCell>
                     <TableCell>
                         <div className="font-bold text-stone-800">{atividade.tipo === 'outro' ? atividade.tipo_personalizado : getTipoLabel(atividade.tipo)}</div>
-                        <div className="text-xs text-stone-400">{atividade.responsavel && `Resp: ${atividade.responsavel}`}</div>
+                        <div className="text-xs text-stone-500">{atividade.responsavel && `Resp: ${atividade.responsavel}`}</div>
                         {atividade.terceirizada && <Badge variant="outline" className="text-xs border-blue-200 text-blue-600 mt-1">Terceirizado</Badge>}
                     </TableCell>
                     <TableCell><Badge variant="outline" className="bg-white border-stone-200 text-stone-600">{getTalhaoNome(atividade.talhao_id)}</Badge></TableCell>
@@ -741,7 +741,7 @@ export default function Atividades() {
                             </Button>
                         )}
                         <Button variant="ghost" size="icon" className="h-8 w-8 text-emerald-500 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg" onClick={() => handleViewActivityText(atividade)} title="Ver Texto"><FileText className="w-4 h-4" /></Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-stone-400 hover:text-stone-700 hover:bg-stone-100 rounded-lg" onClick={() => handleEdit(atividade)} title="Editar"><Edit className="w-4 h-4" /></Button>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-stone-500 hover:text-stone-700 hover:bg-stone-100 rounded-lg" onClick={() => handleEdit(atividade)} title="Editar"><Edit className="w-4 h-4" /></Button>
                         <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg" onClick={() => handleDuplicate(atividade)} title="Duplicar"><Copy className="w-4 h-4" /></Button>
                         <Button variant="ghost" size="icon" className="h-8 w-8 text-red-300 hover:text-red-500 hover:bg-red-50 rounded-lg" onClick={() => { if(confirm("Excluir?")) deleteMutation.mutate(atividade.id) }} title="Excluir"><Trash2 className="w-4 h-4" /></Button>
                       </div>
