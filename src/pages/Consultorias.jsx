@@ -377,7 +377,7 @@ export default function Consultorias() {
                           </div>
                           <p className="text-sm text-stone-600">{ind.recomendacao}</p>
                           {ind.prazo && (
-                            <p className="text-xs text-stone-400 mt-1">Prazo: {ind.prazo}</p>
+                            <p className="text-xs text-stone-500 mt-1">Prazo: {ind.prazo}</p>
                           )}
                         </div>
                         <Button
