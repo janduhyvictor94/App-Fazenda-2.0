@@ -471,14 +471,14 @@ export default function Dashboard() {
                                     <TableRow key={`op-${talhao}-${idx}`} className="hover:bg-stone-50/50">
                                         <TableCell className="text-xs font-medium text-stone-500 pl-6">{format(parseISO(item.data), 'dd/MM')}</TableCell>
                                         <TableCell className="font-medium text-stone-700 pl-6 border-l-2 border-stone-200">{item.descricao}</TableCell>
-                                        <TableCell className="text-xs text-stone-400">Atividade Operacional</TableCell>
+                                        <TableCell className="text-xs text-stone-500">Atividade Operacional</TableCell>
                                         <TableCell className="text-right font-medium text-red-600/80">R$ {item.valor.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</TableCell>
                                     </TableRow>
                                 ))}
                             </React.Fragment>
                         ))}
                         {detailsData.financialItems.length === 0 && Object.keys(detailsData.groupedOperational).length === 0 && (
-                            <TableRow><TableCell colSpan={4} className="text-center py-8 text-stone-400">Nenhum registro encontrado.</TableCell></TableRow>
+                            <TableRow><TableCell colSpan={4} className="text-center py-8 text-stone-500">Nenhum registro encontrado.</TableCell></TableRow>
                         )}
                         <TableRow className="bg-stone-800 hover:bg-stone-800 font-bold border-t-4 border-white">
                             <TableCell colSpan={3} className="text-right uppercase text-xs text-white">Total Geral do Mês</TableCell>
@@ -549,7 +549,7 @@ export default function Dashboard() {
             {filterType === 'periodo' && (
                 <div className="flex items-center gap-2 w-full sm:w-auto bg-stone-50 p-1 px-3 rounded-xl border border-stone-200">
                     <Input type="date" value={dateStart} onChange={e => setDateStart(e.target.value)} className="h-8 border-none bg-transparent shadow-none" />
-                    <span className="text-stone-400 font-medium">até</span>
+                    <span className="text-stone-500 font-medium">até</span>
                     <Input type="date" value={dateEnd} onChange={e => setDateEnd(e.target.value)} className="h-8 border-none bg-transparent shadow-none" />
                 </div>
             )}
@@ -611,7 +611,7 @@ export default function Dashboard() {
               </ComposedChart>
             </ResponsiveContainer>
           </div>
-          <p className="text-center text-xs text-stone-400 mt-2 italic">Clique nas barras para ver detalhes do mês.</p>
+          <p className="text-center text-xs text-stone-500 mt-2 italic">Clique nas barras para ver detalhes do mês.</p>
         </div>
 
         {/* Coluna Direita: Produção + Atividades */}
@@ -643,7 +643,7 @@ export default function Dashboard() {
                 
                 <div className="space-y-3">
                     {proximasAtividades.length === 0 ? (
-                        <div className="text-center py-8 text-stone-400 text-sm"><CheckCircle2 className="w-8 h-8 mx-auto mb-2 opacity-50" /> Nenhuma atividade pendente próxima.</div>
+                        <div className="text-center py-8 text-stone-500 text-sm"><CheckCircle2 className="w-8 h-8 mx-auto mb-2 opacity-50" /> Nenhuma atividade pendente próxima.</div>
                     ) : (
                         proximasAtividades.map(ativ => (
                             <div 
