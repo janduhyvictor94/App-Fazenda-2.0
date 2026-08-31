@@ -399,7 +399,7 @@ export default function Planejamentos() {
                     </Select>
                 </div>
                 <div className="space-y-2">
-                    <Label>Data Base de Início {planTipoCiclo === 'livre' && <span className="text-stone-400 font-normal">(opcional)</span>}</Label>
+                    <Label>Data Base de Início {planTipoCiclo === 'livre' && <span className="text-stone-500 font-normal">(opcional)</span>}</Label>
                     <Input type="date" value={applyStartDate} onChange={e => setApplyStartDate(e.target.value)} className="rounded-xl" />
                     {planTipoCiclo === 'livre' ? (
                         <p className="text-xs text-stone-500">As etapas nascem <b>sem data</b> em Atividades, na ordem certa. Você escolhe a data real de cada uma só quando marcar como concluída — e é aí que o custo entra no financeiro daquele talhão.</p>
@@ -472,7 +472,7 @@ export default function Planejamentos() {
                                 </div>
                             </div>
                             <div className="space-y-2">
-                                <Label className="text-stone-600">Qtd de Plantas <span className="text-xs text-stone-400 font-normal">(Usado p/ cálculo g/planta)</span></Label>
+                                <Label className="text-stone-600">Qtd de Plantas <span className="text-xs text-stone-500 font-normal">(Usado p/ cálculo g/planta)</span></Label>
                                 <Input type="number" value={novoPlan.quantidade_plantas} onChange={e => setNovoPlan({...novoPlan, quantidade_plantas: e.target.value})} className="rounded-xl" placeholder="Ex: 500" />
                             </div>
                             <Button onClick={handleCreateNew} className="w-full bg-emerald-600 hover:bg-emerald-700 rounded-xl font-bold h-11 mt-2" disabled={saveMutation.isPending}>
@@ -572,17 +572,17 @@ export default function Planejamentos() {
                       {planFases.length === 0 ? (
                           <div className="relative z-10 text-center py-10">
                               <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-stone-100 border-4 border-white shadow-sm mb-3">
-                                  <Calendar className="w-5 h-5 text-stone-400" />
+                                  <Calendar className="w-5 h-5 text-stone-500" />
                               </div>
                               <p className="text-stone-500 font-medium text-sm">Nenhuma etapa programada.</p>
-                              <p className="text-stone-400 text-xs mt-1">Clique em "Adicionar {cicloLabels[planTipoCiclo]}" para começar.</p>
+                              <p className="text-stone-500 text-xs mt-1">Clique em "Adicionar {cicloLabels[planTipoCiclo]}" para começar.</p>
                           </div>
                       ) : (
                           planFases.map((fase) => (
                               <div key={fase.id} className="relative z-10 flex items-start flex-col md:flex-row gap-4 group">
                                   <div className="flex items-center md:justify-end w-12 md:w-32 pt-3 shrink-0">
                                       <div className="hidden md:block mr-4 text-right">
-                                          <div className="text-xs font-bold uppercase text-stone-400 tracking-wider">
+                                          <div className="text-xs font-bold uppercase text-stone-500 tracking-wider">
                                               {planTipoCiclo === 'livre' ? 'Etapa' : cicloLabels[planTipoCiclo]}
                                           </div>
                                           <div className="text-xl font-black text-stone-800">{fase.momento}</div>
@@ -612,7 +612,7 @@ export default function Planejamentos() {
                                               <Button variant="outline" size="sm" onClick={() => handleAddAplicacao(fase.id)} className="h-8 text-xs bg-white text-emerald-600 border-emerald-200 hover:bg-emerald-50 shadow-sm">
                                                   <Plus className="w-3 h-3 mr-1"/> Adicionar Item
                                               </Button>
-                                              <Button variant="ghost" size="sm" onClick={() => handleRemoveFase(fase.id)} className="h-8 w-8 p-0 text-stone-400 hover:text-red-500 hover:bg-red-50 rounded-lg">
+                                              <Button variant="ghost" size="sm" onClick={() => handleRemoveFase(fase.id)} className="h-8 w-8 p-0 text-stone-500 hover:text-red-500 hover:bg-red-50 rounded-lg">
                                                   <Trash2 className="w-4 h-4"/>
                                               </Button>
                                           </div>
@@ -620,7 +620,7 @@ export default function Planejamentos() {
                                       
                                       <div className="p-4">
                                           {fase.aplicacoes.length === 0 ? (
-                                              <p className="text-xs text-stone-400 italic text-center py-2">
+                                              <p className="text-xs text-stone-500 italic text-center py-2">
                                                   Nenhum item adicionado nesta etapa.
                                               </p>
                                           ) : (
@@ -728,15 +728,15 @@ export default function Planejamentos() {
                       <Card className="border-stone-200 rounded-[2rem] shadow-lg overflow-hidden">
                           <CardContent className="p-0">
                               <div className="p-6 text-center text-white bg-stone-900">
-                                  <div className="flex items-center justify-center gap-2 mb-4 text-stone-400">
+                                  <div className="flex items-center justify-center gap-2 mb-4 text-stone-500">
                                       <ShoppingCart className="w-4 h-4" />
                                       <span className="text-xs uppercase font-bold tracking-widest">Resumo do Ciclo</span>
                                   </div>
-                                  <p className="text-stone-400 text-xs uppercase font-bold tracking-widest mb-1">Custo Total Estimado</p>
+                                  <p className="text-stone-500 text-xs uppercase font-bold tracking-widest mb-1">Custo Total Estimado</p>
                                   <div className="text-3xl font-black tracking-tight text-emerald-400">
                                       R$ {resumoCompras.custoGeralEstimado.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
                                   </div>
-                                  <div className="flex justify-center gap-4 mt-3 text-xs text-stone-400 font-medium">
+                                  <div className="flex justify-center gap-4 mt-3 text-xs text-stone-500 font-medium">
                                       <span>Insumos: R$ {resumoCompras.custoTotalInsumos.toLocaleString('pt-BR')}</span>
                                       <span>Mão de Obra: R$ {resumoCompras.custoTerceirizadoEstimado.toLocaleString('pt-BR')}</span>
                                   </div>
@@ -753,7 +753,7 @@ export default function Planejamentos() {
                                   </h3>
                                   
                                   {resumoCompras.itens.length === 0 ? (
-                                      <div className="text-center text-stone-400 py-10 italic text-sm">
+                                      <div className="text-center text-stone-500 py-10 italic text-sm">
                                           Adicione produtos e preencha as quantidades para ver o resumo.
                                       </div>
                                   ) : (
@@ -762,7 +762,7 @@ export default function Planejamentos() {
                                               <div key={idx} className="bg-stone-50 rounded-xl p-3 border border-stone-100 flex items-center justify-between group hover:border-stone-300 transition-colors">
                                                   <div className="flex-1 truncate pr-2">
                                                       <p className="font-bold text-stone-800 text-sm truncate" title={item.nome}>{item.nome}</p>
-                                                      <p className="text-xs text-stone-400 font-medium">Ref: R$ {item.preco_unitario?.toFixed(2)} por embalagem</p>
+                                                      <p className="text-xs text-stone-500 font-medium">Ref: R$ {item.preco_unitario?.toFixed(2)} por embalagem</p>
                                                   </div>
                                                   <div className="text-right shrink-0">
                                                       <p className="text-sm font-black text-stone-800">
