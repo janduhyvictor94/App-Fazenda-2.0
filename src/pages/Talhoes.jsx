@@ -32,6 +32,8 @@ const culturaLabels = {
 export default function Talhoes() {
   const [open, setOpen] = useState(false);
   const [editingTalhao, setEditingTalhao] = useState(null);
+  const [openCulturaDialog, setOpenCulturaDialog] = useState(false);
+  const [novaCultura, setNovaCultura] = useState('');
   const [formData, setFormData] = useState({
     nome: '',
     area_hectares: '',
@@ -43,6 +45,37 @@ export default function Talhoes() {
   });
 
   const queryClient = useQueryClient();
+
+  // Culturas cadastráveis (manga, goiaba, ou o que o cliente plantar — uva, mamão, etc.)
+  const { data: culturas = [] } = useQuery({
+    queryKey: ['culturas'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('culturas').select('*').order('nome');
+      if (error) throw error;
+      return data;
+    }
+  });
+
+  const createCulturaMutation = useMutation({
+    mutationFn: async (nome) => {
+      const { error } = await supabase.from('culturas').insert({ nome: nome.trim().toLowerCase() });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['culturas'] });
+      setNovaCultura('');
+    },
+    onError: (error) => { alert(`Não foi possível cadastrar a cultura.\n\nMotivo: ${error.message || 'Erro desconhecido'}`); console.error('Erro ao criar cultura:', error); }
+  });
+
+  const deleteCulturaMutation = useMutation({
+    mutationFn: async (id) => {
+      const { error } = await supabase.from('culturas').delete().eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['culturas'] }),
+    onError: (error) => { alert(`Não foi possível excluir a cultura.\n\nMotivo: ${error.message || 'Erro desconhecido'}`); console.error('Erro ao excluir cultura:', error); }
+  });
 
   const { data: talhoes = [], isLoading } = useQuery({
     queryKey: ['talhoes'],
@@ -209,7 +242,12 @@ export default function Talhoes() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>Cultura</Label>
+                  <div className="flex items-center justify-between">
+                    <Label>Cultura</Label>
+                    <Button type="button" variant="ghost" size="sm" onClick={() => setOpenCulturaDialog(true)} className="h-6 text-xs px-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg">
+                      <Plus className="w-3 h-3 mr-1" /> Gerenciar
+                    </Button>
+                  </div>
                   <Select
                     value={formData.cultura}
                     onValueChange={(value) => setFormData({ ...formData, cultura: value })}
@@ -218,9 +256,9 @@ export default function Talhoes() {
                       <SelectValue placeholder="Selecione" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="manga">Manga</SelectItem>
-                      <SelectItem value="goiaba">Goiaba</SelectItem>
-                      <SelectItem value="misto">Misto</SelectItem>
+                      {culturas.map((c) => (
+                        <SelectItem key={c.id} value={c.nome}>{c.nome.charAt(0).toUpperCase() + c.nome.slice(1)}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -286,6 +324,31 @@ export default function Talhoes() {
             </form>
           </DialogContent>
         </Dialog>
+
+        <Dialog open={openCulturaDialog} onOpenChange={setOpenCulturaDialog}>
+          <DialogContent className="sm:max-w-md rounded-[2rem]">
+            <DialogHeader>
+              <DialogTitle>Gerenciar Culturas</DialogTitle>
+              <DialogDescription>Cadastre as culturas que a fazenda trabalha (manga, goiaba, uva, mamão, etc.).</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="flex gap-2">
+                <Input value={novaCultura} onChange={(e) => setNovaCultura(e.target.value)} placeholder="Ex: Uva" className="rounded-xl" />
+                <Button onClick={() => createCulturaMutation.mutate(novaCultura)} disabled={!novaCultura.trim() || createCulturaMutation.isPending} className="rounded-xl bg-emerald-600 hover:bg-emerald-700"><Plus className="w-4 h-4" /></Button>
+              </div>
+              <div className="border rounded-xl divide-y overflow-hidden">
+                {culturas.length === 0 ? (
+                  <div className="p-4 text-center text-sm text-stone-400 italic">Nenhuma cultura cadastrada ainda.</div>
+                ) : culturas.map((c) => (
+                  <div key={c.id} className="flex justify-between items-center p-3 bg-stone-50 hover:bg-white transition-colors">
+                    <span className="text-sm font-medium capitalize">{c.nome}</span>
+                    <Button variant="ghost" size="sm" onClick={() => { if (confirm(`Excluir a cultura "${c.nome}"? Talhões já cadastrados com ela não serão afetados, só deixa de aparecer na lista pra novos cadastros.`)) deleteCulturaMutation.mutate(c.id) }} className="h-6 w-6 p-0 text-red-400 hover:text-red-600"><Trash2 className="w-3 h-3" /></Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
 
       {/* KPI Cards Padronizados */}
@@ -338,7 +401,7 @@ export default function Talhoes() {
                 <div className="grid grid-cols-2 gap-3 text-sm">
                   <div className="p-3 bg-stone-50 rounded-xl border border-stone-100">
                     <p className="text-stone-500 text-xs font-bold uppercase mb-1.5 tracking-wide">Cultura</p>
-                    <Badge variant="outline" className={`${culturaLabels[talhao.cultura]?.color || 'bg-stone-100'} bg-opacity-20 border-opacity-50`}>
+                    <Badge variant="outline" className={`${culturaLabels[talhao.cultura]?.color || 'bg-stone-100'} bg-opacity-20 border-opacity-50 capitalize`}>
                       {culturaLabels[talhao.cultura]?.label || talhao.cultura}
                     </Badge>
                   </div>
