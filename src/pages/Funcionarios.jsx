@@ -585,7 +585,7 @@ export default function Funcionarios() {
                 <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2"><Label>Admissão</Label><Input type="date" value={formData.data_admissao} onChange={(e) => setFormData({ ...formData, data_admissao: e.target.value })} className="rounded-xl" required /></div>
                     <div className="space-y-2">
-                        <Label className="flex items-center gap-1">Início Contabilização <span className="text-stone-400 font-normal text-xs">(Opcional)</span></Label>
+                        <Label className="flex items-center gap-1">Início Contabilização <span className="text-stone-500 font-normal text-xs">(Opcional)</span></Label>
                         <Input type="date" value={formData.data_inicio_contabil} onChange={(e) => setFormData({ ...formData, data_inicio_contabil: e.target.value })} className="rounded-xl" placeholder="Para Dashboard" />
                     </div>
                 </div>
@@ -637,8 +637,8 @@ export default function Funcionarios() {
             {selectedFuncionario && (
               <div className="space-y-6 pt-2">
                 <div className="bg-stone-50 p-4 rounded-2xl border border-stone-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div className="flex items-center gap-2 text-stone-600"><CalendarRange className="w-5 h-5 text-stone-400" /><span className="text-sm font-bold uppercase tracking-wide">Período de Apuração:</span></div>
-                    <div className="flex flex-wrap items-center gap-3"><div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl border border-stone-200 shadow-sm"><span className="text-xs text-stone-400 font-bold">DE</span><Input type="date" value={filtroInicio} onChange={(e) => setFiltroInicio(e.target.value)} className="h-8 w-32 border-none p-0 text-sm font-semibold text-stone-700 focus-visible:ring-0" /></div><div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl border border-stone-200 shadow-sm"><span className="text-xs text-stone-400 font-bold">ATÉ</span><Input type="date" value={filtroFim} onChange={(e) => setFiltroFim(e.target.value)} className="h-8 w-32 border-none p-0 text-sm font-semibold text-stone-700 focus-visible:ring-0" /></div></div>
+                    <div className="flex items-center gap-2 text-stone-600"><CalendarRange className="w-5 h-5 text-stone-500" /><span className="text-sm font-bold uppercase tracking-wide">Período de Apuração:</span></div>
+                    <div className="flex flex-wrap items-center gap-3"><div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl border border-stone-200 shadow-sm"><span className="text-xs text-stone-500 font-bold">DE</span><Input type="date" value={filtroInicio} onChange={(e) => setFiltroInicio(e.target.value)} className="h-8 w-32 border-none p-0 text-sm font-semibold text-stone-700 focus-visible:ring-0" /></div><div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl border border-stone-200 shadow-sm"><span className="text-xs text-stone-500 font-bold">ATÉ</span><Input type="date" value={filtroFim} onChange={(e) => setFiltroFim(e.target.value)} className="h-8 w-32 border-none p-0 text-sm font-semibold text-stone-700 focus-visible:ring-0" /></div></div>
                 </div>
                 {rescisaoInd && (
                     <div className="bg-red-50 border border-red-200 rounded-2xl p-5 space-y-4">
@@ -648,17 +648,17 @@ export default function Funcionarios() {
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                             <div className="bg-white rounded-xl p-3 border border-red-100">
-                                <p className="text-[11px] font-bold text-stone-400 uppercase">Já recebido (histórico)</p>
+                                <p className="text-[11px] font-bold text-stone-500 uppercase">Já recebido (histórico)</p>
                                 <p className="text-lg font-black text-stone-800">R$ {rescisaoInd.totalRecebidoHistorico.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-                                <p className="text-[11px] text-stone-400">Salários: R$ {rescisaoInd.totalSalariosRecebidos.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} · Férias: R$ {rescisaoInd.totalFeriasRecebidas.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} · 13º: R$ {rescisaoInd.totalDecimoRecebido.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                                <p className="text-[11px] text-stone-500">Salários: R$ {rescisaoInd.totalSalariosRecebidos.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} · Férias: R$ {rescisaoInd.totalFeriasRecebidas.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} · 13º: R$ {rescisaoInd.totalDecimoRecebido.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
                             </div>
                             <div className="bg-white rounded-xl p-3 border border-red-100">
-                                <p className="text-[11px] font-bold text-stone-400 uppercase">13º a receber na saída</p>
+                                <p className="text-[11px] font-bold text-stone-500 uppercase">13º a receber na saída</p>
                                 <p className="text-lg font-black text-emerald-700">R$ {rescisaoInd.decimoRescisao.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
                                 <p className="text-[11px] text-stone-500">{rescisaoInd.decimoRescisao.detalhe}</p>
                             </div>
                             <div className="bg-white rounded-xl p-3 border border-red-100">
-                                <p className="text-[11px] font-bold text-stone-400 uppercase">Férias a receber na saída</p>
+                                <p className="text-[11px] font-bold text-stone-500 uppercase">Férias a receber na saída</p>
                                 <p className="text-lg font-black text-emerald-700">R$ {rescisaoInd.feriasRescisao.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
                                 <p className="text-[11px] text-stone-500">{rescisaoInd.feriasRescisao.detalhe}</p>
                             </div>
@@ -675,7 +675,7 @@ export default function Funcionarios() {
                     <div className="bg-emerald-50 p-5 rounded-2xl border border-emerald-100 relative overflow-hidden group"><p className="text-xs font-bold text-emerald-600 uppercase tracking-widest mb-1">Total Salários</p><p className="text-xl font-black text-emerald-700">R$ {totalSalariosInd.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p><p className="text-xs text-emerald-600/60 mt-1 font-medium">No período selecionado</p></div>
                     <div className="bg-amber-50 p-5 rounded-2xl border border-amber-100 relative overflow-hidden group"><p className="text-xs font-bold text-amber-600 uppercase tracking-widest mb-1">Total 13º Salário</p><p className="text-xl font-black text-amber-700">R$ {totalDecimoInd.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p><p className="text-xs text-amber-600/60 mt-1 font-medium">No período selecionado</p></div>
                     <div className="bg-blue-50 p-5 rounded-2xl border border-blue-100 relative overflow-hidden group"><p className="text-xs font-bold text-blue-600 uppercase tracking-widest mb-1">Total Férias</p><p className="text-xl font-black text-blue-700">R$ {totalFeriasInd.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p><p className="text-xs text-blue-600/60 mt-1 font-medium">No período selecionado</p></div>
-                    <div className="bg-stone-800 p-5 rounded-2xl border border-stone-700 relative overflow-hidden shadow-lg group"><div className="absolute right-0 top-0 p-3 opacity-10"><Calculator className="w-12 h-12 text-white" /></div><p className="text-xs font-bold text-stone-400 uppercase tracking-widest mb-1">Custo Total</p><p className="text-xl font-black text-white">R$ {custoTotalPeriodoInd.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p><p className="text-xs text-stone-400 mt-1 font-medium">Soma de todos os encargos</p></div>
+                    <div className="bg-stone-800 p-5 rounded-2xl border border-stone-700 relative overflow-hidden shadow-lg group"><div className="absolute right-0 top-0 p-3 opacity-10"><Calculator className="w-12 h-12 text-white" /></div><p className="text-xs font-bold text-stone-500 uppercase tracking-widest mb-1">Custo Total</p><p className="text-xl font-black text-white">R$ {custoTotalPeriodoInd.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p><p className="text-xs text-stone-500 mt-1 font-medium">Soma de todos os encargos</p></div>
                 </div>
                 <div className="rounded-[2rem] border border-stone-100 overflow-hidden shadow-sm">
                   <Table>
@@ -689,15 +689,15 @@ export default function Funcionarios() {
                           <TableCell className="text-xs text-stone-500 max-w-[200px] truncate" title={evento.detalhe}>{evento.detalhe}</TableCell>
                           <TableCell className="text-right font-bold text-stone-800">R$ {evento.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</TableCell>
                           <TableCell className="text-center">
-                            {evento.status === 'ignorado' && <Badge variant="outline" className="bg-stone-100 text-stone-400 border-stone-200">HISTÓRICO</Badge>}
+                            {evento.status === 'ignorado' && <Badge variant="outline" className="bg-stone-100 text-stone-500 border-stone-200">HISTÓRICO</Badge>}
                             {evento.status === 'pago' && <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 border">PAGO</Badge>}
                             {evento.status === 'pendente_financeiro' && <Badge className="bg-amber-100 text-amber-700 border-amber-200 border">PENDENTE</Badge>}
                             {evento.status === 'pendente_lancamento' && <Badge className="bg-red-50 text-red-600 border-red-200 border">A LANÇAR</Badge>}
-                            {evento.status === 'provisionado' && <Badge variant="outline" className="text-stone-400 border-stone-200">FUTURO</Badge>}
+                            {evento.status === 'provisionado' && <Badge variant="outline" className="text-stone-500 border-stone-200">FUTURO</Badge>}
                           </TableCell>
                           <TableCell className="text-right pr-6 no-print">
                             {evento.status === 'ignorado' ? (
-                                <span className="text-xs text-stone-300 italic flex justify-end items-center gap-1"><Lock className="w-3 h-3"/> Bloqueado</span>
+                                <span className="text-xs text-stone-500 italic flex justify-end items-center gap-1"><Lock className="w-3 h-3"/> Bloqueado</span>
                             ) : (
                                 (evento.status === 'pago' || evento.status === 'pendente_financeiro') ? (
                                     <div className="flex justify-end"><Select defaultValue={evento.status === 'pago' ? 'pago' : 'pendente'} onValueChange={(valor) => atualizarStatusCustoMutation.mutate({ id: evento.custoId, novoStatus: valor })}><SelectTrigger className="h-8 w-[110px] text-xs font-bold border-stone-200 bg-white shadow-sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="pago" className="text-emerald-700 font-bold">Pago</SelectItem><SelectItem value="pendente" className="text-amber-700 font-bold">Pendente</SelectItem></SelectContent></Select></div>
@@ -738,15 +738,15 @@ export default function Funcionarios() {
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-4">
                     <div className="w-14 h-14 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-200 transition-transform group-hover:scale-105"><span className="text-xl font-bold text-white">{funcionario.nome?.charAt(0).toUpperCase()}</span></div>
-                    <div><CardTitle className="text-xl font-bold text-stone-800">{funcionario.nome}</CardTitle><p className="text-sm font-semibold text-stone-400 uppercase tracking-wider">{funcionario.cargo}</p></div>
+                    <div><CardTitle className="text-xl font-bold text-stone-800">{funcionario.nome}</CardTitle><p className="text-sm font-semibold text-stone-500 uppercase tracking-wider">{funcionario.cargo}</p></div>
                   </div>
                   <Badge variant="outline" className={`rounded-full border ${statusLabels[funcionario.status]?.color}`}>{statusLabels[funcionario.status]?.label}</Badge>
                 </div>
               </CardHeader>
               <CardContent className="space-y-4 pt-4">
                 <div className="grid grid-cols-1 gap-2 bg-stone-50 p-4 rounded-2xl border border-stone-100">
-                  <div className="flex items-center gap-2 text-sm font-medium text-stone-600"><Phone className="w-4 h-4 text-stone-400" /> {funcionario.telefone || '-'}</div>
-                  <div className="flex items-center gap-2 text-sm font-medium text-stone-600"><Calendar className="w-4 h-4 text-stone-400" /> Adm: {funcionario.data_admissao ? format(new Date(funcionario.data_admissao + 'T12:00:00'), 'dd/MM/yyyy') : '-'}</div>
+                  <div className="flex items-center gap-2 text-sm font-medium text-stone-600"><Phone className="w-4 h-4 text-stone-500" /> {funcionario.telefone || '-'}</div>
+                  <div className="flex items-center gap-2 text-sm font-medium text-stone-600"><Calendar className="w-4 h-4 text-stone-500" /> Adm: {funcionario.data_admissao ? format(new Date(funcionario.data_admissao + 'T12:00:00'), 'dd/MM/yyyy') : '-'}</div>
                   <div className="flex items-center gap-2 text-sm font-bold text-emerald-600"><Briefcase className="w-4 h-4" /> Atual: R$ {funcionario.salario?.toLocaleString('pt-BR') || '0,00'}</div>
                 </div>
                 <Button variant="outline" className="w-full rounded-xl border-blue-200 text-blue-700 hover:bg-blue-50 hover:text-blue-800 font-bold" onClick={() => { setSelectedFuncionario(funcionario); setFolhaOpen(true); }}><Calculator className="w-4 h-4 mr-2" /> Folha & Financeiro</Button>
