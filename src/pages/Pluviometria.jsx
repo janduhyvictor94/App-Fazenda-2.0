@@ -163,10 +163,10 @@ export default function Pluviometria() {
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent bg-stone-50/50 border-stone-100 h-14">
-                <TableHead className="font-bold text-stone-400 pl-8 uppercase text-[11px] tracking-widest">Data</TableHead>
-                <TableHead className="font-bold text-stone-400 uppercase text-[11px] tracking-widest">Local</TableHead>
-                <TableHead className="font-bold text-stone-400 uppercase text-[11px] tracking-widest">Volume</TableHead>
-                <TableHead className="font-bold text-stone-400 uppercase text-[11px] tracking-widest text-right pr-8">Ação</TableHead>
+                <TableHead className="font-bold text-stone-500 pl-8 uppercase text-[11px] tracking-widest">Data</TableHead>
+                <TableHead className="font-bold text-stone-500 uppercase text-[11px] tracking-widest">Local</TableHead>
+                <TableHead className="font-bold text-stone-500 uppercase text-[11px] tracking-widest">Volume</TableHead>
+                <TableHead className="font-bold text-stone-500 uppercase text-[11px] tracking-widest text-right pr-8">Ação</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
