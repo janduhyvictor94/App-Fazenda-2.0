@@ -88,6 +88,14 @@ export default function Colheitas() {
     }
   });
 
+  const { data: culturas = [] } = useQuery({
+    queryKey: ['culturas'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('culturas').select('*').order('nome');
+      if (error) throw error; return data;
+    }
+  });
+
   // --- MUTATIONS ---
   const createBatchMutation = useMutation({
     mutationFn: async ({ itens, lotes }) => {
@@ -403,7 +411,7 @@ export default function Colheitas() {
                             <Label>Cultura</Label>
                             <Select value={formData.cultura || ""} onValueChange={(value) => setFormData({ ...formData, cultura: value, tipo_colheita: '' })}>
                                 <SelectTrigger className="rounded-xl"><SelectValue placeholder="Selecione" /></SelectTrigger>
-                                <SelectContent><SelectItem value="manga">Manga</SelectItem><SelectItem value="goiaba">Goiaba</SelectItem></SelectContent>
+                                <SelectContent>{culturas.map((c) => (<SelectItem key={c.id} value={c.nome}>{c.nome.charAt(0).toUpperCase() + c.nome.slice(1)}</SelectItem>))}</SelectContent>
                             </Select>
                         </div>
                         <div className="space-y-2">
@@ -481,7 +489,7 @@ export default function Colheitas() {
                         <Label>Cultura</Label>
                         <Select value={formData.cultura || ""} onValueChange={(value) => setFormData({ ...formData, cultura: value })}>
                             <SelectTrigger className="rounded-xl"><SelectValue placeholder="Selecione" /></SelectTrigger>
-                            <SelectContent><SelectItem value="manga">Manga</SelectItem><SelectItem value="goiaba">Goiaba</SelectItem></SelectContent>
+                            <SelectContent>{culturas.map((c) => (<SelectItem key={c.id} value={c.nome}>{c.nome.charAt(0).toUpperCase() + c.nome.slice(1)}</SelectItem>))}</SelectContent>
                         </Select>
                     </div>
 
@@ -616,7 +624,7 @@ export default function Colheitas() {
                         <Label>Cultura</Label>
                         <Select value={novoTipoColheita.cultura || ""} onValueChange={(value) => setNovoTipoColheita({ ...novoTipoColheita, cultura: value })}>
                             <SelectTrigger className="rounded-xl"><SelectValue placeholder="Selecione" /></SelectTrigger>
-                            <SelectContent><SelectItem value="manga">Manga</SelectItem><SelectItem value="goiaba">Goiaba</SelectItem></SelectContent>
+                            <SelectContent>{culturas.map((c) => (<SelectItem key={c.id} value={c.nome}>{c.nome.charAt(0).toUpperCase() + c.nome.slice(1)}</SelectItem>))}</SelectContent>
                         </Select>
                     </div>
                     <div className="space-y-2">
@@ -655,7 +663,7 @@ export default function Colheitas() {
                 </Select>
                 <Select value={filtroCultura || "todos"} onValueChange={setFiltroCultura}>
                     <SelectTrigger className="w-40 rounded-xl bg-stone-50 border-stone-200"><SelectValue placeholder="Cultura" /></SelectTrigger>
-                    <SelectContent><SelectItem value="todos">Todas Culturas</SelectItem><SelectItem value="manga">Manga</SelectItem><SelectItem value="goiaba">Goiaba</SelectItem></SelectContent>
+                    <SelectContent><SelectItem value="todos">Todas Culturas</SelectItem>{culturas.map((c) => (<SelectItem key={c.id} value={c.nome}>{c.nome.charAt(0).toUpperCase() + c.nome.slice(1)}</SelectItem>))}</SelectContent>
                 </Select>
                 <div className="flex items-center gap-2 bg-stone-50 p-1 px-3 rounded-xl border border-stone-200">
                     <Calendar className="w-4 h-4 text-stone-500" />
