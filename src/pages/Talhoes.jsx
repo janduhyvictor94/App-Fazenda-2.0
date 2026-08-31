@@ -326,7 +326,7 @@ export default function Talhoes() {
                     </div>
                     <div>
                       <CardTitle className="text-lg font-bold text-stone-800">{talhao.nome}</CardTitle>
-                      <p className="text-xs font-bold text-stone-400 uppercase tracking-wider">{talhao.variedade || 'Variedade N/A'}</p>
+                      <p className="text-xs font-bold text-stone-500 uppercase tracking-wider">{talhao.variedade || 'Variedade N/A'}</p>
                     </div>
                   </div>
                   <Badge className={`${statusLabels[talhao.status]?.color || 'bg-stone-100'} border`}>
@@ -337,13 +337,13 @@ export default function Talhoes() {
               <CardContent className="space-y-4 pt-6">
                 <div className="grid grid-cols-2 gap-3 text-sm">
                   <div className="p-3 bg-stone-50 rounded-xl border border-stone-100">
-                    <p className="text-stone-400 text-xs font-bold uppercase mb-1">Cultura</p>
+                    <p className="text-stone-500 text-xs font-bold uppercase mb-1.5 tracking-wide">Cultura</p>
                     <Badge variant="outline" className={`${culturaLabels[talhao.cultura]?.color || 'bg-stone-100'} bg-opacity-20 border-opacity-50`}>
                       {culturaLabels[talhao.cultura]?.label || talhao.cultura}
                     </Badge>
                   </div>
                   <div className="p-3 bg-stone-50 rounded-xl border border-stone-100">
-                    <p className="text-stone-400 text-xs font-bold uppercase mb-1">Área</p>
+                    <p className="text-stone-500 text-xs font-bold uppercase mb-1.5 tracking-wide">Área</p>
                     <p className="font-bold text-stone-700 text-lg">{talhao.area_hectares || '-'} ha</p>
                   </div>
                 </div>
@@ -372,7 +372,7 @@ export default function Talhoes() {
                     variant="ghost" 
                     size="sm" 
                     onClick={() => handleEdit(talhao)}
-                    className="rounded-xl text-stone-400 hover:text-stone-700 hover:bg-stone-100"
+                    className="rounded-xl text-stone-500 hover:text-stone-700 hover:bg-stone-100"
                   >
                     <Edit className="w-4 h-4" />
                   </Button>
