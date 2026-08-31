@@ -165,6 +165,29 @@ export default function Financeiro({ showMessage }) {
     }
   });
 
+  // Marca 1 lançamento como pago com um clique só, sem precisar abrir o formulário de edição.
+  const marcarPagoMutation = useMutation({
+    mutationFn: async (id) => { const { error } = await supabase.from('custos').update({ status_pagamento: 'pago' }).eq('id', id); if (error) throw error; },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['custos'] });
+      if (showMessage) showMessage("Marcado como pago", "success");
+    },
+    onError: (error) => { alert(`Não foi possível marcar como pago.\n\nMotivo: ${error.message || 'Erro desconhecido'}`); console.error('Erro ao marcar como pago:', error); }
+  });
+
+  // Marca TODOS os lançamentos de um grupo (ex: 23 lançamentos de colheita do mês) como pago de uma vez.
+  const marcarGrupoPagoMutation = useMutation({
+    mutationFn: async (ids) => {
+      const { error } = await supabase.from('custos').update({ status_pagamento: 'pago' }).in('id', ids);
+      if (error) throw error;
+    },
+    onSuccess: (_, ids) => {
+      queryClient.invalidateQueries({ queryKey: ['custos'] });
+      if (showMessage) showMessage(`${ids.length} lançamentos marcados como pagos`, "success");
+    },
+    onError: (error) => { alert(`Não foi possível marcar o grupo como pago.\n\nMotivo: ${error.message || 'Erro desconhecido'}`); console.error('Erro ao marcar grupo como pago:', error); }
+  });
+
   // --- HANDLERS ---
   const resetForm = () => {
     setFormData({
@@ -508,7 +531,28 @@ export default function Financeiro({ showMessage }) {
                                     <TableCell className="text-center">
                                         <Badge variant="secondary" className="bg-white border border-blue-200 text-blue-600 text-xs">AGRUPADO (PAGOS)</Badge>
                                     </TableCell>
-                                    <TableCell className="text-right pr-6"><span className="text-xs text-blue-400">Ver itens</span></TableCell>
+                                    <TableCell className="text-right pr-6">
+                                        <div className="flex items-center justify-end gap-2">
+                                            {item.itens.some(i => i.status_pagamento !== 'pago') && (
+                                                <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    className="h-7 text-xs rounded-lg bg-white border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        const idsPendentes = item.itens.filter(i => i.status_pagamento !== 'pago').map(i => i.id);
+                                                        if (confirm(`Marcar os ${idsPendentes.length} lançamentos pendentes deste grupo como pagos?`)) {
+                                                            marcarGrupoPagoMutation.mutate(idsPendentes);
+                                                        }
+                                                    }}
+                                                    disabled={marcarGrupoPagoMutation.isPending}
+                                                >
+                                                    Marcar Todos Pagos
+                                                </Button>
+                                            )}
+                                            <span className="text-xs text-blue-400">Ver itens</span>
+                                        </div>
+                                    </TableCell>
                                 </TableRow>
                                 
                                 {isExpanded && item.itens.map(subItem => (
@@ -517,9 +561,17 @@ export default function Financeiro({ showMessage }) {
                                         <TableCell className="text-sm font-medium text-stone-700">{subItem.descricao}</TableCell>
                                         <TableCell className="text-right font-medium text-stone-600">R$ {subItem.valor?.toLocaleString('pt-BR')}</TableCell>
                                         <TableCell className="text-center">
-                                            <Badge variant="outline" className={subItem.status_pagamento === 'pago' ? "bg-emerald-50 text-emerald-700 border-emerald-100 scale-90" : "bg-amber-50 text-amber-700 border-amber-100 scale-90"}>
-                                                {subItem.status_pagamento === 'pago' ? 'PAGO' : 'PENDENTE'}
-                                            </Badge>
+                                            {subItem.status_pagamento === 'pago' ? (
+                                                <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-100 scale-90">PAGO</Badge>
+                                            ) : (
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); marcarPagoMutation.mutate(subItem.id); }}
+                                                    title="Clique para marcar como pago"
+                                                    className="scale-90"
+                                                >
+                                                    <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-100 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200 cursor-pointer transition-colors">PENDENTE</Badge>
+                                                </button>
+                                            )}
                                         </TableCell>
                                         <TableCell className="text-right pr-6">
                                             <div className="flex justify-end gap-1">
@@ -550,9 +602,13 @@ export default function Financeiro({ showMessage }) {
                             R$ {item.valor?.toLocaleString('pt-BR')}
                         </TableCell>
                         <TableCell className="text-center">
-                        <Badge variant="outline" className={item.status_pagamento === 'pago' ? "bg-emerald-50 text-emerald-700 border-emerald-100" : "bg-amber-50 text-amber-700 border-amber-100"}>
-                            {item.status_pagamento === 'pago' ? 'PAGO' : 'PENDENTE'}
-                        </Badge>
+                        {item.status_pagamento === 'pago' ? (
+                            <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-100">PAGO</Badge>
+                        ) : (
+                            <button onClick={() => marcarPagoMutation.mutate(item.id)} title="Clique para marcar como pago">
+                                <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-100 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200 cursor-pointer transition-colors">PENDENTE</Badge>
+                            </button>
+                        )}
                         </TableCell>
                         <TableCell className="text-right pr-6">
                         <div className="flex justify-end gap-1">
