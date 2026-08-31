@@ -23,6 +23,7 @@ const COLORS = [
 const categoriaLabels = {
   funcionario: { label: 'Funcionário', color: 'bg-blue-100 text-blue-700' },
   insumo: { label: 'Insumo', color: 'bg-green-100 text-green-700' },
+  colheita: { label: 'Colheita', color: 'bg-lime-100 text-lime-700' },
   manutencao: { label: 'Manutenção', color: 'bg-amber-100 text-amber-700' },
   energia: { label: 'Energia', color: 'bg-yellow-100 text-yellow-700' },
   agua: { label: 'Água', color: 'bg-cyan-100 text-cyan-700' },
