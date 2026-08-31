@@ -557,12 +557,12 @@ export default function Colheitas() {
                 <div className="lg:col-span-1 bg-stone-50 rounded-2xl border border-stone-200 p-4 flex flex-col h-full min-h-[300px]">
                     <h4 className="text-sm font-bold text-stone-700 mb-3 flex items-center gap-2"><ClipboardList className="w-4 h-4" /> Lista de Colheitas ({colheitaQueue.length})</h4>
                     {editingColheita ? (
-                        <div className="flex-1 flex items-center justify-center text-center text-stone-400 text-xs italic">Modo de edição individual.<br/>A lista está desabilitada.</div>
+                        <div className="flex-1 flex items-center justify-center text-center text-stone-500 text-xs italic">Modo de edição individual.<br/>A lista está desabilitada.</div>
                     ) : (
                         <>
                             <div className="flex-1 overflow-y-auto space-y-2 max-h-[500px] pr-1 scrollbar-thin">
                                 {colheitaQueue.length === 0 ? (
-                                    <div className="text-center text-stone-400 text-xs py-10 italic">Preencha o formulário e clique em "Adicionar à Lista".</div>
+                                    <div className="text-center text-stone-500 text-xs py-10 italic">Preencha o formulário e clique em "Adicionar à Lista".</div>
                                 ) : (
                                     colheitaQueue.map((item) => (
                                         <div key={item.tempId} className="bg-white p-3 rounded-xl border border-stone-100 shadow-sm text-sm relative group animate-in slide-in-from-left-2">
@@ -658,9 +658,9 @@ export default function Colheitas() {
                     <SelectContent><SelectItem value="todos">Todas Culturas</SelectItem><SelectItem value="manga">Manga</SelectItem><SelectItem value="goiaba">Goiaba</SelectItem></SelectContent>
                 </Select>
                 <div className="flex items-center gap-2 bg-stone-50 p-1 px-3 rounded-xl border border-stone-200">
-                    <Calendar className="w-4 h-4 text-stone-400" />
+                    <Calendar className="w-4 h-4 text-stone-500" />
                     <Input type="date" value={dataInicio || ""} onChange={(e) => setDataInicio(e.target.value)} min="2020-01-01" max="2040-12-31" className="w-32 border-none bg-transparent h-8 p-0 text-sm" />
-                    <span className="text-stone-400">-</span>
+                    <span className="text-stone-500">-</span>
                     <Input type="date" value={dataFim || ""} onChange={(e) => setDataFim(e.target.value)} min="2020-01-01" max="2040-12-31" className="w-32 border-none bg-transparent h-8 p-0 text-sm" />
                 </div>
             </div>
@@ -702,13 +702,13 @@ export default function Colheitas() {
                             <div className="flex flex-col items-end">
                                 {colheita.quantidade_kg > 0 && <span className="font-medium text-stone-700">{colheita.quantidade_kg.toLocaleString('pt-BR')} kg</span>}
                                 {colheita.quantidade_caixas > 0 && <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md mt-0.5">{colheita.quantidade_caixas.toLocaleString('pt-BR')} cx</span>}
-                                {!colheita.quantidade_kg && !colheita.quantidade_caixas && <span className="text-stone-400">-</span>}
+                                {!colheita.quantidade_kg && !colheita.quantidade_caixas && <span className="text-stone-500">-</span>}
                             </div>
                         </TableCell>
                         <TableCell className="text-right">
                             <div className="flex flex-col items-end">
                                 <span className="font-bold text-emerald-600">R$ {colheita.valor_total?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                                <span className="text-xs text-stone-400 font-medium mt-0.5">R$ {colheita.preco_unitario?.toFixed(2)}/{colheita.unidade_preco}</span>
+                                <span className="text-xs text-stone-500 font-medium mt-0.5">R$ {colheita.preco_unitario?.toFixed(2)}/{colheita.unidade_preco}</span>
                             </div>
                         </TableCell>
                         <TableCell className="text-right">
@@ -718,14 +718,14 @@ export default function Colheitas() {
                                 return (
                                     <div className="flex flex-col items-end">
                                         <span className="font-bold text-red-600">R$ {custoTotalLinha.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                                        <span className="text-xs text-stone-400 font-medium mt-0.5">R$ {colheita.custo_colheita.toFixed(2)}/{colheita.unidade_custo}</span>
+                                        <span className="text-xs text-stone-500 font-medium mt-0.5">R$ {colheita.custo_colheita.toFixed(2)}/{colheita.unidade_custo}</span>
                                     </div>
                                 );
-                            })() : <span className="text-stone-300">-</span>}
+                            })() : <span className="text-stone-500">-</span>}
                         </TableCell>
                         <TableCell className="text-right pr-6">
                             <div className="flex justify-end gap-1">
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-stone-400 hover:text-stone-700 hover:bg-stone-100 rounded-lg" onClick={() => handleEdit(colheita)}><Edit className="w-4 h-4" /></Button>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-stone-500 hover:text-stone-700 hover:bg-stone-100 rounded-lg" onClick={() => handleEdit(colheita)}><Edit className="w-4 h-4" /></Button>
                                 <Button variant="ghost" size="icon" className="h-8 w-8 text-red-300 hover:text-red-500 hover:bg-red-50 rounded-lg" onClick={() => { if (confirm("Excluir esta colheita? Essa ação não pode ser desfeita.")) deleteMutation.mutate(colheita.id) }}><Trash2 className="w-4 h-4" /></Button>
                             </div>
                         </TableCell>
