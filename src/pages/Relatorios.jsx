@@ -322,7 +322,7 @@ export default function Relatorios({ showMessage }) {
         {/* Controle específico do modo selecionado */}
         {modoRelatorio === 'talhao' && (
           <div className="flex items-center gap-2 bg-stone-50 p-1 rounded-xl border border-stone-200 w-fit">
-             <Filter className="w-4 h-4 text-stone-400 ml-2" />
+             <Filter className="w-4 h-4 text-stone-500 ml-2" />
              <Select value={filtroTalhao} onValueChange={setFiltroTalhao}>
                 <SelectTrigger className="w-48 border-none bg-transparent shadow-none h-8 font-medium text-stone-700"><SelectValue placeholder="Talhão" /></SelectTrigger>
                 <SelectContent>
@@ -335,9 +335,9 @@ export default function Relatorios({ showMessage }) {
 
         {modoRelatorio === 'periodo' && (
           <div className="flex items-center gap-2 bg-stone-50 p-1 rounded-xl border border-stone-200 w-fit">
-             <CalendarIcon className="w-4 h-4 text-stone-400 ml-2" />
+             <CalendarIcon className="w-4 h-4 text-stone-500 ml-2" />
              <Input type="date" value={dataInicio} onChange={(e) => setDataInicio(e.target.value)} className="w-32 border-none bg-transparent shadow-none h-8 p-0 text-sm font-medium text-stone-700" />
-             <span className="text-stone-400">-</span>
+             <span className="text-stone-500">-</span>
              <Input type="date" value={dataFim} onChange={(e) => setDataFim(e.target.value)} className="w-32 border-none bg-transparent shadow-none h-8 p-0 text-sm font-medium text-stone-700" />
           </div>
         )}
@@ -380,11 +380,11 @@ export default function Relatorios({ showMessage }) {
                             </div>
                             <div className="flex gap-4">
                                 <div className="text-right">
-                                    <span className="text-xs font-bold text-stone-400 uppercase">Custos Gerais (Rateio)</span>
+                                    <span className="text-xs font-bold text-stone-500 uppercase">Custos Gerais (Rateio)</span>
                                     <p className="text-lg font-bold text-purple-600">R$ {custosGeraisPeriodo.toLocaleString('pt-BR', {maximumFractionDigits: 2})}</p>
                                 </div>
                                 <div className="text-right">
-                                    <span className="text-xs font-bold text-stone-400 uppercase">Custo Médio / Ha</span>
+                                    <span className="text-xs font-bold text-stone-500 uppercase">Custo Médio / Ha</span>
                                     <p className="text-xl font-bold text-stone-800">R$ {(totaisSafra.area > 0 ? totaisSafra.custoTotal / totaisSafra.area : 0).toLocaleString('pt-BR', {maximumFractionDigits: 2})}</p>
                                 </div>
                             </div>
@@ -407,14 +407,14 @@ export default function Relatorios({ showMessage }) {
                             <TableBody>
                                 {talhoesComDados.length === 0 ? (
                                     <TableRow>
-                                        <TableCell colSpan={8} className="text-center h-24 text-stone-400">Nenhum dado encontrado para o período selecionado.</TableCell>
+                                        <TableCell colSpan={8} className="text-center h-24 text-stone-500">Nenhum dado encontrado para o período selecionado.</TableCell>
                                     </TableRow>
                                 ) : (
                                     talhoesComDados.map((item) => (
                                         <TableRow key={item.id} className="hover:bg-stone-50 border-b border-stone-100 transition-colors">
                                             <TableCell className="pl-6">
                                                 <div className="font-bold text-stone-700">{item.nome}</div>
-                                                <div className="text-xs text-stone-400 capitalize">{item.cultura}</div>
+                                                <div className="text-xs text-stone-500 capitalize">{item.cultura}</div>
                                             </TableCell>
                                             <TableCell className="text-right text-stone-600">{item.area.toFixed(2)}</TableCell>
                                             <TableCell className="text-right text-stone-600">R$ {item.custoDireto.toLocaleString('pt-BR')}</TableCell>
