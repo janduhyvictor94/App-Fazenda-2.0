@@ -100,7 +100,7 @@ export default function Colheitas() {
         .filter(item => !item.loteId && item.custoTotalCalc > 0)
         .map(item => ({
           descricao: `Colheita - ${tipoColheitaLabel(item.tipo_colheita)} - ${getTalhaoNome(item.talhao_id)}`,
-          categoria: 'terceirizado',
+          categoria: 'colheita',
           talhao_id: item.talhao_id,
           valor: item.custoTotalCalc,
           data: item.data,
@@ -110,7 +110,7 @@ export default function Colheitas() {
       // Custos de lote (modo rápido: vários tipos no mesmo dia, um único custo combinado)
       const custosDeLotes = (lotes || []).filter(l => l.valor > 0).map(lote => ({
         descricao: `Colheita - ${lote.resumoTipos} - ${getTalhaoNome(lote.talhao_id)}`,
-        categoria: 'terceirizado',
+        categoria: 'colheita',
         talhao_id: lote.talhao_id,
         valor: lote.valor,
         data: lote.data,
