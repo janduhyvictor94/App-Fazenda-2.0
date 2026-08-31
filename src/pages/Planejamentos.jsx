@@ -55,6 +55,7 @@ export default function Planejamentos() {
   const { data: insumos = [] } = useQuery({ queryKey: ['insumos'], queryFn: async () => { const { data } = await supabase.from('insumos').select('*').order('nome'); return data || []; } });
   const { data: planejamentos = [] } = useQuery({ queryKey: ['planejamentos'], queryFn: async () => { const { data } = await supabase.from('planejamentos').select('*').order('created_at', { ascending: false }); return data || []; } });
   const { data: safras = [] } = useQuery({ queryKey: ['safras'], queryFn: async () => { const { data } = await supabase.from('safras').select('*, talhoes(nome)').eq('status', 'ativo').order('data_inicio', { ascending: false }); return data || []; } });
+  const { data: culturas = [] } = useQuery({ queryKey: ['culturas'], queryFn: async () => { const { data } = await supabase.from('culturas').select('*').order('nome'); return data || []; } });
 
   useEffect(() => {
     if (activePlanId && activePlanId !== 'novo') {
@@ -455,7 +456,7 @@ export default function Planejamentos() {
                                     <Label>Cultura</Label>
                                     <Select value={novoPlan.cultura} onValueChange={v => setNovoPlan({...novoPlan, cultura: v})}>
                                         <SelectTrigger className="rounded-xl"><SelectValue/></SelectTrigger>
-                                        <SelectContent><SelectItem value="manga">Manga</SelectItem><SelectItem value="goiaba">Goiaba</SelectItem></SelectContent>
+                                        <SelectContent>{culturas.map((c) => (<SelectItem key={c.id} value={c.nome}>{c.nome.charAt(0).toUpperCase() + c.nome.slice(1)}</SelectItem>))}</SelectContent>
                                     </Select>
                                 </div>
                                 <div className="space-y-2">
