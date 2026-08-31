@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from './utils';
 import { supabase } from '@/lib/supabaseClient'; 
 import { 
   LayoutDashboard, Map, Wheat, Calendar, Package, 
   DollarSign, Users, FileText, ClipboardList,
-  Menu, Leaf, LogOut, CloudRain, Sparkles, ChevronRight,
+  Menu, Leaf, LogOut, CloudRain, Sparkles, ChevronRight, ChevronsLeft, ChevronsRight,
   Sprout, ClipboardCheck // NOVO IMPORT
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -29,8 +29,18 @@ const navigation = [
   { name: 'Relatórios', icon: FileText, page: 'Relatorios' },
 ];
 
+const SIDEBAR_COLLAPSED_KEY = 'fazenda_sidebar_collapsed';
+
 export default function Layout({ children, currentPageName }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  // Menu retrátil: lembra a preferência entre sessões, igual o tema.
+  const [collapsed, setCollapsed] = useState(() => {
+    try { return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === 'true'; } catch { return false; }
+  });
+
+  useEffect(() => {
+    try { localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? 'true' : 'false'); } catch {}
+  }, [collapsed]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -46,25 +56,37 @@ export default function Layout({ children, currentPageName }) {
 
       {/* Sidebar */}
       <aside className={cn(
-        "fixed inset-y-0 left-0 z-50 w-72 bg-white/90 backdrop-blur-xl border-r border-stone-100 transform transition-transform duration-300 ease-in-out lg:translate-x-0 shadow-2xl shadow-stone-200/20",
+        "fixed inset-y-0 left-0 z-50 bg-white/90 backdrop-blur-xl border-r border-stone-100 transform transition-all duration-300 ease-in-out lg:translate-x-0 shadow-2xl shadow-stone-200/20",
+        collapsed ? "w-20" : "w-72",
         sidebarOpen ? "translate-x-0" : "-translate-x-full"
       )}>
-        <div className="flex flex-col h-full">
+        <div className="flex flex-col h-full relative">
+          {/* Botão de retrair/expandir — só aparece em telas grandes (no mobile o menu já fecha sozinho) */}
+          <button
+            onClick={() => setCollapsed(!collapsed)}
+            className="hidden lg:flex absolute -right-3 top-9 w-6 h-6 bg-white border border-stone-200 rounded-full items-center justify-center text-stone-400 hover:text-emerald-600 hover:border-emerald-200 shadow-sm transition-all z-10"
+            title={collapsed ? 'Expandir menu' : 'Retrair menu'}
+          >
+            {collapsed ? <ChevronsRight className="w-3.5 h-3.5" /> : <ChevronsLeft className="w-3.5 h-3.5" />}
+          </button>
+
           {/* Logo Area */}
-          <div className="p-8 pb-6 flex items-center justify-between">
-            <div className="flex items-center gap-4 group cursor-default">
-              <div className="w-10 h-10 bg-gradient-to-br from-emerald-600 to-teal-700 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-200/50 transition-transform group-hover:scale-105 duration-300">
+          <div className={cn("p-8 pb-6 flex items-center", collapsed ? "justify-center px-0" : "justify-between")}>
+            <div className={cn("flex items-center group cursor-default", collapsed ? "gap-0" : "gap-4")}>
+              <div className="w-10 h-10 shrink-0 bg-gradient-to-br from-emerald-600 to-teal-700 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-200/50 transition-transform group-hover:scale-105 duration-300">
                 <Leaf className="w-5 h-5 text-white" />
               </div>
-              <div className="flex flex-col">
-                <span className="text-lg font-black tracking-tight text-stone-800 leading-none">Fazenda</span>
-                <span className="text-xs uppercase tracking-[0.25em] text-emerald-600 font-bold mt-1">Cassiano's</span>
-              </div>
+              {!collapsed && (
+                <div className="flex flex-col overflow-hidden whitespace-nowrap">
+                  <span className="text-lg font-black tracking-tight text-stone-800 leading-none">Fazenda</span>
+                  <span className="text-xs uppercase tracking-[0.25em] text-emerald-600 font-bold mt-1">Cassiano's</span>
+                </div>
+              )}
             </div>
           </div>
 
           {/* Navigation */}
-          <nav className="flex-1 px-4 space-y-1 overflow-y-auto scrollbar-hide py-2">
+          <nav className="flex-1 px-4 space-y-1 overflow-y-auto overflow-x-hidden scrollbar-hide py-2">
             {navigation.map((item) => {
               const isActive = currentPageName === item.page;
               return (
@@ -72,16 +94,18 @@ export default function Layout({ children, currentPageName }) {
                   key={item.name}
                   to={createPageUrl(item.page)}
                   onClick={() => setSidebarOpen(false)}
+                  title={collapsed ? item.name : undefined}
                   className={cn(
                     "flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all duration-200 group relative",
+                    collapsed && "justify-center px-0",
                     isActive 
                       ? "bg-stone-900 text-white shadow-lg shadow-stone-900/20" 
                       : "text-stone-500 hover:bg-stone-50 hover:text-stone-900"
                   )}
                 >
-                  <item.icon className={cn("w-5 h-5 transition-colors", isActive ? "text-emerald-400" : "text-stone-400 group-hover:text-stone-600")} />
-                  <span className="flex-1">{item.name}</span>
-                  {isActive && <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400/50" />}
+                  <item.icon className={cn("w-5 h-5 shrink-0 transition-colors", isActive ? "text-emerald-400" : "text-stone-400 group-hover:text-stone-600")} />
+                  {!collapsed && <span className="flex-1 whitespace-nowrap overflow-hidden text-ellipsis">{item.name}</span>}
+                  {!collapsed && isActive && <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400/50" />}
                 </Link>
               );
             })}
@@ -89,16 +113,16 @@ export default function Layout({ children, currentPageName }) {
 
           {/* Footer Sidebar */}
           <div className="p-4 border-t border-stone-100 bg-stone-50/50">
-            <button onClick={handleLogout} className="flex items-center gap-3 w-full px-4 py-3 text-sm font-bold text-stone-500 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all duration-200 group">
-              <LogOut className="w-5 h-5 transition-transform group-hover:-translate-x-1" />
-              <span>Sair do Sistema</span>
+            <button onClick={handleLogout} title={collapsed ? 'Sair do Sistema' : undefined} className={cn("flex items-center gap-3 w-full px-4 py-3 text-sm font-bold text-stone-500 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all duration-200 group", collapsed && "justify-center px-0")}>
+              <LogOut className="w-5 h-5 shrink-0 transition-transform group-hover:-translate-x-1" />
+              {!collapsed && <span className="whitespace-nowrap">Sair do Sistema</span>}
             </button>
           </div>
         </div>
       </aside>
 
       {/* Main Content Wrapper */}
-      <div className="lg:pl-72 transition-all duration-300 flex flex-col min-h-screen">
+      <div className={cn("transition-all duration-300 flex flex-col min-h-screen", collapsed ? "lg:pl-20" : "lg:pl-72")}>
         
         {/* Header Clean */}
         <header className="sticky top-0 z-30 bg-white/60 backdrop-blur-xl border-b border-stone-100">
