@@ -64,7 +64,7 @@ export default function Layout({ children, currentPageName }) {
           {/* Botão de retrair/expandir — só aparece em telas grandes (no mobile o menu já fecha sozinho) */}
           <button
             onClick={() => setCollapsed(!collapsed)}
-            className="hidden lg:flex absolute -right-3 top-9 w-6 h-6 bg-white border border-stone-200 rounded-full items-center justify-center text-stone-400 hover:text-emerald-600 hover:border-emerald-200 shadow-sm transition-all z-10"
+            className="hidden lg:flex absolute -right-3 top-9 w-6 h-6 bg-white border border-stone-200 rounded-full items-center justify-center text-stone-500 hover:text-emerald-600 hover:border-emerald-200 shadow-sm transition-all z-10"
             title={collapsed ? 'Expandir menu' : 'Retrair menu'}
           >
             {collapsed ? <ChevronsRight className="w-3.5 h-3.5" /> : <ChevronsLeft className="w-3.5 h-3.5" />}
@@ -103,7 +103,7 @@ export default function Layout({ children, currentPageName }) {
                       : "text-stone-500 hover:bg-stone-50 hover:text-stone-900"
                   )}
                 >
-                  <item.icon className={cn("w-5 h-5 shrink-0 transition-colors", isActive ? "text-emerald-400" : "text-stone-400 group-hover:text-stone-600")} />
+                  <item.icon className={cn("w-5 h-5 shrink-0 transition-colors", isActive ? "text-emerald-400" : "text-stone-500 group-hover:text-stone-600")} />
                   {!collapsed && <span className="flex-1 whitespace-nowrap overflow-hidden text-ellipsis">{item.name}</span>}
                   {!collapsed && isActive && <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400/50" />}
                 </Link>
@@ -131,7 +131,7 @@ export default function Layout({ children, currentPageName }) {
                 <button onClick={() => setSidebarOpen(true)} className="p-2 rounded-xl hover:bg-stone-100 lg:hidden text-stone-500 transition-colors">
                     <Menu className="w-6 h-6" />
                 </button>
-                <div className="hidden lg:flex items-center gap-2 text-sm font-medium text-stone-400">
+                <div className="hidden lg:flex items-center gap-2 text-sm font-medium text-stone-500">
                     <span className="hover:text-stone-600 cursor-pointer transition-colors">App</span>
                     <ChevronRight className="w-4 h-4 text-stone-300" />
                     <span className="text-stone-800 font-bold bg-stone-100 px-2 py-0.5 rounded-md">
@@ -149,7 +149,7 @@ export default function Layout({ children, currentPageName }) {
                     <p className="text-xs font-bold text-emerald-600 uppercase tracking-wider">Online</p>
                 </div>
               </div>
-              <div className="w-10 h-10 bg-white rounded-full border border-stone-100 shadow-sm flex items-center justify-center text-stone-400 hover:text-emerald-600 hover:border-emerald-100 transition-all cursor-pointer">
+              <div className="w-10 h-10 bg-white rounded-full border border-stone-100 shadow-sm flex items-center justify-center text-stone-500 hover:text-emerald-600 hover:border-emerald-100 transition-all cursor-pointer">
                 <Users className="w-5 h-5" />
               </div>
             </div>
