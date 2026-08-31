@@ -147,7 +147,7 @@ export default function Insumos({ showMessage }) {
         
         <div className="flex items-center gap-3">
             <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-500" />
                 <Input 
                   placeholder="Buscar insumo..." 
                   className="pl-10 rounded-xl bg-stone-50 border-stone-200 w-64 focus:bg-white transition-colors"
@@ -217,7 +217,7 @@ export default function Insumos({ showMessage }) {
                         </div>
 
                         <div className="space-y-2 p-3 bg-stone-50 rounded-xl border border-stone-100">
-                            <Label>Quantidade por Embalagem <span className="text-stone-400 font-normal">(quantos {formData.unidade} vêm em cada embalagem comprada)</span></Label>
+                            <Label>Quantidade por Embalagem <span className="text-stone-500 font-normal">(quantos {formData.unidade} vêm em cada embalagem comprada)</span></Label>
                             <Input type="number" step="0.01" value={formData.tamanho_embalagem} onChange={(e) => setFormData({...formData, tamanho_embalagem: e.target.value})} placeholder={`Ex: 50 (para um saco de 50${formData.unidade})`} className="rounded-xl bg-white" />
                             {formData.preco_unitario && formData.tamanho_embalagem && parseFloat(formData.tamanho_embalagem) > 0 && (
                                 <p className="text-xs font-bold text-emerald-700">
@@ -225,7 +225,7 @@ export default function Insumos({ showMessage }) {
                                 </p>
                             )}
                             {!formData.tamanho_embalagem && (
-                                <p className="text-[11px] text-stone-400">Deixe em branco se cada embalagem já é 1 {formData.unidade} (ex: 1 saco = 1 unidade sem fracionar).</p>
+                                <p className="text-[11px] text-stone-500">Deixe em branco se cada embalagem já é 1 {formData.unidade} (ex: 1 saco = 1 unidade sem fracionar).</p>
                             )}
                         </div>
 
@@ -310,7 +310,7 @@ export default function Insumos({ showMessage }) {
                             <span className="font-bold text-stone-800">{insumo.nome}</span>
                             {isBaixo && <Badge variant="destructive" className="text-[11px] h-4 bg-red-500 hover:bg-red-600">CRÍTICO</Badge>}
                         </div>
-                        <div className="text-xs text-stone-400 uppercase tracking-tight">{insumo.fornecedor || 'Fornecedor N/A'}</div>
+                        <div className="text-xs text-stone-500 uppercase tracking-tight mt-0.5">{insumo.fornecedor || 'Fornecedor N/A'}</div>
                         </TableCell>
                         <TableCell>
                         <Badge className={`${categoriaLabels[insumo.categoria]?.color || 'bg-stone-100 text-stone-600 border-stone-200'} border`}>
@@ -318,9 +318,9 @@ export default function Insumos({ showMessage }) {
                         </Badge>
                         </TableCell>
                         <TableCell className="text-right font-medium text-stone-600">
-                            <div>R$ {insumo.preco_unitario?.toFixed(2)} <span className="text-xs text-stone-400">/ embalagem</span></div>
+                            <div>R$ {insumo.preco_unitario?.toFixed(2)} <span className="text-xs text-stone-500">/ embalagem</span></div>
                             {precoPorUnidade !== null ? (
-                                <div className="text-xs text-stone-500">≈ R$ {precoPorUnidade.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} / {insumo.unidade}</div>
+                                <div className="text-xs text-stone-600 font-medium">≈ R$ {precoPorUnidade.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} / {insumo.unidade}</div>
                             ) : (
                                 <div className="text-xs text-amber-600 font-bold">falta embalagem</div>
                             )}
@@ -330,12 +330,12 @@ export default function Insumos({ showMessage }) {
                             {insumo.estoque_atual} {insumo.unidade}
                         </div>
                         {insumo.estoque_minimo && (
-                            <div className="text-xs text-stone-400">mín: {insumo.estoque_minimo}</div>
+                            <div className="text-xs text-stone-500">mín: {insumo.estoque_minimo}</div>
                         )}
                         </TableCell>
                         <TableCell className="text-right pr-6">
                         <div className="flex justify-end gap-1">
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-stone-400 hover:text-stone-700 hover:bg-stone-100 rounded-lg" onClick={() => handleEdit(insumo)}><Edit className="w-4 h-4" /></Button>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-stone-500 hover:text-stone-700 hover:bg-stone-100 rounded-lg" onClick={() => handleEdit(insumo)}><Edit className="w-4 h-4" /></Button>
                             <Button variant="ghost" size="icon" className="h-8 w-8 text-red-300 hover:text-red-500 hover:bg-red-50 rounded-lg" onClick={() => { if(confirm("Remover do estoque?")) deleteMutation.mutate(insumo.id) }}><Trash2 className="w-4 h-4" /></Button>
                         </div>
                         </TableCell>
