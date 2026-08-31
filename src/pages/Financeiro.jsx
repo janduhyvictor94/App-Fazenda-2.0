@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, Edit, Trash2, TrendingUp, TrendingDown, Wallet, Clock, ChevronDown, ChevronRight, Users, Filter, CalendarDays, Search } from 'lucide-react';
+import { Plus, Edit, Trash2, TrendingUp, TrendingDown, Wallet, Clock, ChevronDown, ChevronRight, Users, Wheat, Filter, CalendarDays, Search } from 'lucide-react';
 import StatCard from '@/components/ui/StatCard';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -232,6 +232,7 @@ export default function Financeiro({ showMessage }) {
   const listaVisual = useMemo(() => {
     const agrupados = [];
     const mapMeses = {};
+    const mapColheitas = {};
 
     custosFiltrados.forEach(custo => {
         if (custo.categoria === 'funcionario') {
@@ -254,12 +255,37 @@ export default function Financeiro({ showMessage }) {
             if (custo.status_pagamento === 'pago') {
                 mapMeses[mesAnoKey].total += custo.valor || 0;
             }
+        } else if (custo.categoria === 'terceirizado' && custo.descricao?.startsWith('Colheita')) {
+            // Agrupa custos de colheita por talhão + mês, igual à Folha de Pagamento —
+            // senão cada tipo colhido (caixa verde, madura, polpa...) vira uma linha solta na lista.
+            const mesAnoKey = custo.data.substring(0, 7);
+            const talhaoKey = custo.talhao_id || 'geral';
+            const chave = `colheita-${talhaoKey}-${mesAnoKey}`;
+            if (!mapColheitas[chave]) {
+                const nomeTalhao = talhoes.find(t => t.id === custo.talhao_id)?.nome || 'Geral';
+                const grupo = {
+                    id: `group-${chave}`,
+                    isGroup: true,
+                    isColheita: true,
+                    dateKey: mesAnoKey,
+                    data: custo.data,
+                    descricao: `Colheita - ${nomeTalhao} - ${format(new Date(custo.data + 'T12:00:00'), 'MMMM/yyyy', { locale: ptBR })}`,
+                    total: 0,
+                    itens: []
+                };
+                mapColheitas[chave] = grupo;
+                agrupados.push(grupo);
+            }
+            mapColheitas[chave].itens.push(custo);
+            if (custo.status_pagamento === 'pago') {
+                mapColheitas[chave].total += custo.valor || 0;
+            }
         } else {
             agrupados.push(custo);
         }
     });
     return agrupados.sort((a, b) => new Date(b.data) - new Date(a.data));
-  }, [custosFiltrados]);
+  }, [custosFiltrados, talhoes]);
 
   const toggleGroup = (groupId) => {
     setExpandedGroups(prev => ({ ...prev, [groupId]: !prev[groupId] }));
@@ -473,7 +499,7 @@ export default function Financeiro({ showMessage }) {
                                     <TableCell>
                                         <div className="font-bold text-blue-900">{item.descricao}</div>
                                         <div className="text-xs text-blue-600 font-bold uppercase tracking-wider flex items-center gap-1">
-                                            <Users className="w-3 h-3" /> {item.itens.length} lançamentos agrupados
+                                            {item.isColheita ? <Wheat className="w-3 h-3" /> : <Users className="w-3 h-3" />} {item.itens.length} lançamentos agrupados
                                         </div>
                                     </TableCell>
                                     <TableCell className="text-right font-black text-blue-700 text-lg">
