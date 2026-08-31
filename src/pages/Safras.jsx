@@ -336,13 +336,13 @@ export default function Safras() {
                             <CardContent>
                                 <div className="space-y-3">
                                     <div className="flex items-center text-sm text-stone-500">
-                                        <Calendar className="w-4 h-4 mr-2 text-stone-400" />
+                                        <Calendar className="w-4 h-4 mr-2 text-stone-500" />
                                         {format(parseISO(safra.data_inicio), 'dd/MMM/yy', { locale: ptBR })} 
                                         <ArrowRight className="w-3 h-3 mx-2" /> 
                                         {safra.data_fim ? format(parseISO(safra.data_fim), 'dd/MMM/yy', { locale: ptBR }) : <span className="text-emerald-600 font-bold">Em andamento</span>}
                                     </div>
                                     <div className="flex items-center justify-between pt-2 border-t border-stone-100">
-                                        <span className="text-xs font-bold text-stone-400 uppercase tracking-wider">Área</span>
+                                        <span className="text-xs font-bold text-stone-500 uppercase tracking-wider">Área</span>
                                         <span className="font-bold text-stone-700">{safra.talhoes?.area_hectares} ha</span>
                                     </div>
                                 </div>
