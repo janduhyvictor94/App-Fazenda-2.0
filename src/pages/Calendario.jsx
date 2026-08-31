@@ -139,11 +139,11 @@ export default function Calendario() {
                         {/* Infos Principais */}
                         <div className="grid grid-cols-2 gap-4">
                             <div className="bg-stone-50 p-3 rounded-xl border border-stone-100">
-                                <Label className="text-xs uppercase tracking-wider text-stone-400 font-bold flex items-center gap-1 mb-1"><MapPin className="w-3 h-3"/> Válvula</Label>
+                                <Label className="text-xs uppercase tracking-wider text-stone-500 font-bold flex items-center gap-1 mb-1"><MapPin className="w-3 h-3"/> Válvula</Label>
                                 <p className="font-bold text-stone-800 text-sm">{getTalhaoNome(selectedActivity.talhao_id)}</p>
                             </div>
                             <div className="bg-stone-50 p-3 rounded-xl border border-stone-100">
-                                <Label className="text-xs uppercase tracking-wider text-stone-400 font-bold flex items-center gap-1 mb-1"><User className="w-3 h-3"/> Responsável</Label>
+                                <Label className="text-xs uppercase tracking-wider text-stone-500 font-bold flex items-center gap-1 mb-1"><User className="w-3 h-3"/> Responsável</Label>
                                 <p className="font-bold text-stone-800 text-sm">{selectedActivity.responsavel || '-'}</p>
                             </div>
                         </div>
@@ -151,7 +151,7 @@ export default function Calendario() {
                         {/* Insumos */}
                         {selectedActivity.insumos_utilizados && selectedActivity.insumos_utilizados.length > 0 && (
                             <div className="bg-stone-50 p-4 rounded-xl border border-stone-100">
-                                <Label className="text-xs uppercase tracking-wider text-stone-400 font-bold flex items-center gap-1 mb-3"><Package className="w-3 h-3"/> Insumos Definidos</Label>
+                                <Label className="text-xs uppercase tracking-wider text-stone-500 font-bold flex items-center gap-1 mb-3"><Package className="w-3 h-3"/> Insumos Definidos</Label>
                                 <div className="space-y-2">
                                     {selectedActivity.insumos_utilizados.map((ins, idx) => (
                                         <div key={idx} className="flex justify-between items-center text-sm border-b border-stone-200/50 last:border-0 pb-1 last:pb-0">
@@ -165,11 +165,11 @@ export default function Calendario() {
                         
                         {/* Observações */}
                         <div className="bg-stone-50 p-4 rounded-xl border border-stone-100">
-                            <Label className="text-xs uppercase tracking-wider text-stone-400 font-bold flex items-center gap-1 mb-2"><FileText className="w-3 h-3"/> Recomendação / Obs</Label>
+                            <Label className="text-xs uppercase tracking-wider text-stone-500 font-bold flex items-center gap-1 mb-2"><FileText className="w-3 h-3"/> Recomendação / Obs</Label>
                             {selectedActivity.observacoes ? (
                                 <p className="text-sm text-stone-700 whitespace-pre-wrap leading-relaxed font-medium">{selectedActivity.observacoes}</p>
                             ) : (
-                                <p className="text-sm text-stone-400 italic">Sem observações adicionais.</p>
+                                <p className="text-sm text-stone-500 italic">Sem observações adicionais.</p>
                             )}
                         </div>
 
@@ -195,7 +195,7 @@ export default function Calendario() {
           <p className="text-stone-500 font-medium">Cronograma detalhado de manejo e atividades</p>
         </div>
         <div className="flex items-center gap-3">
-          <Label className="font-medium text-stone-400 uppercase text-xs tracking-wider">Filtrar Válvula:</Label>
+          <Label className="font-medium text-stone-500 uppercase text-xs tracking-wider">Filtrar Válvula:</Label>
           <Select value={filtroTalhao} onValueChange={setFiltroTalhao}>
             <SelectTrigger className="w-56 rounded-xl border-stone-200 bg-white shadow-sm h-11 font-medium text-stone-600">
               <SelectValue placeholder="Selecione..." />
@@ -230,14 +230,14 @@ export default function Calendario() {
           <CardContent className="p-8">
             <div className="grid grid-cols-7 mb-6">
               {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map(day => (
-                <div key={day} className="text-center font-bold text-stone-400 text-xs uppercase tracking-widest">{day}</div>
+                <div key={day} className="text-center font-bold text-stone-500 text-xs uppercase tracking-widest">{day}</div>
               ))}
             </div>
             
             <div className="grid grid-cols-7 gap-4">
               {previousDays.map((date, idx) => (
                 <div key={idx} className="min-h-[120px] p-3 rounded-3xl bg-stone-50/30 opacity-40 border border-stone-100/50 flex flex-col items-start pointer-events-none">
-                  <span className="text-xs font-medium text-stone-400">{format(date, 'd')}</span>
+                  <span className="text-xs font-medium text-stone-500">{format(date, 'd')}</span>
                 </div>
               ))}
 
@@ -281,7 +281,7 @@ export default function Calendario() {
                         );
                       })}
                       {dayAtivs.length > 3 && (
-                        <p className={cn("text-[11px] font-semibold pl-1 mt-1", isSel ? "text-white/80" : "text-stone-400")}>
+                        <p className={cn("text-[11px] font-semibold pl-1 mt-1", isSel ? "text-white/80" : "text-stone-500")}>
                           +{dayAtivs.length - 3} mais
                         </p>
                       )}
@@ -336,7 +336,7 @@ export default function Calendario() {
                           <p className="text-sm font-bold text-stone-700 tracking-tight">Válvula: {getTalhaoNome(a.talhao_id)}</p>
                         </div>
                         <div className="flex items-center justify-between mt-3">
-                            <p className="text-xs text-stone-400 font-medium flex items-center gap-1">
+                            <p className="text-xs text-stone-500 font-medium flex items-center gap-1">
                                 <FileText className="w-3 h-3"/> Ver recomendação
                             </p>
                             <ArrowRight className="w-4 h-4 text-stone-300 group-hover:text-emerald-500 transition-colors" />
@@ -350,8 +350,8 @@ export default function Calendario() {
                    <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mb-4 shadow-sm border border-stone-100">
                      <Circle className="w-8 h-8 text-stone-200" />
                    </div>
-                   <p className="text-sm font-semibold text-stone-400">Nada programado.</p>
-                   <p className="text-xs text-stone-300 mt-1">Dia livre de atividades.</p>
+                   <p className="text-sm font-semibold text-stone-500">Nada programado.</p>
+                   <p className="text-xs text-stone-500 mt-1">Dia livre de atividades.</p>
                 </div>
               )}
             </div>
@@ -362,7 +362,7 @@ export default function Calendario() {
       {/* Legenda Estilizada */}
       <Card className="border-none shadow-sm rounded-3xl bg-white p-6 overflow-hidden">
         <div className="flex flex-col lg:flex-row lg:items-center gap-6">
-          <span className="text-xs font-bold text-stone-400 uppercase tracking-widest lg:border-r pr-6 border-stone-100">Legenda:</span>
+          <span className="text-xs font-bold text-stone-500 uppercase tracking-widest lg:border-r pr-6 border-stone-100">Legenda:</span>
           <div className="flex flex-wrap items-center gap-3">
             {Object.entries(tiposAtividadeLabels).map(([key, { label, color }]) => (
               <div key={key} className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-stone-50 border border-stone-100">
