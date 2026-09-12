@@ -3,39 +3,89 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabaseClient';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Sparkles, Send, Check, X, Loader2, Bot, User } from 'lucide-react';
+import { Sparkles, Send, Check, X, Loader2, Bot, User, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 
 // Normaliza texto pra comparar nomes sem se importar com acento/maiúscula
 const normalizar = (s) => (s || '').toString().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
 
+// Acha um item pelo nome, tolerando acento/maiúscula. Se tiver mais de um
+// candidato parecido (nome ambíguo), NÃO escolhe sozinho — melhor perguntar
+// de novo do que registrar no talhão/insumo errado.
 const encontrarPorNome = (lista, nomeAlvo, campo = 'nome') => {
-  if (!nomeAlvo) return null;
+  if (!nomeAlvo) return { item: null, ambiguo: false };
   const alvo = normalizar(nomeAlvo);
-  return lista.find(item => normalizar(item[campo]) === alvo)
-    || lista.find(item => normalizar(item[campo]).includes(alvo) || alvo.includes(normalizar(item[campo])))
-    || null;
+
+  const exato = lista.find(item => normalizar(item[campo]) === alvo);
+  if (exato) return { item: exato, ambiguo: false };
+
+  const parecidos = lista.filter(item => normalizar(item[campo]).includes(alvo) || alvo.includes(normalizar(item[campo])));
+  if (parecidos.length === 1) return { item: parecidos[0], ambiguo: false };
+  if (parecidos.length > 1) return { item: null, ambiguo: true, opcoes: parecidos.map(p => p[campo]) };
+  return { item: null, ambiguo: false };
+};
+
+// Busca e já lança um erro claro se não achar (ou se for ambíguo) — usado em
+// todo lugar que PRECISA achar o registro pra continuar.
+const buscarObrigatorio = (lista, nomeAlvo, tipoLabel) => {
+  const { item, ambiguo, opcoes } = encontrarPorNome(lista, nomeAlvo);
+  if (ambiguo) throw new Error(`"${nomeAlvo}" é ambíguo — encontrei mais de um ${tipoLabel} parecido (${opcoes.join(', ')}). Seja mais específico.`);
+  if (!item) throw new Error(`${tipoLabel} "${nomeAlvo}" não encontrado no cadastro.`);
+  return item;
+};
+
+// Converte pra número com segurança — nunca deixa passar NaN adiante.
+const numero = (v, padrao = 0) => {
+  const n = typeof v === 'number' ? v : parseFloat(v);
+  return Number.isFinite(n) ? n : padrao;
+};
+
+// A conversa fica guardada no navegador — assim ela sobrevive a um recarregamento
+// de página ou troca de aba, e você sempre vê o que já foi mandado.
+const CHAVE_MENSAGENS = 'fazenda_assistente_mensagens';
+const CHAVE_HISTORICO_API = 'fazenda_assistente_historico';
+const CHAVE_PROPOSTA = 'fazenda_assistente_proposta';
+
+const MENSAGEM_INICIAL = [
+  { autor: 'ia', texto: 'Oi! Pode me contar o que você quer registrar — colheita, atividade, pagamento, ou até me perguntar algo tipo "quanto gastei com colheita esse mês".' }
+];
+
+const carregarDoStorage = (chave, padrao) => {
+  try {
+    const salvo = localStorage.getItem(chave);
+    return salvo ? JSON.parse(salvo) : padrao;
+  } catch { return padrao; }
 };
 
 export default function Assistente() {
   const queryClient = useQueryClient();
-  const [mensagens, setMensagens] = useState([
-    { autor: 'ia', texto: 'Oi! Pode me contar o que você quer registrar — colheita, atividade, pagamento, ou até me perguntar algo tipo "quanto gastei com colheita esse mês".' }
-  ]);
+  const [mensagens, setMensagens] = useState(() => carregarDoStorage(CHAVE_MENSAGENS, MENSAGEM_INICIAL));
   const [input, setInput] = useState('');
   const [carregando, setCarregando] = useState(false);
-  const [historicoAPI, setHistoricoAPI] = useState([]);
-  const [propostaPendente, setPropostaPendente] = useState(null); // { resumo, propostas }
+  const [historicoAPI, setHistoricoAPI] = useState(() => carregarDoStorage(CHAVE_HISTORICO_API, []));
+  const [propostaPendente, setPropostaPendente] = useState(() => carregarDoStorage(CHAVE_PROPOSTA, null));
   const [salvando, setSalvando] = useState(false);
   const fimDaListaRef = useRef(null);
 
-  const { data: talhoes = [] } = useQuery({ queryKey: ['talhoes'], queryFn: async () => { const { data } = await supabase.from('talhoes').select('*'); return data || []; } });
-  const { data: insumos = [] } = useQuery({ queryKey: ['insumos'], queryFn: async () => { const { data } = await supabase.from('insumos').select('*'); return data || []; } });
-  const { data: funcionarios = [] } = useQuery({ queryKey: ['funcionarios'], queryFn: async () => { const { data } = await supabase.from('funcionarios').select('*'); return data || []; } });
+  const { data: talhoes = [], isLoading: carregandoTalhoes } = useQuery({ queryKey: ['talhoes'], queryFn: async () => { const { data } = await supabase.from('talhoes').select('*'); return data || []; } });
+  const { data: insumos = [], isLoading: carregandoInsumos } = useQuery({ queryKey: ['insumos'], queryFn: async () => { const { data } = await supabase.from('insumos').select('*'); return data || []; } });
+  const { data: funcionarios = [], isLoading: carregandoFuncionarios } = useQuery({ queryKey: ['funcionarios'], queryFn: async () => { const { data } = await supabase.from('funcionarios').select('*'); return data || []; } });
+  const contextoCarregando = carregandoTalhoes || carregandoInsumos || carregandoFuncionarios;
 
   useEffect(() => {
     fimDaListaRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [mensagens, propostaPendente]);
+
+  // Salva a cada mudança, pra sobreviver a reload/troca de aba
+  useEffect(() => { try { localStorage.setItem(CHAVE_MENSAGENS, JSON.stringify(mensagens)); } catch {} }, [mensagens]);
+  useEffect(() => { try { localStorage.setItem(CHAVE_HISTORICO_API, JSON.stringify(historicoAPI)); } catch {} }, [historicoAPI]);
+  useEffect(() => { try { localStorage.setItem(CHAVE_PROPOSTA, JSON.stringify(propostaPendente)); } catch {} }, [propostaPendente]);
+
+  const novaConversa = () => {
+    setMensagens(MENSAGEM_INICIAL);
+    setHistoricoAPI([]);
+    setPropostaPendente(null);
+  };
 
   const enviarMensagem = async () => {
     const texto = input.trim();
@@ -63,11 +113,13 @@ export default function Assistente() {
         setHistoricoAPI(dados.historico_atualizado || []);
       } else if (dados.tipo === 'resposta') {
         setMensagens(prev => [...prev, { autor: 'ia', texto: dados.texto }]);
-        setHistoricoAPI([]); // consulta encerra o fluxo, começa do zero na próxima
+        setHistoricoAPI(dados.historico_atualizado || historicoAPI);
       } else if (dados.tipo === 'proposta') {
         setMensagens(prev => [...prev, { autor: 'ia', texto: dados.resumo }]);
+        // Se já existia uma proposta pendente e essa nova é uma correção/complemento
+        // dela (ex: você lembrou de mandar o custo depois), ela substitui a anterior.
         setPropostaPendente({ propostas: dados.propostas });
-        setHistoricoAPI([]);
+        setHistoricoAPI(dados.historico_atualizado || historicoAPI);
       }
     } catch (err) {
       setMensagens(prev => [...prev, { autor: 'ia', texto: `Não consegui falar com o servidor: ${err.message}` }]);
@@ -78,59 +130,94 @@ export default function Assistente() {
 
   const cancelarProposta = () => {
     setPropostaPendente(null);
+    setHistoricoAPI([]); // fecha o "assunto" — próxima mensagem começa do zero, sem risco de ficar preso num estado antigo
     setMensagens(prev => [...prev, { autor: 'ia', texto: 'Ok, não salvei nada.' }]);
   };
 
   const confirmarProposta = async () => {
-    if (!propostaPendente) return;
+    if (!propostaPendente || salvando) return; // trava contra clique duplo
+    if (contextoCarregando) {
+      setMensagens(prev => [...prev, { autor: 'ia', texto: 'Ainda estou carregando os dados da fazenda, espera só um instante e tenta de novo.' }]);
+      return;
+    }
+    if (!propostaPendente.propostas || propostaPendente.propostas.length === 0) {
+      setPropostaPendente(null);
+      return;
+    }
+
     setSalvando(true);
-    try {
-      const tabelasAfetadas = new Set();
-      for (const item of propostaPendente.propostas) {
+    const tabelasAfetadas = new Set();
+    const sucessos = [];
+    const falhas = [];
+
+    // Processa uma de cada vez — se uma falhar, as outras continuam sendo tentadas,
+    // e no final você sabe exatamente o que foi salvo e o que não foi (nunca um
+    // erro genérico que esconde o que já entrou no banco).
+    for (const item of propostaPendente.propostas) {
+      try {
         const tabela = await executarAcao(item.ferramenta, item.dados, { talhoes, insumos, funcionarios });
         if (tabela) tabelasAfetadas.add(tabela);
+        sucessos.push(rotuloFerramenta[item.ferramenta] || item.ferramenta);
+      } catch (err) {
+        falhas.push(`${rotuloFerramenta[item.ferramenta] || item.ferramenta}: ${err.message}`);
       }
-      tabelasAfetadas.forEach(t => queryClient.invalidateQueries({ queryKey: [t] }));
-      setMensagens(prev => [...prev, { autor: 'ia', texto: '✅ Pronto, salvei tudo certinho.' }]);
-      setPropostaPendente(null);
-    } catch (err) {
-      setMensagens(prev => [...prev, { autor: 'ia', texto: `❌ Não consegui salvar: ${err.message}` }]);
-    } finally {
-      setSalvando(false);
     }
+
+    tabelasAfetadas.forEach(t => queryClient.invalidateQueries({ queryKey: [t] }));
+
+    let textoResultado = '';
+    if (sucessos.length > 0) textoResultado += `✅ Salvo: ${sucessos.join(', ')}.\n`;
+    if (falhas.length > 0) textoResultado += `❌ Não salvo:\n${falhas.map(f => `• ${f}`).join('\n')}`;
+    setMensagens(prev => [...prev, { autor: 'ia', texto: textoResultado.trim() }]);
+
+    setPropostaPendente(null);
+    setHistoricoAPI([]); // conversa "fecha" aqui — próxima mensagem começa limpa
+    setSalvando(false);
   };
 
   // ------------------------------------------------------------------------
   // Executa a ação de verdade no Supabase — mesma lógica/campos que cada
   // página já usa, só que disparada a partir do que a IA organizou.
+  // Cada ação valida o que precisa ANTES de tentar salvar, pra nunca gravar
+  // um registro pela metade ou com número inválido.
   // ------------------------------------------------------------------------
   const executarAcao = async (ferramenta, dados, ctx) => {
     const hoje = format(new Date(), 'yyyy-MM-dd');
 
     if (ferramenta === 'registrar_colheita') {
-      const talhao = encontrarPorNome(ctx.talhoes, dados.talhao_nome);
-      if (!talhao) throw new Error(`Talhão "${dados.talhao_nome}" não encontrado.`);
-      const data = dados.data || hoje;
+      if (!dados.talhao_nome) throw new Error('Faltou o nome do talhão.');
+      const talhao = buscarObrigatorio(ctx.talhoes, dados.talhao_nome, 'Talhão');
+      if (!dados.itens || dados.itens.length === 0) throw new Error('Nenhum item de colheita informado.');
 
-      const payload = (dados.itens || []).map(item => ({
-        talhao_id: talhao.id,
-        data,
-        cultura: dados.cultura || talhao.cultura,
-        tipo_colheita: item.tipo_colheita,
-        quantidade_kg: item.quantidade_kg || null,
-        quantidade_caixas: item.quantidade_caixas || null,
-        preco_unitario: item.preco_unitario,
-        unidade_preco: item.unidade_preco,
-        valor_total: (item.unidade_preco === 'kg' ? (item.quantidade_kg || 0) : (item.quantidade_caixas || 0)) * item.preco_unitario
-      }));
+      const data = dados.data || hoje;
+      const payload = dados.itens.map((item, idx) => {
+        if (!item.tipo_colheita) throw new Error(`Item ${idx + 1}: faltou o tipo de colheita.`);
+        const preco = numero(item.preco_unitario, null);
+        if (preco === null) throw new Error(`Item ${idx + 1} (${item.tipo_colheita}): faltou o preço.`);
+        const qtdKg = numero(item.quantidade_kg, null);
+        const qtdCx = numero(item.quantidade_caixas, null);
+        const qtdUsada = item.unidade_preco === 'kg' ? (qtdKg || 0) : (qtdCx || 0);
+        return {
+          talhao_id: talhao.id,
+          data,
+          cultura: dados.cultura || talhao.cultura,
+          tipo_colheita: item.tipo_colheita,
+          quantidade_kg: qtdKg,
+          quantidade_caixas: qtdCx,
+          preco_unitario: preco,
+          unidade_preco: item.unidade_preco || 'caixa',
+          valor_total: qtdUsada * preco
+        };
+      });
       const { error } = await supabase.from('colheitas').insert(payload);
       if (error) throw error;
 
-      if (dados.custo_colheita_unitario > 0) {
-        const somaQtd = (dados.itens || []).reduce((acc, item) => acc + (dados.custo_unidade === 'kg' ? (item.quantidade_kg || 0) : (item.quantidade_caixas || 0)), 0);
-        const custoTotal = somaQtd * dados.custo_colheita_unitario;
+      const custoUnit = numero(dados.custo_colheita_unitario, 0);
+      if (custoUnit > 0) {
+        const somaQtd = dados.itens.reduce((acc, item) => acc + (dados.custo_unidade === 'kg' ? numero(item.quantidade_kg) : numero(item.quantidade_caixas)), 0);
+        const custoTotal = somaQtd * custoUnit;
         if (custoTotal > 0) {
-          const resumoTipos = (dados.itens || []).map(i => i.tipo_colheita).join(' + ');
+          const resumoTipos = dados.itens.map(i => i.tipo_colheita).join(' + ');
           const { error: errCusto } = await supabase.from('custos').insert({
             descricao: `Colheita - ${resumoTipos} - ${talhao.nome}`,
             categoria: 'colheita',
@@ -139,7 +226,7 @@ export default function Assistente() {
             data,
             status_pagamento: 'pendente',
             tipo_lancamento: 'despesa',
-            observacoes: `Custo de colheita (via assistente): R$ ${dados.custo_colheita_unitario}/${dados.custo_unidade}`
+            observacoes: `Custo de colheita (via assistente): R$ ${custoUnit}/${dados.custo_unidade || 'caixa'}`
           });
           if (errCusto) throw errCusto;
         }
@@ -148,34 +235,39 @@ export default function Assistente() {
     }
 
     if (ferramenta === 'registrar_atividade') {
-      const talhao = encontrarPorNome(ctx.talhoes, dados.talhao_nome);
-      if (!talhao) throw new Error(`Talhão "${dados.talhao_nome}" não encontrado.`);
+      if (!dados.talhao_nome) throw new Error('Faltou o nome do talhão.');
+      if (!dados.tipo) throw new Error('Faltou o tipo da atividade.');
+      const talhao = buscarObrigatorio(ctx.talhoes, dados.talhao_nome, 'Talhão');
 
       const insumosResolvidos = [];
       for (const i of (dados.insumos || [])) {
-        const insumo = encontrarPorNome(ctx.insumos, i.nome_insumo);
-        if (!insumo) throw new Error(`Insumo "${i.nome_insumo}" não encontrado no cadastro.`);
-        const precoPorUnidade = (insumo.preco_unitario || 0) / (insumo.tamanho_embalagem || 1);
+        if (!i.nome_insumo) continue;
+        const insumo = buscarObrigatorio(ctx.insumos, i.nome_insumo, 'Insumo');
+        const qtd = numero(i.quantidade, 0);
+        if (qtd <= 0) throw new Error(`Quantidade inválida pro insumo "${i.nome_insumo}".`);
+        const precoPorUnidade = numero(insumo.preco_unitario) / (numero(insumo.tamanho_embalagem) || 1);
         insumosResolvidos.push({
           insumo_id: insumo.id,
           nome: insumo.nome,
-          quantidade: i.quantidade,
+          quantidade: qtd,
           unidade: insumo.unidade,
           valor_unitario: precoPorUnidade,
-          valor_total: i.quantidade * precoPorUnidade,
+          valor_total: qtd * precoPorUnidade,
           metodo_aplicacao: 'adubacao'
         });
       }
+      const terceirizada = !!dados.terceirizada;
+      const valorTerceirizado = terceirizada ? numero(dados.valor_terceirizado, 0) : 0;
       const custoInsumos = insumosResolvidos.reduce((acc, i) => acc + i.valor_total, 0);
-      const custoTotal = custoInsumos + (dados.terceirizada ? (dados.valor_terceirizado || 0) : 0);
+      const custoTotal = custoInsumos + valorTerceirizado;
 
       const { error } = await supabase.from('atividades').insert({
         talhao_id: talhao.id,
         tipo: dados.tipo,
         data_programada: dados.data_programada || hoje,
         status: 'programada',
-        terceirizada: !!dados.terceirizada,
-        valor_terceirizado: dados.terceirizada ? (dados.valor_terceirizado || null) : null,
+        terceirizada,
+        valor_terceirizado: terceirizada ? valorTerceirizado : null,
         insumos_utilizados: insumosResolvidos,
         custo_total: custoTotal,
         responsavel: dados.responsavel || null,
@@ -186,12 +278,15 @@ export default function Assistente() {
     }
 
     if (ferramenta === 'registrar_pagamento') {
-      const talhao = dados.talhao_nome ? encontrarPorNome(ctx.talhoes, dados.talhao_nome) : null;
+      if (!dados.descricao) throw new Error('Faltou a descrição do pagamento.');
+      const valor = numero(dados.valor, null);
+      if (!valor || valor <= 0) throw new Error('Valor inválido.');
+      const talhao = dados.talhao_nome ? buscarObrigatorio(ctx.talhoes, dados.talhao_nome, 'Talhão') : null;
       const { error } = await supabase.from('custos').insert({
         descricao: dados.descricao,
         categoria: dados.categoria || 'outro',
         talhao_id: talhao?.id || null,
-        valor: dados.valor,
+        valor,
         data: dados.data || hoje,
         status_pagamento: dados.ja_pago ? 'pago' : 'pendente',
         tipo_lancamento: 'despesa'
@@ -201,9 +296,10 @@ export default function Assistente() {
     }
 
     if (ferramenta === 'criar_talhao') {
+      if (!dados.nome) throw new Error('Faltou o nome do talhão.');
       const { error } = await supabase.from('talhoes').insert({
         nome: dados.nome,
-        area_hectares: dados.area_hectares || null,
+        area_hectares: dados.area_hectares ? numero(dados.area_hectares) : null,
         cultura: dados.cultura || null,
         variedade: dados.variedade || null,
         data_plantio: dados.data_plantio || null,
@@ -214,11 +310,12 @@ export default function Assistente() {
     }
 
     if (ferramenta === 'criar_funcionario') {
-      const talhao = dados.talhao_nome ? encontrarPorNome(ctx.talhoes, dados.talhao_nome) : null;
+      if (!dados.nome) throw new Error('Faltou o nome do funcionário.');
+      const talhao = dados.talhao_nome ? buscarObrigatorio(ctx.talhoes, dados.talhao_nome, 'Talhão') : null;
       const { error } = await supabase.from('funcionarios').insert({
         nome: dados.nome,
         cargo: dados.cargo || null,
-        salario: dados.salario || null,
+        salario: dados.salario ? numero(dados.salario) : null,
         data_admissao: dados.data_admissao || hoje,
         talhao_id: talhao?.id || null,
         status: 'ativo'
@@ -228,10 +325,12 @@ export default function Assistente() {
     }
 
     if (ferramenta === 'registrar_chuva') {
-      const talhao = dados.talhao_nome ? encontrarPorNome(ctx.talhoes, dados.talhao_nome) : null;
+      const mm = numero(dados.quantidade_mm, null);
+      if (mm === null || mm < 0) throw new Error('Quantidade de chuva inválida.');
+      const talhao = dados.talhao_nome ? buscarObrigatorio(ctx.talhoes, dados.talhao_nome, 'Talhão') : null;
       const { error } = await supabase.from('pluviometria').insert({
         data: dados.data || hoje,
-        quantidade_mm: dados.quantidade_mm,
+        quantidade_mm: mm,
         talhao_id: talhao?.id || null
       });
       if (error) throw error;
@@ -239,21 +338,26 @@ export default function Assistente() {
     }
 
     if (ferramenta === 'criar_insumo') {
+      if (!dados.nome) throw new Error('Faltou o nome do insumo.');
+      if (!dados.unidade) throw new Error('Faltou a unidade do insumo.');
+      const preco = numero(dados.preco_unitario, null);
+      if (preco === null || preco < 0) throw new Error('Preço inválido.');
       const { error } = await supabase.from('insumos').insert({
         nome: dados.nome,
         categoria: dados.categoria || 'outro',
         unidade: dados.unidade,
-        preco_unitario: dados.preco_unitario,
-        tamanho_embalagem: dados.tamanho_embalagem || null,
-        estoque_atual: dados.estoque_atual || 0
+        preco_unitario: preco,
+        tamanho_embalagem: dados.tamanho_embalagem ? numero(dados.tamanho_embalagem) : null,
+        estoque_atual: numero(dados.estoque_atual, 0)
       });
       if (error) throw error;
       return 'insumos';
     }
 
     if (ferramenta === 'criar_safra') {
-      const talhao = encontrarPorNome(ctx.talhoes, dados.talhao_nome);
-      if (!talhao) throw new Error(`Talhão "${dados.talhao_nome}" não encontrado.`);
+      if (!dados.nome) throw new Error('Faltou o nome da safra.');
+      if (!dados.talhao_nome) throw new Error('Faltou o nome do talhão.');
+      const talhao = buscarObrigatorio(ctx.talhoes, dados.talhao_nome, 'Talhão');
       const { error } = await supabase.from('safras').insert({
         nome: dados.nome,
         talhao_id: talhao.id,
@@ -266,6 +370,7 @@ export default function Assistente() {
     }
 
     if (ferramenta === 'registrar_consultoria') {
+      if (!dados.consultor_nome) throw new Error('Faltou o nome do consultor.');
       const { error } = await supabase.from('consultorias').insert({
         consultor_nome: dados.consultor_nome,
         data_visita: dados.data_visita || hoje,
@@ -294,14 +399,19 @@ export default function Assistente() {
 
   return (
     <div className="space-y-6 h-[calc(100vh-8rem)] flex flex-col">
-      <div className="bg-white p-6 rounded-[1.5rem] border border-stone-100 shadow-sm flex items-center gap-3">
-        <div className="w-11 h-11 bg-gradient-to-br from-emerald-600 to-teal-700 rounded-xl flex items-center justify-center shrink-0">
-          <Sparkles className="w-5 h-5 text-white" />
+      <div className="bg-white p-6 rounded-[1.5rem] border border-stone-100 shadow-sm flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="w-11 h-11 bg-gradient-to-br from-emerald-600 to-teal-700 rounded-xl flex items-center justify-center shrink-0">
+            <Sparkles className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold text-stone-900 tracking-tight">Assistente</h1>
+            <p className="text-stone-500 font-medium">Escreva o que quer registrar ou pergunte algo sobre seus dados</p>
+          </div>
         </div>
-        <div>
-          <h1 className="text-2xl font-bold text-stone-900 tracking-tight">Assistente</h1>
-          <p className="text-stone-500 font-medium">Escreva o que quer registrar ou pergunte algo sobre seus dados</p>
-        </div>
+        <Button onClick={novaConversa} variant="outline" className="rounded-xl border-stone-200 text-stone-500 hover:bg-stone-50 shrink-0">
+          <Trash2 className="w-4 h-4 mr-2" /> Nova Conversa
+        </Button>
       </div>
 
       <div className="flex-1 bg-white rounded-[1.5rem] border border-stone-100 shadow-sm flex flex-col overflow-hidden">
@@ -334,8 +444,8 @@ export default function Assistente() {
                 </div>
               ))}
               <div className="flex gap-2 pt-1">
-                <Button onClick={confirmarProposta} disabled={salvando} className="flex-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-10">
-                  {salvando ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Check className="w-4 h-4 mr-2" /> Confirmar e Salvar</>}
+                <Button onClick={confirmarProposta} disabled={salvando || contextoCarregando} className="flex-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-10">
+                  {salvando ? <Loader2 className="w-4 h-4 animate-spin" /> : contextoCarregando ? 'Carregando dados...' : <><Check className="w-4 h-4 mr-2" /> Confirmar e Salvar</>}
                 </Button>
                 <Button onClick={cancelarProposta} disabled={salvando} variant="outline" className="rounded-xl border-stone-200 h-10">
                   <X className="w-4 h-4" />
@@ -363,9 +473,9 @@ export default function Assistente() {
             placeholder="Ex: Goiaba 2, 25 caixas verdes a 50 reais, custo de 4 reais a caixa hoje"
             className="rounded-xl resize-none"
             rows={2}
-            disabled={carregando || !!propostaPendente}
+            disabled={carregando}
           />
-          <Button onClick={enviarMensagem} disabled={carregando || !input.trim() || !!propostaPendente} className="rounded-xl bg-emerald-600 hover:bg-emerald-700 h-11 w-11 shrink-0 p-0">
+          <Button onClick={enviarMensagem} disabled={carregando || !input.trim()} className="rounded-xl bg-emerald-600 hover:bg-emerald-700 h-11 w-11 shrink-0 p-0">
             <Send className="w-4 h-4" />
           </Button>
         </div>
