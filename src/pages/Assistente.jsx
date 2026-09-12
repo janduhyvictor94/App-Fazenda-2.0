@@ -221,6 +221,12 @@ export default function Assistente() {
         const somaQtd = dados.itens.reduce((acc, item) => acc + (dados.custo_unidade === 'kg' ? numero(item.quantidade_kg) : numero(item.quantidade_caixas)), 0);
         const custoTotal = somaQtd * custoUnit;
         if (custoTotal > 0) {
+          // Antes de criar o custo, checa se já não existe um pra esse talhão/dia —
+          // evita duplicar se você (ou a IA) mandar a mesma colheita duas vezes.
+          const { data: custoExistente } = await supabase.from('custos').select('id, descricao, valor').eq('categoria', 'colheita').eq('talhao_id', talhao.id).eq('data', data).limit(1);
+          if (custoExistente && custoExistente.length > 0) {
+            throw new Error(`Já existe um custo de colheita lançado pra ${talhao.nome} em ${data} (R$${custoExistente[0].valor}). As caixas foram registradas, mas o custo NÃO foi duplicado — edite o lançamento existente no Financeiro se precisar ajustar o valor.`);
+          }
           const resumoTipos = dados.itens.map(i => i.tipo_colheita).join(' + ');
           const { error: errCusto } = await supabase.from('custos').insert({
             descricao: `Colheita - ${resumoTipos} - ${talhao.nome}`,
