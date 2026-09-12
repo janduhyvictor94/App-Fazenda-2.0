@@ -273,11 +273,20 @@ export default function Assistente() {
       const valorTerceirizado = terceirizada ? numero(dados.valor_terceirizado, 0) : 0;
       const custoInsumos = insumosResolvidos.reduce((acc, i) => acc + i.valor_total, 0);
       const custoTotal = custoInsumos + valorTerceirizado;
+      const dataProgramada = dados.data_programada || hoje;
+
+      // Só bloqueia se já existir uma atividade IDÊNTICA (mesmo talhão, mesmo tipo,
+      // mesma data, mesmo custo total) — duas atividades diferentes no mesmo dia/tipo
+      // com custo diferente são legítimas e não devem ser bloqueadas.
+      const { data: atividadesDoDia } = await supabase.from('atividades').select('id, custo_total').eq('talhao_id', talhao.id).eq('tipo', dados.tipo).eq('data_programada', dataProgramada);
+      if ((atividadesDoDia || []).some(a => Math.abs((a.custo_total || 0) - custoTotal) < 0.01)) {
+        throw new Error(`Já existe uma atividade IDÊNTICA (${dados.tipo}, mesmo talhão, mesma data, mesmo custo R$${custoTotal.toFixed(2)}) — parece repetição. Se for uma atividade diferente, ajuste algum dado (ex: quantidade de insumo) que confirme que não é repetição.`);
+      }
 
       const { error } = await supabase.from('atividades').insert({
         talhao_id: talhao.id,
         tipo: dados.tipo,
-        data_programada: dados.data_programada || hoje,
+        data_programada: dataProgramada,
         status: 'programada',
         terceirizada,
         valor_terceirizado: terceirizada ? valorTerceirizado : null,
@@ -295,12 +304,22 @@ export default function Assistente() {
       const valor = numero(dados.valor, null);
       if (!valor || valor <= 0) throw new Error('Valor inválido.');
       const talhao = dados.talhao_nome ? buscarObrigatorio(ctx.talhoes, dados.talhao_nome, 'Talhão') : null;
+      const data = dados.data || hoje;
+
+      // Só bloqueia se já existir um pagamento IDÊNTICO (mesma descrição, mesmo talhão
+      // — ou ambos sem talhão —, mesma data, mesmo valor).
+      const { data: pagamentosDoDia } = await supabase.from('custos').select('id, descricao, talhao_id, valor').eq('data', data).eq('descricao', dados.descricao);
+      const talhaoIdNovo = talhao?.id || null;
+      if ((pagamentosDoDia || []).some(p => (p.talhao_id || null) === talhaoIdNovo && Math.abs((p.valor || 0) - valor) < 0.01)) {
+        throw new Error(`Já existe um pagamento IDÊNTICO ("${dados.descricao}", R$${valor.toFixed(2)}, mesma data) — parece repetição. Se for um pagamento diferente, ajuste a descrição ou o valor.`);
+      }
+
       const { error } = await supabase.from('custos').insert({
         descricao: dados.descricao,
         categoria: dados.categoria || 'outro',
-        talhao_id: talhao?.id || null,
+        talhao_id: talhaoIdNovo,
         valor,
-        data: dados.data || hoje,
+        data,
         status_pagamento: dados.ja_pago ? 'pago' : 'pendente',
         tipo_lancamento: 'despesa'
       });
@@ -310,6 +329,11 @@ export default function Assistente() {
 
     if (ferramenta === 'criar_talhao') {
       if (!dados.nome) throw new Error('Faltou o nome do talhão.');
+      // Nome de talhão é único por natureza — se já existe um com esse nome, é quase
+      // certamente o mesmo talhão sendo cadastrado de novo por engano.
+      if (encontrarPorNome(ctx.talhoes, dados.nome).item) {
+        throw new Error(`Já existe um talhão chamado "${dados.nome}" — se quiser editar ele, use a tela de Talhões em vez de cadastrar de novo.`);
+      }
       const { error } = await supabase.from('talhoes').insert({
         nome: dados.nome,
         area_hectares: dados.area_hectares ? numero(dados.area_hectares) : null,
@@ -325,11 +349,24 @@ export default function Assistente() {
     if (ferramenta === 'criar_funcionario') {
       if (!dados.nome) throw new Error('Faltou o nome do funcionário.');
       const talhao = dados.talhao_nome ? buscarObrigatorio(ctx.talhoes, dados.talhao_nome, 'Talhão') : null;
+      const dataAdmissao = dados.data_admissao || hoje;
+
+      // Bloqueia só se mesmo nome E mesma data de admissão — duas pessoas podem ter
+      // nome igual, mas dificilmente entram na empresa no mesmo dia por coincidência.
+      const nomeNormalizado = normalizar(dados.nome);
+      const { item: funcExistente } = encontrarPorNome(ctx.funcionarios, dados.nome);
+      if (funcExistente) {
+        const { data: mesmaAdmissao } = await supabase.from('funcionarios').select('id').eq('id', funcExistente.id).eq('data_admissao', dataAdmissao);
+        if (mesmaAdmissao && mesmaAdmissao.length > 0) {
+          throw new Error(`Já existe um funcionário chamado "${dados.nome}" admitido em ${dataAdmissao} — parece repetição. Se for uma pessoa diferente, confirme o nome completo pra diferenciar.`);
+        }
+      }
+
       const { error } = await supabase.from('funcionarios').insert({
         nome: dados.nome,
         cargo: dados.cargo || null,
         salario: dados.salario ? numero(dados.salario) : null,
-        data_admissao: dados.data_admissao || hoje,
+        data_admissao: dataAdmissao,
         talhao_id: talhao?.id || null,
         status: 'ativo'
       });
@@ -341,10 +378,21 @@ export default function Assistente() {
       const mm = numero(dados.quantidade_mm, null);
       if (mm === null || mm < 0) throw new Error('Quantidade de chuva inválida.');
       const talhao = dados.talhao_nome ? buscarObrigatorio(ctx.talhoes, dados.talhao_nome, 'Talhão') : null;
+      const data = dados.data || hoje;
+      const talhaoIdNovo = talhao?.id || null;
+
+      // Só bloqueia se já existir uma medição IDÊNTICA (mesmo talhão — ou ambos sem
+      // talhão —, mesma data, mesmo mm). Duas medições no mesmo dia com valores
+      // diferentes (ex: correção, ou postos diferentes) são legítimas.
+      const { data: chuvasDoDia } = await supabase.from('pluviometria').select('id, talhao_id, quantidade_mm').eq('data', data);
+      if ((chuvasDoDia || []).some(c => (c.talhao_id || null) === talhaoIdNovo && Math.abs((c.quantidade_mm || 0) - mm) < 0.01)) {
+        throw new Error(`Já existe uma medição de chuva IDÊNTICA (${mm}mm, mesmo talhão, mesma data) — parece repetição.`);
+      }
+
       const { error } = await supabase.from('pluviometria').insert({
-        data: dados.data || hoje,
+        data,
         quantidade_mm: mm,
-        talhao_id: talhao?.id || null
+        talhao_id: talhaoIdNovo
       });
       if (error) throw error;
       return 'pluviometria';
@@ -355,6 +403,10 @@ export default function Assistente() {
       if (!dados.unidade) throw new Error('Faltou a unidade do insumo.');
       const preco = numero(dados.preco_unitario, null);
       if (preco === null || preco < 0) throw new Error('Preço inválido.');
+      // Nome de insumo repetido quase sempre é o mesmo item sendo cadastrado de novo.
+      if (encontrarPorNome(ctx.insumos, dados.nome).item) {
+        throw new Error(`Já existe um insumo chamado "${dados.nome}" — se quiser atualizar o preço/estoque dele, use a tela de Insumos em vez de cadastrar de novo.`);
+      }
       const { error } = await supabase.from('insumos').insert({
         nome: dados.nome,
         categoria: dados.categoria || 'outro',
@@ -371,6 +423,13 @@ export default function Assistente() {
       if (!dados.nome) throw new Error('Faltou o nome da safra.');
       if (!dados.talhao_nome) throw new Error('Faltou o nome do talhão.');
       const talhao = buscarObrigatorio(ctx.talhoes, dados.talhao_nome, 'Talhão');
+
+      // Mesmo nome de safra no mesmo talhão é quase certamente repetição.
+      const { data: safrasExistentes } = await supabase.from('safras').select('id, nome').eq('talhao_id', talhao.id);
+      if ((safrasExistentes || []).some(s => normalizar(s.nome) === normalizar(dados.nome))) {
+        throw new Error(`Já existe uma safra chamada "${dados.nome}" nesse talhão — parece repetição.`);
+      }
+
       const { error } = await supabase.from('safras').insert({
         nome: dados.nome,
         talhao_id: talhao.id,
@@ -384,9 +443,17 @@ export default function Assistente() {
 
     if (ferramenta === 'registrar_consultoria') {
       if (!dados.consultor_nome) throw new Error('Faltou o nome do consultor.');
+      const dataVisita = dados.data_visita || hoje;
+
+      // Mesmo consultor, mesma data de visita = quase certamente repetição.
+      const { data: consultoriasNoDia } = await supabase.from('consultorias').select('id, consultor_nome').eq('data_visita', dataVisita);
+      if ((consultoriasNoDia || []).some(c => normalizar(c.consultor_nome) === normalizar(dados.consultor_nome))) {
+        throw new Error(`Já existe uma visita de "${dados.consultor_nome}" registrada em ${dataVisita} — parece repetição.`);
+      }
+
       const { error } = await supabase.from('consultorias').insert({
         consultor_nome: dados.consultor_nome,
-        data_visita: dados.data_visita || hoje,
+        data_visita: dataVisita,
         observacoes_gerais: dados.observacoes_gerais || null,
         proxima_visita: dados.proxima_visita || null,
         indicacoes: []
