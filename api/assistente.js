@@ -17,6 +17,10 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 
 const MODELO = 'claude-haiku-4-5-20251001'; // mais barato, recomendado pra começar. Pra trocar por um mais "esperto": 'claude-sonnet-5'.
 
+// Dá mais tempo pra função rodar (o modo de consulta faz 2 chamadas seguidas à IA,
+// então o padrão de 10s às vezes não é suficiente).
+export const maxDuration = 30;
+
 // --------------------------------------------------------------------------
 // DEFINIÇÃO DAS FERRAMENTAS (o que a IA pode fazer no seu sistema)
 // Pra adicionar uma ação nova no futuro: só descrever ela aqui, nesse formato.
@@ -211,21 +215,33 @@ export default async function handler(req, res) {
     return res.status(500).json({ erro: 'ANTHROPIC_API_KEY não configurada no servidor. Configure em Vercel → Settings → Environment Variables.' });
   }
 
-  const { mensagem, historico = [] } = req.body || {};
+  const { mensagem, historico: historicoRecebido = [] } = req.body || {};
   if (!mensagem || typeof mensagem !== 'string') {
     return res.status(400).json({ erro: 'Envie { mensagem: "..." } no corpo da requisição.' });
   }
+  if (mensagem.length > 4000) {
+    return res.status(400).json({ erro: 'Mensagem muito longa (máximo 4000 caracteres).' });
+  }
+
+  // Nunca deixa a conversa crescer sem limite (custo e contexto) — mantém só as
+  // últimas trocas, que é o que importa pra entender o que está em andamento agora.
+  const historico = Array.isArray(historicoRecebido) ? historicoRecebido.slice(-24) : [];
 
   const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
   try {
     // Busca contexto real do banco, pra IA conseguir casar "área 04" com o talhão de verdade,
     // "ureia" com o insumo cadastrado, etc. — sem isso ela erraria nome toda hora.
-    const [{ data: talhoes }, { data: insumos }, { data: funcionarios }, { data: culturas }] = await Promise.all([
-      supabase.from('talhoes').select('id, nome, cultura, area_hectares'),
-      supabase.from('insumos').select('id, nome, unidade, preco_unitario, tamanho_embalagem'),
-      supabase.from('funcionarios').select('id, nome, status').eq('status', 'ativo'),
-      supabase.from('culturas').select('nome')
+    // Cada busca é resiliente por conta própria: se uma falhar, as outras continuam
+    // (melhor a IA funcionar com um pouco menos de contexto do que travar tudo).
+    const buscarSeguro = async (query) => {
+      try { const { data } = await query; return data || []; } catch { return []; }
+    };
+    const [talhoes, insumos, funcionarios, culturas] = await Promise.all([
+      buscarSeguro(supabase.from('talhoes').select('id, nome, cultura, area_hectares')),
+      buscarSeguro(supabase.from('insumos').select('id, nome, unidade, preco_unitario, tamanho_embalagem')),
+      buscarSeguro(supabase.from('funcionarios').select('id, nome, status').eq('status', 'ativo')),
+      buscarSeguro(supabase.from('culturas').select('nome'))
     ]);
 
     const hoje = new Date().toISOString().split('T')[0];
@@ -252,18 +268,38 @@ REGRAS IMPORTANTES:
 3. Nunca calcule custo de insumo sozinho — só extraia qual insumo e quanto foi usado; o sistema calcula o valor certo usando o preço real cadastrado.
 4. Quando tiver todas as informações, chame a ferramenta correspondente. Você pode chamar mais de uma ferramenta na mesma resposta se o usuário descreveu várias ações de uma vez (ex: várias atividades em áreas diferentes).
 5. Antes de cada chamada de ferramenta de CADASTRO (tudo exceto consultar_dados), escreva também um pequeno resumo em português do que vai ser registrado, pro usuário conferir.
-6. Seja direto e objetivo — sem enrolação, sem saudação longa.`;
+6. Seja direto e objetivo — sem enrolação, sem saudação longa.
+7. Em "registrar_colheita": se o usuário mencionar QUALQUER custo de colheita (ex: "custo de 4 reais por caixa", "paguei 4 reais pra colher"), SEMPRE preencha custo_colheita_unitario e custo_unidade na chamada — nunca deixe esses campos de fora quando essa informação foi dada, mesmo que venha numa frase separada dentro da mesma mensagem.
+8. Se uma ação anterior na conversa AINDA NÃO foi confirmada pelo usuário (você vê isso pelo histórico: você chamou uma ferramenta e a resposta foi só "aguardando confirmação") e a nova mensagem do usuário claramente corrige ou completa aquela mesma ação (ex: ele esqueceu de mencionar um valor e agora está complementando), chame a MESMA ferramenta de novo com TODAS as informações já reunidas (as antigas + a nova) — não só a informação nova sozinha. Isso substitui a proposta anterior por uma completa.`;
 
     const mensagens = [
       ...historico,
       { role: 'user', content: mensagem }
     ];
 
-    const respostaClaude = await chamarClaude(apiKey, systemPrompt, mensagens, FERRAMENTAS);
+    let respostaClaude;
+    try {
+      respostaClaude = await chamarClaude(apiKey, systemPrompt, mensagens, FERRAMENTAS);
+    } catch (erroPrimeiraTentativa) {
+      // Se o histórico salvo (ex: de uma versão antiga, ou corrompido) fizer a API
+      // rejeitar por causa da estrutura da conversa, tenta de novo do zero, só com
+      // a mensagem atual — melhor responder mesmo assim do que travar por completo.
+      console.warn('Primeira tentativa falhou, tentando de novo sem histórico:', erroPrimeiraTentativa.message);
+      respostaClaude = await chamarClaude(apiKey, systemPrompt, [{ role: 'user', content: mensagem }], FERRAMENTAS);
+      mensagens.length = 0;
+      mensagens.push({ role: 'user', content: mensagem });
+    }
 
     // Separa o que veio: texto (pergunta/resumo) e chamadas de ferramenta
     const blocosTexto = respostaClaude.content.filter(b => b.type === 'text').map(b => b.text).join('\n');
-    const chamadasFerramenta = respostaClaude.content.filter(b => b.type === 'tool_use');
+    let chamadasFerramenta = respostaClaude.content.filter(b => b.type === 'tool_use');
+
+    // Nunca deveria acontecer (o prompt já instrui a não fazer isso), mas por segurança:
+    // se vier consultar_dados junto com ações de cadastro na mesma resposta, ignora a
+    // consulta e trata só as ações de cadastro — evita confusão na tela de confirmação.
+    if (chamadasFerramenta.length > 1 && chamadasFerramenta.some(c => c.name === 'consultar_dados')) {
+      chamadasFerramenta = chamadasFerramenta.filter(c => c.name !== 'consultar_dados');
+    }
 
     // Caso 1: nenhuma ferramenta chamada -> é só uma pergunta/esclarecimento
     if (chamadasFerramenta.length === 0) {
@@ -279,34 +315,59 @@ REGRAS IMPORTANTES:
     if (chamadaConsulta && chamadasFerramenta.length === 1) {
       const resultado = await executarConsulta(supabase, chamadaConsulta.input);
 
+      const turnoComResultado = {
+        role: 'user',
+        content: [{
+          type: 'tool_result',
+          tool_use_id: chamadaConsulta.id,
+          content: JSON.stringify(resultado)
+        }]
+      };
+
       const segundaResposta = await chamarClaude(
         apiKey,
         systemPrompt,
-        [
-          ...mensagens,
-          { role: 'assistant', content: respostaClaude.content },
-          {
-            role: 'user',
-            content: [{
-              type: 'tool_result',
-              tool_use_id: chamadaConsulta.id,
-              content: JSON.stringify(resultado)
-            }]
-          }
-        ],
+        [...mensagens, { role: 'assistant', content: respostaClaude.content }, turnoComResultado],
         FERRAMENTAS
       );
 
       const textoFinal = segundaResposta.content.filter(b => b.type === 'text').map(b => b.text).join('\n');
-      return res.status(200).json({ tipo: 'resposta', texto: textoFinal || 'Não consegui calcular isso.' });
+      return res.status(200).json({
+        tipo: 'resposta',
+        texto: textoFinal || 'Não consegui calcular isso.',
+        historico_atualizado: [
+          ...mensagens,
+          { role: 'assistant', content: respostaClaude.content },
+          turnoComResultado,
+          { role: 'assistant', content: segundaResposta.content }
+        ]
+      });
     }
 
     // Caso 3: uma ou mais ações de cadastro -> devolve pra confirmação (NADA é salvo aqui)
+    // Como a ferramenta foi "chamada" mas ainda não executada de verdade, a conversa
+    // precisa de um tool_result sintético pra ficar estruturalmente válida pra próxima
+    // mensagem (a API da Anthropic exige isso) — e esse texto também dá contexto real
+    // pra IA entender, se você completar/corrigir essa mesma ação na mensagem seguinte.
     const propostas = chamadasFerramenta.map(c => ({ ferramenta: c.name, dados: c.input }));
+    const turnoAguardando = {
+      role: 'user',
+      content: chamadasFerramenta.map(c => ({
+        type: 'tool_result',
+        tool_use_id: c.id,
+        content: 'Aguardando confirmação do usuário. Ainda NÃO foi salvo no banco de dados.'
+      }))
+    };
+
     return res.status(200).json({
       tipo: 'proposta',
       resumo: blocosTexto || 'Confira os dados abaixo antes de confirmar:',
-      propostas
+      propostas,
+      historico_atualizado: [
+        ...mensagens,
+        { role: 'assistant', content: respostaClaude.content },
+        turnoAguardando
+      ]
     });
 
   } catch (err) {
@@ -319,21 +380,33 @@ REGRAS IMPORTANTES:
 // Chama a API da Anthropic
 // --------------------------------------------------------------------------
 async function chamarClaude(apiKey, system, messages, tools) {
-  const resposta = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01'
-    },
-    body: JSON.stringify({
-      model: MODELO,
-      max_tokens: 1500,
-      system,
-      messages,
-      tools
-    })
-  });
+  const controlador = new AbortController();
+  const timeoutId = setTimeout(() => controlador.abort(), 25000);
+
+  let resposta;
+  try {
+    resposta = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01'
+      },
+      body: JSON.stringify({
+        model: MODELO,
+        max_tokens: 1500,
+        system,
+        messages,
+        tools
+      }),
+      signal: controlador.signal
+    });
+  } catch (err) {
+    if (err.name === 'AbortError') throw new Error('A IA demorou demais pra responder. Tenta de novo.');
+    throw err;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   if (!resposta.ok) {
     const erroTexto = await resposta.text();
