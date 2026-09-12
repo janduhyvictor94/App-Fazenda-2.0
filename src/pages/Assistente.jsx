@@ -397,6 +397,41 @@ export default function Assistente() {
     registrar_consultoria: 'Consultoria'
   };
 
+  // Resumo legível de cada proposta, pra você conferir de relance antes de
+  // confirmar — em vez de precisar ler um JSON cru pra notar se faltou algo.
+  const resumoProposta = (ferramenta, dados) => {
+    const linhas = [];
+    if (ferramenta === 'registrar_colheita') {
+      linhas.push(`Talhão: ${dados.talhao_nome || '?'}`);
+      linhas.push(`Data: ${dados.data || 'hoje'}`);
+      (dados.itens || []).forEach(i => {
+        const qtd = i.unidade_preco === 'kg' ? `${i.quantidade_kg ?? '?'}kg` : `${i.quantidade_caixas ?? '?'}cx`;
+        linhas.push(`• ${i.tipo_colheita}: ${qtd} a R$${i.preco_unitario}/${i.unidade_preco}`);
+      });
+      if (dados.custo_colheita_unitario) {
+        linhas.push(`Custo de colheita: R$${dados.custo_colheita_unitario}/${dados.custo_unidade}`);
+      } else {
+        linhas.push(`Custo de colheita: NÃO informado`);
+      }
+    } else if (ferramenta === 'registrar_atividade') {
+      linhas.push(`Talhão: ${dados.talhao_nome || '?'} · Tipo: ${dados.tipo || '?'}`);
+      linhas.push(`Data: ${dados.data_programada || 'hoje'}`);
+      (dados.insumos || []).forEach(i => linhas.push(`• ${i.nome_insumo}: ${i.quantidade}`));
+      linhas.push(dados.terceirizada ? `Terceirizada — Responsável: ${dados.responsavel || '?'} · Valor: R$${dados.valor_terceirizado ?? '?'}` : `Executada por: ${dados.responsavel || '(não informado)'}`);
+    } else if (ferramenta === 'registrar_pagamento') {
+      linhas.push(`${dados.descricao} — R$${dados.valor}`);
+      linhas.push(`Categoria: ${dados.categoria || '?'} · Data: ${dados.data || 'hoje'}`);
+      linhas.push(dados.talhao_nome ? `Talhão: ${dados.talhao_nome}` : `Geral (entra no rateio por área)`);
+      linhas.push(dados.ja_pago ? 'Status: já pago' : 'Status: pendente');
+    } else {
+      // Ações de cadastro simples (talhão, funcionário, insumo, safra, consultoria, chuva)
+      Object.entries(dados).forEach(([chave, valor]) => {
+        if (valor !== null && valor !== undefined && valor !== '') linhas.push(`${chave}: ${valor}`);
+      });
+    }
+    return linhas;
+  };
+
   return (
     <div className="space-y-6 h-[calc(100vh-8rem)] flex flex-col">
       <div className="bg-white p-6 rounded-[1.5rem] border border-stone-100 shadow-sm flex items-center justify-between gap-3">
@@ -439,8 +474,12 @@ export default function Assistente() {
               <p className="text-xs font-bold text-emerald-800 uppercase tracking-wide">Confirme antes de salvar</p>
               {propostaPendente.propostas.map((p, idx) => (
                 <div key={idx} className="bg-white rounded-xl p-3 border border-emerald-100 text-sm">
-                  <p className="font-bold text-stone-800 mb-1">{rotuloFerramenta[p.ferramenta] || p.ferramenta}</p>
-                  <pre className="text-xs text-stone-500 whitespace-pre-wrap font-sans">{JSON.stringify(p.dados, null, 2)}</pre>
+                  <p className="font-bold text-stone-800 mb-1.5">{rotuloFerramenta[p.ferramenta] || p.ferramenta}</p>
+                  <div className="space-y-0.5">
+                    {resumoProposta(p.ferramenta, p.dados).map((linha, i) => (
+                      <p key={i} className={linha.includes('NÃO informado') ? 'text-xs font-bold text-red-600' : 'text-xs text-stone-600'}>{linha}</p>
+                    ))}
+                  </div>
                 </div>
               ))}
               <div className="flex gap-2 pt-1">
