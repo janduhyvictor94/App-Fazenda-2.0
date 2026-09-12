@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, Edit, Trash2, Wheat, Filter, Package, TrendingUp, Calendar, FileText, ListPlus, ClipboardList, X } from 'lucide-react';
+import { Plus, Edit, Trash2, Wheat, Filter, Package, TrendingUp, Calendar, FileText, ListPlus, ClipboardList, X, ChevronDown, ChevronRight } from 'lucide-react';
 import EmptyState from '@/components/ui/EmptyState';
 import StatCard from '@/components/ui/StatCard';
 import { format } from 'date-fns';
@@ -96,6 +96,17 @@ export default function Colheitas() {
     }
   });
 
+  // Custos de colheita já lançados (tanto pelo Modo Rápido quanto pelo Assistente)
+  // — usados pra mostrar o custo do dia agrupado, já que ele é um valor só combinado,
+  // não um valor por linha individual.
+  const { data: custosColheita = [] } = useQuery({
+    queryKey: ['custos-colheita'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('custos').select('*').eq('categoria', 'colheita');
+      if (error) throw error; return data || [];
+    }
+  });
+
   // --- MUTATIONS ---
   const createBatchMutation = useMutation({
     mutationFn: async ({ itens, lotes }) => {
@@ -134,6 +145,7 @@ export default function Colheitas() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['colheitas'] });
       queryClient.invalidateQueries({ queryKey: ['custos'] });
+      queryClient.invalidateQueries({ queryKey: ['custos-colheita'] });
       setColheitaQueue([]);
       setLotesCusto([]);
       resetForm();
@@ -339,11 +351,48 @@ export default function Colheitas() {
   const totalKg = colheitasFiltradas.reduce((acc, c) => acc + (c.quantidade_kg || 0), 0);
   const totalCaixas = colheitasFiltradas.reduce((acc, c) => acc + (c.quantidade_caixas || 0), 0);
   const totalReceita = colheitasFiltradas.reduce((acc, c) => acc + (c.valor_total || 0), 0);
-  const totalCustoColheita = colheitasFiltradas.reduce((acc, c) => {
-    if (!c.custo_colheita) return acc;
-    const qtdBase = c.unidade_custo === 'kg' ? (c.quantidade_kg || 0) : (c.quantidade_caixas || 0);
-    return acc + (qtdBase * c.custo_colheita);
-  }, 0);
+  // O custo de colheita fica guardado como lançamento em "custos" (categoria colheita),
+  // vinculado por talhão + data — soma só dali, pra não contar em dobro com o campo
+  // antigo que também existe em cada linha (mesma informação, dois lugares).
+  const paresDataTalhao = new Set(colheitasFiltradas.map(c => `${c.data}|${c.talhao_id}`));
+  const totalCustoColheita = custosColheita
+    .filter(cc => paresDataTalhao.has(`${cc.data}|${cc.talhao_id}`))
+    .reduce((acc, cc) => acc + (cc.valor || 0), 0);
+
+  // Agrupa as colheitas por dia + talhão — se você colheu caixa verde, madura e polpa
+  // no mesmo dia/área, isso vira UMA linha na tabela (com o total do dia), em vez de
+  // uma linha solta por tipo. Clicar expande e mostra o detalhe de cada tipo colhido.
+  const gruposColheita = React.useMemo(() => {
+    const mapa = {};
+    colheitasFiltradas.forEach(c => {
+      const chave = `${c.data}|${c.talhao_id}`;
+      if (!mapa[chave]) {
+        mapa[chave] = {
+          chave, data: c.data, talhao_id: c.talhao_id, cultura: c.cultura,
+          itens: [], totalKg: 0, totalCaixas: 0, totalReceita: 0
+        };
+      }
+      mapa[chave].itens.push(c);
+      mapa[chave].totalKg += c.quantidade_kg || 0;
+      mapa[chave].totalCaixas += c.quantidade_caixas || 0;
+      mapa[chave].totalReceita += c.valor_total || 0;
+    });
+    return Object.values(mapa)
+      .map(g => {
+        const custoDoDia = custosColheita
+          .filter(cc => cc.talhao_id === g.talhao_id && cc.data === g.data)
+          .reduce((acc, cc) => acc + (cc.valor || 0), 0);
+        return { ...g, custoDoDia };
+      })
+      .sort((a, b) => new Date(b.data) - new Date(a.data));
+  }, [colheitasFiltradas, custosColheita]);
+
+  const [gruposExpandidos, setGruposExpandidos] = useState(new Set());
+  const alternarGrupo = (chave) => setGruposExpandidos(prev => {
+    const novo = new Set(prev);
+    novo.has(chave) ? novo.delete(chave) : novo.add(chave);
+    return novo;
+  });
 
   const getTalhaoNome = (id) => talhoes.find(t => t.id === id)?.nome || '-';
 
@@ -686,59 +735,77 @@ export default function Colheitas() {
                     <TableHead className="pl-6">Data</TableHead>
                     <TableHead>Talhão</TableHead>
                     <TableHead>Cultura</TableHead>
-                    <TableHead>Tipo</TableHead>
-                    <TableHead className="text-right">Quantidade</TableHead>
+                    <TableHead>Tipos Colhidos</TableHead>
+                    <TableHead className="text-right">Quantidade Total</TableHead>
                     <TableHead className="text-right">Venda Total</TableHead>
                     <TableHead className="text-right">Custo Colheita</TableHead>
                     <TableHead className="text-right pr-6 w-[120px]">Ações</TableHead>
                 </TableRow>
                 </TableHeader>
                 <TableBody>
-                {colheitasFiltradas.map((colheita) => (
-                    <TableRow key={colheita.id} className="hover:bg-stone-50 transition-colors">
-                        <TableCell className="pl-6 font-medium text-stone-600">
-                            {colheita.data ? format(new Date(colheita.data + 'T12:00:00'), 'dd/MM/yyyy') : '-'}
-                        </TableCell>
-                        <TableCell className="font-bold text-stone-700">{getTalhaoNome(colheita.talhao_id)}</TableCell>
-                        <TableCell>
-                            <Badge className={colheita.cultura === 'manga' ? 'bg-orange-100 text-orange-800 border-orange-200 border' : 'bg-pink-100 text-pink-800 border-pink-200 border'}>
-                                {colheita.cultura === 'manga' ? '🥭 Manga' : '🍈 Goiaba'}
-                            </Badge>
-                        </TableCell>
-                        <TableCell className="capitalize text-stone-600">{tipoColheitaLabel(colheita.tipo_colheita)}</TableCell>
-                        <TableCell className="text-right">
-                            <div className="flex flex-col items-end">
-                                {colheita.quantidade_kg > 0 && <span className="font-medium text-stone-700">{colheita.quantidade_kg.toLocaleString('pt-BR')} kg</span>}
-                                {colheita.quantidade_caixas > 0 && <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md mt-0.5">{colheita.quantidade_caixas.toLocaleString('pt-BR')} cx</span>}
-                                {!colheita.quantidade_kg && !colheita.quantidade_caixas && <span className="text-stone-500">-</span>}
-                            </div>
-                        </TableCell>
-                        <TableCell className="text-right">
-                            <div className="flex flex-col items-end">
-                                <span className="font-bold text-emerald-600">R$ {colheita.valor_total?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                                <span className="text-xs text-stone-500 font-medium mt-0.5">R$ {colheita.preco_unitario?.toFixed(2)}/{colheita.unidade_preco}</span>
-                            </div>
-                        </TableCell>
-                        <TableCell className="text-right">
-                            {colheita.custo_colheita ? (() => {
-                                const qtdBase = colheita.unidade_custo === 'kg' ? (colheita.quantidade_kg || 0) : (colheita.quantidade_caixas || 0);
-                                const custoTotalLinha = qtdBase * colheita.custo_colheita;
-                                return (
+                {gruposColheita.map((grupo) => {
+                    const expandido = gruposExpandidos.has(grupo.chave);
+                    return (
+                    <React.Fragment key={grupo.chave}>
+                        <TableRow className="hover:bg-stone-50 transition-colors cursor-pointer" onClick={() => alternarGrupo(grupo.chave)}>
+                            <TableCell className="pl-6 font-medium text-stone-600">
+                                <div className="flex items-center gap-1.5">
+                                    {expandido ? <ChevronDown className="w-4 h-4 text-stone-500 shrink-0" /> : <ChevronRight className="w-4 h-4 text-stone-500 shrink-0" />}
+                                    {grupo.data ? format(new Date(grupo.data + 'T12:00:00'), 'dd/MM/yyyy') : '-'}
+                                </div>
+                            </TableCell>
+                            <TableCell className="font-bold text-stone-700">{getTalhaoNome(grupo.talhao_id)}</TableCell>
+                            <TableCell>
+                                <Badge className={grupo.cultura === 'manga' ? 'bg-orange-100 text-orange-800 border-orange-200 border' : 'bg-pink-100 text-pink-800 border-pink-200 border'}>
+                                    {grupo.cultura === 'manga' ? '🥭 Manga' : '🍈 Goiaba'}
+                                </Badge>
+                            </TableCell>
+                            <TableCell className="text-stone-600">
+                                {grupo.itens.length === 1 ? tipoColheitaLabel(grupo.itens[0].tipo_colheita) : `${grupo.itens.length} tipos`}
+                            </TableCell>
+                            <TableCell className="text-right">
+                                <div className="flex flex-col items-end">
+                                    {grupo.totalKg > 0 && <span className="font-medium text-stone-700">{grupo.totalKg.toLocaleString('pt-BR')} kg</span>}
+                                    {grupo.totalCaixas > 0 && <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md mt-0.5">{grupo.totalCaixas.toLocaleString('pt-BR')} cx</span>}
+                                </div>
+                            </TableCell>
+                            <TableCell className="text-right font-bold text-emerald-600">R$ {grupo.totalReceita.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</TableCell>
+                            <TableCell className="text-right font-bold text-red-600">
+                                {grupo.custoDoDia > 0 ? `R$ ${grupo.custoDoDia.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : <span className="text-stone-500 font-normal">-</span>}
+                            </TableCell>
+                            <TableCell className="text-right pr-6">
+                                <span className="text-xs text-stone-500">{expandido ? 'ocultar' : 'ver detalhe'}</span>
+                            </TableCell>
+                        </TableRow>
+
+                        {expandido && grupo.itens.map(colheita => (
+                            <TableRow key={colheita.id} className="bg-stone-50/50 border-l-4 border-l-emerald-200">
+                                <TableCell className="pl-10 text-xs text-stone-500" colSpan={3}></TableCell>
+                                <TableCell className="text-sm font-medium text-stone-700">{tipoColheitaLabel(colheita.tipo_colheita)}</TableCell>
+                                <TableCell className="text-right">
                                     <div className="flex flex-col items-end">
-                                        <span className="font-bold text-red-600">R$ {custoTotalLinha.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                                        <span className="text-xs text-stone-500 font-medium mt-0.5">R$ {colheita.custo_colheita.toFixed(2)}/{colheita.unidade_custo}</span>
+                                        {colheita.quantidade_kg > 0 && <span className="text-sm text-stone-600">{colheita.quantidade_kg.toLocaleString('pt-BR')} kg</span>}
+                                        {colheita.quantidade_caixas > 0 && <span className="text-xs text-blue-600">{colheita.quantidade_caixas.toLocaleString('pt-BR')} cx</span>}
                                     </div>
-                                );
-                            })() : <span className="text-stone-500">-</span>}
-                        </TableCell>
-                        <TableCell className="text-right pr-6">
-                            <div className="flex justify-end gap-1">
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-stone-500 hover:text-stone-700 hover:bg-stone-100 rounded-lg" onClick={() => handleEdit(colheita)}><Edit className="w-4 h-4" /></Button>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-red-300 hover:text-red-500 hover:bg-red-50 rounded-lg" onClick={() => { if (confirm("Excluir esta colheita? Essa ação não pode ser desfeita.")) deleteMutation.mutate(colheita.id) }}><Trash2 className="w-4 h-4" /></Button>
-                            </div>
-                        </TableCell>
-                    </TableRow>
-                ))}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                    <div className="flex flex-col items-end">
+                                        <span className="text-sm font-bold text-emerald-600">R$ {colheita.valor_total?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                                        <span className="text-[11px] text-stone-500">R$ {colheita.preco_unitario?.toFixed(2)}/{colheita.unidade_preco}</span>
+                                    </div>
+                                </TableCell>
+                                <TableCell></TableCell>
+                                <TableCell className="text-right pr-6">
+                                    <div className="flex justify-end gap-1">
+                                        <Button variant="ghost" size="icon" className="h-7 w-7 text-stone-500 hover:text-stone-700 hover:bg-stone-100 rounded-lg" onClick={(e) => { e.stopPropagation(); handleEdit(colheita); }}><Edit className="w-3.5 h-3.5" /></Button>
+                                        <Button variant="ghost" size="icon" className="h-7 w-7 text-red-300 hover:text-red-500 hover:bg-red-50 rounded-lg" onClick={(e) => { e.stopPropagation(); if (confirm("Excluir esta colheita? Essa ação não pode ser desfeita.")) deleteMutation.mutate(colheita.id); }}><Trash2 className="w-3.5 h-3.5" /></Button>
+                                    </div>
+                                </TableCell>
+                            </TableRow>
+                        ))}
+                    </React.Fragment>
+                    );
+                })}
                 </TableBody>
             </Table>
             </div>
