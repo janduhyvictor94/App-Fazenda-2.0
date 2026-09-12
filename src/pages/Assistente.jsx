@@ -221,11 +221,14 @@ export default function Assistente() {
         const somaQtd = dados.itens.reduce((acc, item) => acc + (dados.custo_unidade === 'kg' ? numero(item.quantidade_kg) : numero(item.quantidade_caixas)), 0);
         const custoTotal = somaQtd * custoUnit;
         if (custoTotal > 0) {
-          // Antes de criar o custo, checa se já não existe um pra esse talhão/dia —
-          // evita duplicar se você (ou a IA) mandar a mesma colheita duas vezes.
-          const { data: custoExistente } = await supabase.from('custos').select('id, descricao, valor').eq('categoria', 'colheita').eq('talhao_id', talhao.id).eq('data', data).limit(1);
-          if (custoExistente && custoExistente.length > 0) {
-            throw new Error(`Já existe um custo de colheita lançado pra ${talhao.nome} em ${data} (R$${custoExistente[0].valor}). As caixas foram registradas, mas o custo NÃO foi duplicado — edite o lançamento existente no Financeiro se precisar ajustar o valor.`);
+          // Só bloqueia se já existir um custo IDÊNTICO (mesmo talhão, mesmo dia, MESMO
+          // VALOR) — isso sim é sinal forte de reenvio acidental. Duas colheitas
+          // diferentes no mesmo dia (ex: manhã e tarde), com valores diferentes, são
+          // lançamentos legítimos e distintos — não devem ser bloqueados.
+          const { data: custosDoDia } = await supabase.from('custos').select('id, descricao, valor').eq('categoria', 'colheita').eq('talhao_id', talhao.id).eq('data', data);
+          const duplicataExata = (custosDoDia || []).find(c => Math.abs((c.valor || 0) - custoTotal) < 0.01);
+          if (duplicataExata) {
+            throw new Error(`Já existe um custo de colheita IDÊNTICO (R$${custoTotal.toFixed(2)}) lançado pra ${talhao.nome} em ${data} — parece repetição da mesma colheita. As caixas foram registradas, mas esse custo específico NÃO foi duplicado. Se for realmente uma colheita diferente no mesmo dia, confira o lançamento no Financeiro.`);
           }
           const resumoTipos = dados.itens.map(i => i.tipo_colheita).join(' + ');
           const { error: errCusto } = await supabase.from('custos').insert({
