@@ -138,17 +138,22 @@ export default function Colheitas() {
 
       const custosParaInserir = [...custosIndividuais, ...custosDeLotes];
       if (custosParaInserir.length > 0) {
-        // Checa se já existe custo de colheita pra algum desses talhão+dia — evita
-        // duplicar se a mesma colheita for enviada mais de uma vez sem querer.
-        const paresUnicos = [...new Set(custosParaInserir.map(c => `${c.talhao_id}|${c.data}`))];
+        // Só bloqueia se já existir um custo IDÊNTICO (mesmo talhão, mesmo dia, MESMO
+        // VALOR) — sinal forte de reenvio acidental. Duas colheitas diferentes no mesmo
+        // dia (ex: manhã e tarde), com valores diferentes, são lançamentos legítimos e
+        // distintos — não devem ser bloqueados só por caírem no mesmo dia.
+        const talhoesEnvolvidos = [...new Set(custosParaInserir.map(c => c.talhao_id))];
         const { data: existentes } = await supabase
           .from('custos')
-          .select('talhao_id, data')
+          .select('talhao_id, data, valor')
           .eq('categoria', 'colheita')
-          .in('talhao_id', paresUnicos.map(p => p.split('|')[0]));
-        const paresExistentes = new Set((existentes || []).map(e => `${e.talhao_id}|${e.data}`));
+          .in('talhao_id', talhoesEnvolvidos);
 
-        const custosNovos = custosParaInserir.filter(c => !paresExistentes.has(`${c.talhao_id}|${c.data}`));
+        const ehDuplicataExata = (novo) => (existentes || []).some(e =>
+          e.talhao_id === novo.talhao_id && e.data === novo.data && Math.abs((e.valor || 0) - novo.valor) < 0.01
+        );
+
+        const custosNovos = custosParaInserir.filter(c => !ehDuplicataExata(c));
         const custosIgnorados = custosParaInserir.length - custosNovos.length;
 
         if (custosNovos.length > 0) {
@@ -156,7 +161,7 @@ export default function Colheitas() {
           if (errCustos) throw errCustos;
         }
         if (custosIgnorados > 0) {
-          alert(`As colheitas foram registradas normalmente, mas ${custosIgnorados} custo(s) de colheita NÃO foram lançados porque já existia um custo pra aquele talhão/dia — edite o lançamento existente no Financeiro se precisar ajustar o valor.`);
+          alert(`As colheitas foram registradas normalmente, mas ${custosIgnorados} custo(s) de colheita NÃO foram lançados porque já existia um custo IDÊNTICO (mesmo talhão, dia e valor) — parecia repetição. Confira no Financeiro se precisar ajustar.`);
         }
       }
     },
