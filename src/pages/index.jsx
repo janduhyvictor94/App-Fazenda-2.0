@@ -28,6 +28,8 @@ import Safras from "./Safras"; // Nova página Safras
 
 import Planejamentos from "./Planejamentos"; // Planejamento de Ciclos por Cultura
 
+import Assistente from "./Assistente"; // Assistente com IA
+
 import { BrowserRouter as Router, Route, Routes, useLocation } from 'react-router-dom';
 
 const PAGES = {
@@ -47,6 +49,8 @@ const PAGES = {
     Safras: Safras, // Novo registro Safras
 
     Planejamentos: Planejamentos, // Planejamento de Ciclos por Cultura
+
+    Assistente: Assistente, // Assistente com IA
     
     Calendario: Calendario,
     
@@ -102,6 +106,8 @@ function PagesContent() {
                 <Route path="/Safras" element={<Safras />} /> {/* Nova Rota Safras */}
 
                 <Route path="/Planejamentos" element={<Planejamentos />} /> {/* Planejamento de Ciclos por Cultura */}
+
+                <Route path="/Assistente" element={<Assistente />} /> {/* Assistente com IA */}
                 
                 <Route path="/Calendario" element={<Calendario />} />
                 
