@@ -163,7 +163,11 @@ export default function Assistente() {
       }
     }
 
-    tabelasAfetadas.forEach(t => queryClient.invalidateQueries({ queryKey: [t] }));
+    tabelasAfetadas.forEach(t => {
+      queryClient.invalidateQueries({ queryKey: [t] });
+      if (t === 'colheitas') queryClient.invalidateQueries({ queryKey: ['custos-colheita'] });
+      if (t === 'custos') queryClient.invalidateQueries({ queryKey: ['custos-colheita'] });
+    });
 
     let textoResultado = '';
     if (sucessos.length > 0) textoResultado += `✅ Salvo: ${sucessos.join(', ')}.\n`;
