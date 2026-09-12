@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils';
 import ThemeSwitcher from '@/components/ui/ThemeSwitcher';
 
 const navigation = [
+  { name: 'Assistente', icon: Sparkles, page: 'Assistente' },
   { name: 'Dashboard', icon: LayoutDashboard, page: 'Dashboard' },
   // NOVA ABA SAFRAS AQUI, LOGO APÓS O DASHBOARD PARA DESTAQUE
   { name: 'Gestão de Safras', icon: Sprout, page: 'Safras' }, 
