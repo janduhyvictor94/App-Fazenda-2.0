@@ -138,8 +138,26 @@ export default function Colheitas() {
 
       const custosParaInserir = [...custosIndividuais, ...custosDeLotes];
       if (custosParaInserir.length > 0) {
-        const { error: errCustos } = await supabase.from('custos').insert(custosParaInserir);
-        if (errCustos) throw errCustos;
+        // Checa se já existe custo de colheita pra algum desses talhão+dia — evita
+        // duplicar se a mesma colheita for enviada mais de uma vez sem querer.
+        const paresUnicos = [...new Set(custosParaInserir.map(c => `${c.talhao_id}|${c.data}`))];
+        const { data: existentes } = await supabase
+          .from('custos')
+          .select('talhao_id, data')
+          .eq('categoria', 'colheita')
+          .in('talhao_id', paresUnicos.map(p => p.split('|')[0]));
+        const paresExistentes = new Set((existentes || []).map(e => `${e.talhao_id}|${e.data}`));
+
+        const custosNovos = custosParaInserir.filter(c => !paresExistentes.has(`${c.talhao_id}|${c.data}`));
+        const custosIgnorados = custosParaInserir.length - custosNovos.length;
+
+        if (custosNovos.length > 0) {
+          const { error: errCustos } = await supabase.from('custos').insert(custosNovos);
+          if (errCustos) throw errCustos;
+        }
+        if (custosIgnorados > 0) {
+          alert(`As colheitas foram registradas normalmente, mas ${custosIgnorados} custo(s) de colheita NÃO foram lançados porque já existia um custo pra aquele talhão/dia — edite o lançamento existente no Financeiro se precisar ajustar o valor.`);
+        }
       }
     },
     onSuccess: () => {
