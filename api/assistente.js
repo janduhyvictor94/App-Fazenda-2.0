@@ -344,6 +344,22 @@ REGRAS IMPORTANTES:
       });
     }
 
+    // Rede de segurança pro custo de colheita: a extração livre da IA às vezes deixa esse
+    // campo de fora mesmo quando mencionado. Em vez de confiar só nisso, procura o padrão
+    // "custo de X reais por caixa/kg" direto no texto original do usuário e usa como
+    // reforço/correção se a ferramenta não tiver preenchido (ou preenchido diferente).
+    const regexCusto = /custo[^.]{0,40}?(?:r\$)?\s*(\d+(?:[.,]\d+)?)\s*reais?\s*(?:por|\/|a)\s*(caixa|cx|kg|quilo)/i;
+    for (const c of chamadasFerramenta) {
+      if (c.name === 'registrar_colheita') {
+        const matchTextoUsuario = mensagem.match(regexCusto);
+        if (matchTextoUsuario && !c.input.custo_colheita_unitario) {
+          c.input.custo_colheita_unitario = parseFloat(matchTextoUsuario[1].replace(',', '.'));
+          const unidadeTexto = matchTextoUsuario[2].toLowerCase();
+          c.input.custo_unidade = (unidadeTexto === 'kg' || unidadeTexto === 'quilo') ? 'kg' : 'caixa';
+        }
+      }
+    }
+
     // Caso 3: uma ou mais ações de cadastro -> devolve pra confirmação (NADA é salvo aqui)
     // Como a ferramenta foi "chamada" mas ainda não executada de verdade, a conversa
     // precisa de um tool_result sintético pra ficar estruturalmente válida pra próxima
