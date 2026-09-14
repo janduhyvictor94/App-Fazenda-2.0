@@ -41,6 +41,65 @@ const numero = (v, padrao = 0) => {
   return Number.isFinite(n) ? n : padrao;
 };
 
+// Tabelas em que a exclusão pelo assistente é permitida — dados do dia a dia, sem
+// dependência entre tabelas. Talhões/funcionários/insumos/safras ficam de fora de
+// propósito (têm tratamento especial nas telas próprias).
+const TABELAS_EXCLUSAO_PERMITIDAS = ['colheitas', 'atividades', 'custos', 'pluviometria', 'consultorias'];
+
+const CAMPO_DATA_POR_TABELA = { colheitas: 'data', custos: 'data', pluviometria: 'data', atividades: 'data_programada', consultorias: 'data_visita' };
+
+// Busca de verdade no banco o que combina com os filtros que a IA extraiu — a
+// exclusão nunca acontece "de olhos fechados", sempre em cima do que existe.
+const buscarPreviewExclusao = async (dados, ctx) => {
+  const { tabela, talhao_nome, data, data_inicio, data_fim, tipo_ou_categoria, texto_descricao } = dados;
+  if (!TABELAS_EXCLUSAO_PERMITIDAS.includes(tabela)) {
+    throw new Error(`Não é possível excluir dados de "${tabela}" pelo assistente — talhões, funcionários, insumos e safras têm dependências entre tabelas e precisam ser excluídos na tela própria.`);
+  }
+
+  let query = supabase.from(tabela).select('*');
+  const campoData = CAMPO_DATA_POR_TABELA[tabela];
+
+  if (talhao_nome) {
+    const { item: talhao } = encontrarPorNome(ctx.talhoes, talhao_nome);
+    if (!talhao) throw new Error(`Talhão "${talhao_nome}" não encontrado.`);
+    query = query.eq('talhao_id', talhao.id);
+  }
+  if (data) query = query.eq(campoData, data);
+  if (data_inicio) query = query.gte(campoData, data_inicio);
+  if (data_fim) query = query.lte(campoData, data_fim);
+  if (tipo_ou_categoria) {
+    const campoTipo = tabela === 'colheitas' ? 'tipo_colheita' : tabela === 'atividades' ? 'tipo' : tabela === 'custos' ? 'categoria' : null;
+    if (campoTipo) query = query.ilike(campoTipo, `%${tipo_ou_categoria}%`);
+  }
+  if (texto_descricao) {
+    const campoTexto = tabela === 'custos' ? 'descricao' : tabela === 'consultorias' ? 'consultor_nome' : null;
+    if (campoTexto) query = query.ilike(campoTexto, `%${texto_descricao}%`);
+  }
+
+  const { data: registros, error } = await query.limit(300);
+  if (error) throw error;
+  return registros || [];
+};
+
+// Valor monetário de um registro, quando existir (pra mostrar o total afetado).
+const valorRegistro = (tabela, r) => {
+  if (tabela === 'colheitas') return r.valor_total || 0;
+  if (tabela === 'atividades') return r.custo_total || 0;
+  if (tabela === 'custos') return r.valor || 0;
+  return 0;
+};
+
+// Descrição legível de um registro pra mostrar na lista de confirmação.
+const descreverRegistro = (tabela, r, talhoes) => {
+  const nomeTalhao = (id) => talhoes.find(t => t.id === id)?.nome || 'Geral';
+  if (tabela === 'colheitas') return `${r.data} · ${nomeTalhao(r.talhao_id)} · ${r.tipo_colheita} · R$${(r.valor_total || 0).toFixed(2)}`;
+  if (tabela === 'atividades') return `${r.data_programada} · ${nomeTalhao(r.talhao_id)} · ${r.tipo} · R$${(r.custo_total || 0).toFixed(2)}`;
+  if (tabela === 'custos') return `${r.data} · ${r.descricao} · R$${(r.valor || 0).toFixed(2)}`;
+  if (tabela === 'pluviometria') return `${r.data} · ${nomeTalhao(r.talhao_id)} · ${r.quantidade_mm}mm`;
+  if (tabela === 'consultorias') return `${r.data_visita} · ${r.consultor_nome}`;
+  return JSON.stringify(r);
+};
+
 // A conversa fica guardada no navegador — assim ela sobrevive a um recarregamento
 // de página ou troca de aba, e você sempre vê o que já foi mandado.
 const CHAVE_MENSAGENS = 'fazenda_assistente_mensagens';
@@ -66,6 +125,7 @@ export default function Assistente() {
   const [historicoAPI, setHistoricoAPI] = useState(() => carregarDoStorage(CHAVE_HISTORICO_API, []));
   const [propostaPendente, setPropostaPendente] = useState(() => carregarDoStorage(CHAVE_PROPOSTA, null));
   const [salvando, setSalvando] = useState(false);
+  const [confirmacaoExtra, setConfirmacaoExtra] = useState('');
   const fimDaListaRef = useRef(null);
 
   const { data: talhoes = [], isLoading: carregandoTalhoes } = useQuery({ queryKey: ['talhoes'], queryFn: async () => { const { data } = await supabase.from('talhoes').select('*'); return data || []; } });
@@ -117,9 +177,22 @@ export default function Assistente() {
         setHistoricoAPI(dados.historico_atualizado || historicoAPI);
       } else if (dados.tipo === 'proposta') {
         setMensagens(prev => [...prev, { autor: 'ia', texto: dados.resumo }]);
+        // Se a proposta envolve excluir dados, busca AGORA os registros reais que
+        // combinam com o filtro — a exclusão nunca acontece "no escuro", só em cima
+        // do que realmente existe no banco.
+        const propostasComPreview = await Promise.all(dados.propostas.map(async (p) => {
+          if (p.ferramenta !== 'excluir_dados') return p;
+          try {
+            const registros = await buscarPreviewExclusao(p.dados, { talhoes });
+            return { ...p, __preview: registros };
+          } catch (err) {
+            return { ...p, __previewErro: err.message };
+          }
+        }));
+        setConfirmacaoExtra('');
         // Se já existia uma proposta pendente e essa nova é uma correção/complemento
         // dela (ex: você lembrou de mandar o custo depois), ela substitui a anterior.
-        setPropostaPendente({ propostas: dados.propostas });
+        setPropostaPendente({ propostas: propostasComPreview });
         setHistoricoAPI(dados.historico_atualizado || historicoAPI);
       }
     } catch (err) {
@@ -131,9 +204,15 @@ export default function Assistente() {
 
   const cancelarProposta = () => {
     setPropostaPendente(null);
+    setConfirmacaoExtra('');
     setHistoricoAPI([]); // fecha o "assunto" — próxima mensagem começa do zero, sem risco de ficar preso num estado antigo
     setMensagens(prev => [...prev, { autor: 'ia', texto: 'Ok, não salvei nada.' }]);
   };
+
+  // Quantos registros no total seriam excluídos por essa proposta (soma de todos
+  // os itens de excluir_dados) — usado pra decidir se pede a confirmação extra.
+  const totalParaExcluir = propostaPendente?.propostas.filter(p => p.ferramenta === 'excluir_dados').reduce((acc, p) => acc + (p.__preview?.length || 0), 0) || 0;
+  const temExclusaoEmMassa = totalParaExcluir > 3;
 
   const confirmarProposta = async () => {
     if (!propostaPendente || salvando) return; // trava contra clique duplo
@@ -143,6 +222,12 @@ export default function Assistente() {
     }
     if (!propostaPendente.propostas || propostaPendente.propostas.length === 0) {
       setPropostaPendente(null);
+      return;
+    }
+    // Exclusão de mais de 3 registros exige digitar "EXCLUIR" antes de confirmar —
+    // fricção proporcional ao risco, pra evitar apagar em massa por engano.
+    if (temExclusaoEmMassa && confirmacaoExtra.trim().toUpperCase() !== 'EXCLUIR') {
+      setMensagens(prev => [...prev, { autor: 'ia', texto: `Isso vai excluir ${totalParaExcluir} registros — digite "EXCLUIR" no campo indicado pra confirmar.` }]);
       return;
     }
 
@@ -156,6 +241,22 @@ export default function Assistente() {
     // erro genérico que esconde o que já entrou no banco).
     for (const item of propostaPendente.propostas) {
       try {
+        if (item.ferramenta === 'excluir_dados') {
+          if (item.__previewErro) throw new Error(item.__previewErro);
+          const registros = item.__preview || [];
+          if (registros.length === 0) {
+            sucessos.push(`Exclusão em ${item.dados.tabela}: nenhum registro encontrado com esses filtros — nada foi excluído.`);
+          } else {
+            const ids = registros.map(r => r.id);
+            const { error } = await supabase.from(item.dados.tabela).delete().in('id', ids);
+            if (error) throw error;
+            sucessos.push(`Excluídos ${ids.length} registro(s) de ${item.dados.tabela}.`);
+            tabelasAfetadas.add(item.dados.tabela);
+            if (item.dados.tabela === 'custos') tabelasAfetadas.add('custos-colheita');
+          }
+          continue;
+        }
+
         const tabela = await executarAcao(item.ferramenta, item.dados, { talhoes, insumos, funcionarios });
         if (tabela) tabelasAfetadas.add(tabela);
         if (item.dados.__relatorio) {
@@ -170,8 +271,7 @@ export default function Assistente() {
 
     tabelasAfetadas.forEach(t => {
       queryClient.invalidateQueries({ queryKey: [t] });
-      if (t === 'colheitas') queryClient.invalidateQueries({ queryKey: ['custos-colheita'] });
-      if (t === 'custos') queryClient.invalidateQueries({ queryKey: ['custos-colheita'] });
+      if (t === 'colheitas' || t === 'custos') queryClient.invalidateQueries({ queryKey: ['custos-colheita'] });
     });
 
     let textoResultado = '';
@@ -540,7 +640,8 @@ export default function Assistente() {
     criar_insumo: 'Novo Insumo',
     criar_safra: 'Nova Safra',
     registrar_consultoria: 'Consultoria',
-    marcar_folha_paga: 'Pagamento de Folha'
+    marcar_folha_paga: 'Pagamento de Folha',
+    excluir_dados: 'Exclusão de Dados'
   };
 
   // Resumo legível de cada proposta, pra você conferir de relance antes de
@@ -619,29 +720,79 @@ export default function Assistente() {
             </div>
           ))}
 
-          {propostaPendente && (
-            <div className="ml-11 bg-emerald-50 border border-emerald-200 rounded-2xl p-4 space-y-3">
-              <p className="text-xs font-bold text-emerald-800 uppercase tracking-wide">Confirme antes de salvar</p>
-              {propostaPendente.propostas.map((p, idx) => (
-                <div key={idx} className="bg-white rounded-xl p-3 border border-emerald-100 text-sm">
-                  <p className="font-bold text-stone-800 mb-1.5">{rotuloFerramenta[p.ferramenta] || p.ferramenta}</p>
-                  <div className="space-y-0.5">
-                    {resumoProposta(p.ferramenta, p.dados).map((linha, i) => (
-                      <p key={i} className={linha.includes('NÃO informado') ? 'text-xs font-bold text-red-600' : 'text-xs text-stone-600'}>{linha}</p>
-                    ))}
+          {propostaPendente && (() => {
+            const algumaExclusao = propostaPendente.propostas.some(p => p.ferramenta === 'excluir_dados');
+            return (
+            <div className={`ml-11 rounded-2xl p-4 space-y-3 border ${algumaExclusao ? 'bg-red-50 border-red-200' : 'bg-emerald-50 border-emerald-200'}`}>
+              <p className={`text-xs font-bold uppercase tracking-wide ${algumaExclusao ? 'text-red-800' : 'text-emerald-800'}`}>
+                {algumaExclusao ? '⚠️ Confirme a exclusão' : 'Confirme antes de salvar'}
+              </p>
+              {propostaPendente.propostas.map((p, idx) => {
+                if (p.ferramenta === 'excluir_dados') {
+                  return (
+                    <div key={idx} className="bg-white rounded-xl p-3 border border-red-100 text-sm">
+                      <p className="font-bold text-red-700 mb-1.5">Excluir de: {p.dados.tabela}</p>
+                      {p.__previewErro ? (
+                        <p className="text-xs font-bold text-red-600">{p.__previewErro}</p>
+                      ) : !p.__preview || p.__preview.length === 0 ? (
+                        <p className="text-xs text-stone-500 italic">Nenhum registro encontrado com esses filtros — nada será excluído.</p>
+                      ) : (
+                        <>
+                          <p className="text-xs font-bold text-red-600 mb-2">
+                            {p.__preview.length} registro(s) encontrado(s)
+                            {valorRegistro(p.dados.tabela, p.__preview[0]) !== undefined && p.__preview.some(r => valorRegistro(p.dados.tabela, r) > 0) && (
+                              <> · total R$ {p.__preview.reduce((acc, r) => acc + valorRegistro(p.dados.tabela, r), 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</>
+                            )}
+                          </p>
+                          <div className="max-h-40 overflow-y-auto space-y-1 border border-stone-100 rounded-lg p-2 bg-stone-50">
+                            {p.__preview.map(r => (
+                              <p key={r.id} className="text-[11px] text-stone-600">{descreverRegistro(p.dados.tabela, r, talhoes)}</p>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  );
+                }
+                return (
+                  <div key={idx} className="bg-white rounded-xl p-3 border border-emerald-100 text-sm">
+                    <p className="font-bold text-stone-800 mb-1.5">{rotuloFerramenta[p.ferramenta] || p.ferramenta}</p>
+                    <div className="space-y-0.5">
+                      {resumoProposta(p.ferramenta, p.dados).map((linha, i) => (
+                        <p key={i} className={linha.includes('NÃO informado') ? 'text-xs font-bold text-red-600' : 'text-xs text-stone-600'}>{linha}</p>
+                      ))}
+                    </div>
                   </div>
+                );
+              })}
+
+              {temExclusaoEmMassa && (
+                <div className="space-y-1.5 pt-1">
+                  <p className="text-xs font-bold text-red-700">Isso vai excluir {totalParaExcluir} registros de uma vez. Digite EXCLUIR pra confirmar:</p>
+                  <input
+                    value={confirmacaoExtra}
+                    onChange={(e) => setConfirmacaoExtra(e.target.value)}
+                    placeholder="EXCLUIR"
+                    className="w-full rounded-xl border border-red-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300"
+                  />
                 </div>
-              ))}
+              )}
+
               <div className="flex gap-2 pt-1">
-                <Button onClick={confirmarProposta} disabled={salvando || contextoCarregando} className="flex-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-10">
-                  {salvando ? <Loader2 className="w-4 h-4 animate-spin" /> : contextoCarregando ? 'Carregando dados...' : <><Check className="w-4 h-4 mr-2" /> Confirmar e Salvar</>}
+                <Button
+                  onClick={confirmarProposta}
+                  disabled={salvando || contextoCarregando || (temExclusaoEmMassa && confirmacaoExtra.trim().toUpperCase() !== 'EXCLUIR')}
+                  className={`flex-1 rounded-xl text-white font-bold h-10 ${algumaExclusao ? 'bg-red-600 hover:bg-red-700' : 'bg-emerald-600 hover:bg-emerald-700'}`}
+                >
+                  {salvando ? <Loader2 className="w-4 h-4 animate-spin" /> : contextoCarregando ? 'Carregando dados...' : algumaExclusao ? <><Trash2 className="w-4 h-4 mr-2" /> Excluir Permanentemente</> : <><Check className="w-4 h-4 mr-2" /> Confirmar e Salvar</>}
                 </Button>
                 <Button onClick={cancelarProposta} disabled={salvando} variant="outline" className="rounded-xl border-stone-200 h-10">
                   <X className="w-4 h-4" />
                 </Button>
               </div>
             </div>
-          )}
+            );
+          })()}
 
           {carregando && (
             <div className="flex gap-3 justify-start">
