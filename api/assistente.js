@@ -202,6 +202,23 @@ const FERRAMENTAS = [
     }
   },
   {
+    name: 'excluir_dados',
+    description: 'Exclui um ou mais registros de dados do dia a dia (colheitas, atividades, pagamentos/custos, chuva, consultorias) — nunca use pra excluir talhões, funcionários, insumos ou safras (essas têm telas próprias com tratamento especial). Use quando o usuário pedir pra apagar, remover, desfazer ou "limpar"/"reiniciar" lançamentos. Extraia filtros o mais específico possível a partir do que o usuário disse — o sistema mesmo vai buscar e mostrar exatamente o que combina antes de apagar de verdade, então não precisa ter certeza absoluta, só extrair o que foi dito.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        tabela: { type: 'string', enum: ['colheitas', 'atividades', 'custos', 'pluviometria', 'consultorias'] },
+        talhao_nome: { type: 'string', description: 'Opcional — nome do talhão/área, se mencionado' },
+        data: { type: 'string', description: 'YYYY-MM-DD — se for um dia específico' },
+        data_inicio: { type: 'string', description: 'YYYY-MM-DD — início de um período/mês, se mencionado' },
+        data_fim: { type: 'string', description: 'YYYY-MM-DD — fim de um período/mês, se mencionado' },
+        tipo_ou_categoria: { type: 'string', description: 'Opcional — tipo de atividade/colheita ou categoria de custo, se mencionado' },
+        texto_descricao: { type: 'string', description: 'Opcional — trecho de texto pra buscar na descrição (ex: "água", "luz") ou nome do consultor' }
+      },
+      required: ['tabela']
+    }
+  },
+  {
     name: 'consultar_dados',
     description: 'Use para PERGUNTAS sobre dados já existentes (quanto foi gasto, quanto foi colhido, qual o salário de alguém, etc.) — NUNCA para cadastrar algo novo.',
     input_schema: {
@@ -284,7 +301,8 @@ REGRAS IMPORTANTES:
 6. Seja direto e objetivo — sem enrolação, sem saudação longa.
 7. Em "registrar_colheita": se o usuário mencionar QUALQUER custo de colheita (ex: "custo de 4 reais por caixa", "paguei 4 reais pra colher"), SEMPRE preencha custo_colheita_unitario e custo_unidade na chamada — nunca deixe esses campos de fora quando essa informação foi dada, mesmo que venha numa frase separada dentro da mesma mensagem.
 8. Se uma ação anterior na conversa AINDA NÃO foi confirmada pelo usuário (você vê isso pelo histórico: você chamou uma ferramenta e a resposta foi só "aguardando confirmação") e a nova mensagem do usuário claramente corrige ou completa aquela mesma ação (ex: ele esqueceu de mencionar um valor e agora está complementando), chame a MESMA ferramenta de novo com TODAS as informações já reunidas (as antigas + a nova) — não só a informação nova sozinha. Isso substitui a proposta anterior por uma completa.
-9. PRINCÍPIO GERAL: nunca pergunte uma informação que já está disponível no contexto acima (nomes e salários de funcionários, preços e embalagens de insumos, área/cultura de talhões). Se o usuário disser "pague o salário de todo mundo" ou "o funcionário X", use os dados que você já tem — só pergunte o que genuinamente não está em lugar nenhum (ex: se foi terceirizada uma atividade, ou uma data ambígua).`;
+9. PRINCÍPIO GERAL: nunca pergunte uma informação que já está disponível no contexto acima (nomes e salários de funcionários, preços e embalagens de insumos, área/cultura de talhões). Se o usuário disser "pague o salário de todo mundo" ou "o funcionário X", use os dados que você já tem — só pergunte o que genuinamente não está em lugar nenhum (ex: se foi terceirizada uma atividade, ou uma data ambígua).
+10. Exclusão de dados (excluir_dados) é diferente das outras ações: você só extrai os FILTROS do que o usuário descreveu (talhão, data/período, tipo, texto) — o sistema busca e mostra os registros reais que combinam antes de decidir apagar, então não precisa ter certeza absoluta nem pedir confirmação em texto antes. Nunca use excluir_dados pra talhões, funcionários, insumos ou safras — se o usuário pedir isso, explique que precisa ser feito na tela própria.`;
 
     const mensagens = [
       ...historico,
