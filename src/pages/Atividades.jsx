@@ -90,6 +90,27 @@ export default function Atividades() {
   const { data: tiposCustomizados = [] } = useQuery({ queryKey: ['tipos-atividade'], queryFn: async () => { const { data } = await supabase.from('tipos_atividade').select('*'); return data || []; } });
   const { data: safras = [] } = useQuery({ queryKey: ['safras'], queryFn: async () => { const { data } = await supabase.from('safras').select('*').order('data_inicio', { ascending: false }); return data || []; } });
 
+  // Agrupa as safras por cultura (do talhão) — a query já vem ordenada por data,
+  // então dentro de cada grupo a ordem por data de início já sai certa sozinha.
+  const safrasPorCultura = useMemo(() => {
+    const grupos = {};
+    safras.forEach(safra => {
+      const talhao = talhoes.find(t => String(t.id) === String(safra.talhao_id));
+      const cultura = talhao?.cultura || 'outras';
+      if (!grupos[cultura]) grupos[cultura] = [];
+      grupos[cultura].push(safra);
+    });
+    // Ordem fixa das culturas mais comuns primeiro, qualquer outra entra depois em ordem alfabética.
+    const ordemPreferida = ['manga', 'goiaba'];
+    return Object.entries(grupos).sort(([a], [b]) => {
+      const idxA = ordemPreferida.indexOf(a), idxB = ordemPreferida.indexOf(b);
+      if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+      if (idxA !== -1) return -1;
+      if (idxB !== -1) return 1;
+      return a.localeCompare(b);
+    });
+  }, [safras, talhoes]);
+
   const areasResumo = useMemo(() => {
     return talhoes.map(talhao => {
         const atividadesArea = atividades.filter(a => a.talhao_id === talhao.id);
@@ -349,68 +370,79 @@ export default function Atividades() {
                         <Badge variant="outline" className="mx-auto mt-2 bg-white text-stone-500">Histórico Completo</Badge>
                     </CardHeader>
                 </Card>
-
-                {safras.map(safra => {
-                    const talhao = talhoes.find(t => String(t.id) === String(safra.talhao_id));
-                    
-                    // NOVA LÓGICA DE BLINDAGEM MAIS FORTE:
-                    const statusText = String(safra.status || '').toLowerCase();
-                    const nomeText = String(safra.nome || '').toLowerCase();
-                    const hojeStr = new Date().toISOString().split('T')[0]; // Data de hoje no formato YYYY-MM-DD
-                    
-                    // A safra é finalizada se o status/nome disser, se "ativa" for falso, ou se a data de término já tiver passado de hoje
-                    const isFinalizada = 
-                        statusText === 'concluida' || 
-                        statusText === 'finalizada' || 
-                        statusText === 'encerrada' || 
-                        statusText === 'arquivada' || 
-                        safra.ativa === false ||
-                        safra.arquivada === true ||
-                        nomeText.includes('arquivada') || 
-                        nomeText.includes('arqui') || 
-                        nomeText.includes('finalizada') ||
-                        (safra.data_fim && safra.data_fim < hojeStr);
-
-                    return (
-                        <Card 
-                            key={safra.id} 
-                            onClick={() => handleSelecionarSafra(safra.id)}
-                            className={`cursor-pointer transition-all border group flex flex-col justify-center relative overflow-hidden ${
-                                isFinalizada 
-                                ? "bg-stone-100 border-stone-300 border-dashed hover:border-stone-400 hover:bg-stone-200/50 opacity-80" 
-                                : "bg-white border-stone-200 hover:border-emerald-500 hover:shadow-md"
-                            }`}
-                        >
-                            {/* Etiqueta Visual de Finalizada */}
-                            {isFinalizada && (
-                                <div className="absolute top-3 right-3">
-                                    <Badge className="bg-stone-300 text-stone-700 hover:bg-stone-400 border-none shadow-none text-[11px] uppercase tracking-wider font-bold">Finalizada</Badge>
-                                </div>
-                            )}
-
-                            <CardHeader className="text-center py-8">
-                                {isFinalizada ? (
-                                    <Archive className="w-10 h-10 mx-auto mb-3 text-stone-500 group-hover:text-stone-500 transition-colors" />
-                                ) : (
-                                    <CalendarIcon className="w-10 h-10 mx-auto mb-3 text-emerald-600/50 group-hover:text-emerald-500 transition-colors" />
-                                )}
-                                
-                                <CardTitle className={`text-lg font-bold truncate px-2 ${
-                                    isFinalizada ? "text-stone-500 group-hover:text-stone-700" : "text-stone-800 group-hover:text-emerald-700"
-                                }`} title={safra.nome}>
-                                    {safra.nome}
-                                </CardTitle>
-                                
-                                <Badge variant="outline" className={`mx-auto mt-2 font-bold ${
-                                    isFinalizada ? "bg-stone-200 border-stone-300 text-stone-600" : "bg-emerald-50 border-emerald-200 text-emerald-700"
-                                }`}>
-                                    {talhao ? talhao.nome : 'Sem Válvula'}
-                                </Badge>
-                            </CardHeader>
-                        </Card>
-                    );
-                })}
             </div>
+
+            {safrasPorCultura.map(([cultura, safrasDoGrupo]) => (
+                <div key={cultura} className="space-y-3">
+                    <div className="flex items-center gap-2 pt-2">
+                        <span className="text-lg">{cultura === 'manga' ? '🥭' : cultura === 'goiaba' ? '🍈' : '🌱'}</span>
+                        <h2 className="text-sm font-bold text-stone-500 uppercase tracking-wider">{cultura.charAt(0).toUpperCase() + cultura.slice(1)}</h2>
+                        <span className="text-xs text-stone-400">({safrasDoGrupo.length})</span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                        {safrasDoGrupo.map(safra => {
+                            const talhao = talhoes.find(t => String(t.id) === String(safra.talhao_id));
+
+                            // NOVA LÓGICA DE BLINDAGEM MAIS FORTE:
+                            const statusText = String(safra.status || '').toLowerCase();
+                            const nomeText = String(safra.nome || '').toLowerCase();
+                            const hojeStr = new Date().toISOString().split('T')[0]; // Data de hoje no formato YYYY-MM-DD
+
+                            // A safra é finalizada se o status/nome disser, se "ativa" for falso, ou se a data de término já tiver passado de hoje
+                            const isFinalizada =
+                                statusText === 'concluida' ||
+                                statusText === 'finalizada' ||
+                                statusText === 'encerrada' ||
+                                statusText === 'arquivada' ||
+                                safra.ativa === false ||
+                                safra.arquivada === true ||
+                                nomeText.includes('arquivada') ||
+                                nomeText.includes('arqui') ||
+                                nomeText.includes('finalizada') ||
+                                (safra.data_fim && safra.data_fim < hojeStr);
+
+                            return (
+                                <Card
+                                    key={safra.id}
+                                    onClick={() => handleSelecionarSafra(safra.id)}
+                                    className={`cursor-pointer transition-all border group flex flex-col justify-center relative overflow-hidden ${
+                                        isFinalizada
+                                        ? "bg-stone-100 border-stone-300 border-dashed hover:border-stone-400 hover:bg-stone-200/50 opacity-80"
+                                        : "bg-white border-stone-200 hover:border-emerald-500 hover:shadow-md"
+                                    }`}
+                                >
+                                    {/* Etiqueta Visual de Finalizada */}
+                                    {isFinalizada && (
+                                        <div className="absolute top-3 right-3">
+                                            <Badge className="bg-stone-300 text-stone-700 hover:bg-stone-400 border-none shadow-none text-[11px] uppercase tracking-wider font-bold">Finalizada</Badge>
+                                        </div>
+                                    )}
+
+                                    <CardHeader className="text-center py-8">
+                                        {isFinalizada ? (
+                                            <Archive className="w-10 h-10 mx-auto mb-3 text-stone-500 group-hover:text-stone-500 transition-colors" />
+                                        ) : (
+                                            <CalendarIcon className="w-10 h-10 mx-auto mb-3 text-emerald-600/50 group-hover:text-emerald-500 transition-colors" />
+                                        )}
+
+                                        <CardTitle className={`text-lg font-bold truncate px-2 ${
+                                            isFinalizada ? "text-stone-500 group-hover:text-stone-700" : "text-stone-800 group-hover:text-emerald-700"
+                                        }`} title={safra.nome}>
+                                            {safra.nome}
+                                        </CardTitle>
+
+                                        <Badge variant="outline" className={`mx-auto mt-2 font-bold ${
+                                            isFinalizada ? "bg-stone-200 border-stone-300 text-stone-600" : "bg-emerald-50 border-emerald-200 text-emerald-700"
+                                        }`}>
+                                            {talhao ? talhao.nome : 'Sem Válvula'}
+                                        </Badge>
+                                    </CardHeader>
+                                </Card>
+                            );
+                        })}
+                    </div>
+                </div>
+            ))}
         </div>
       );
   }
