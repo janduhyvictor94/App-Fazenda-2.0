@@ -4,7 +4,8 @@ import { supabase } from '@/lib/supabaseClient';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Sparkles, Send, Check, X, Loader2, Bot, User, Trash2 } from 'lucide-react';
-import { format } from 'date-fns';
+import { format, isSameMonth, parseISO } from 'date-fns';
+import { calcularFolha } from './Funcionarios';
 
 // Normaliza texto pra comparar nomes sem se importar com acento/maiúscula
 const normalizar = (s) => (s || '').toString().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
@@ -157,7 +158,11 @@ export default function Assistente() {
       try {
         const tabela = await executarAcao(item.ferramenta, item.dados, { talhoes, insumos, funcionarios });
         if (tabela) tabelasAfetadas.add(tabela);
-        sucessos.push(rotuloFerramenta[item.ferramenta] || item.ferramenta);
+        if (item.dados.__relatorio) {
+          sucessos.push(`${rotuloFerramenta[item.ferramenta] || item.ferramenta}:\n${item.dados.__relatorio.map(l => `  - ${l}`).join('\n')}`);
+        } else {
+          sucessos.push(rotuloFerramenta[item.ferramenta] || item.ferramenta);
+        }
       } catch (err) {
         falhas.push(`${rotuloFerramenta[item.ferramenta] || item.ferramenta}: ${err.message}`);
       }
@@ -441,6 +446,66 @@ export default function Assistente() {
       return 'safras';
     }
 
+    if (ferramenta === 'marcar_folha_paga') {
+      const mes = numero(dados.mes, null);
+      const ano = numero(dados.ano, null);
+      if (!mes || mes < 1 || mes > 12) throw new Error('Mês inválido (use 1 a 12).');
+      if (!ano) throw new Error('Faltou o ano.');
+
+      // Se não especificar nomes, aplica a TODOS os funcionários ativos.
+      const nomesAlvo = dados.funcionarios && dados.funcionarios.length > 0 ? dados.funcionarios : null;
+      const funcionariosAlvo = nomesAlvo
+        ? nomesAlvo.map(n => buscarObrigatorio(ctx.funcionarios, n, 'Funcionário'))
+        : ctx.funcionarios.filter(f => f.status === 'ativo');
+      if (funcionariosAlvo.length === 0) throw new Error('Nenhum funcionário encontrado.');
+
+      // Busca os custos de folha já lançados, pra saber se cada um já existe (e só
+      // muda o status) ou precisa ser criado (usando o salário já cadastrado — nunca
+      // um valor perguntado, ele já está no cadastro do funcionário).
+      const { data: custosFuncionarios } = await supabase.from('custos').select('*').eq('categoria', 'funcionario');
+      const idAlvo = `salario-${ano}-${String(mes).padStart(2, '0')}`;
+      const relatorio = [];
+
+      for (const func of funcionariosAlvo) {
+        const eventos = calcularFolha(func);
+        const evento = eventos.find(e => e.id === idAlvo);
+        if (!evento) {
+          relatorio.push(`${func.nome}: sem salário devido nesse mês (fora do período contratado).`);
+          continue;
+        }
+
+        const existente = (custosFuncionarios || []).find(c =>
+          c.descricao?.includes(func.nome) && c.descricao?.includes(evento.tipo) && isSameMonth(parseISO(c.data), evento.data_pagamento)
+        );
+
+        if (existente) {
+          if (existente.status_pagamento === 'pago') {
+            relatorio.push(`${func.nome}: já estava marcado como pago (R$${evento.valor.toFixed(2)}).`);
+          } else {
+            const { error } = await supabase.from('custos').update({ status_pagamento: 'pago' }).eq('id', existente.id);
+            if (error) throw error;
+            relatorio.push(`${func.nome}: marcado como pago (R$${evento.valor.toFixed(2)}).`);
+          }
+        } else {
+          const { error } = await supabase.from('custos').insert({
+            descricao: `Folha: ${evento.tipo} - ${func.nome}`,
+            categoria: 'funcionario',
+            valor: parseFloat(evento.valor.toFixed(2)),
+            data: format(evento.data_pagamento, 'yyyy-MM-dd'),
+            status_pagamento: 'pago',
+            tipo_lancamento: 'despesa',
+            observacoes: `Ref: ${evento.referencia}. ${evento.detalhe} (lançado e pago via assistente)`,
+            talhao_id: func.talhao_id || null
+          });
+          if (error) throw error;
+          relatorio.push(`${func.nome}: lançado e marcado como pago (R$${evento.valor.toFixed(2)}).`);
+        }
+      }
+      // Guarda o relatório detalhado pra mostrar no resultado final (ver confirmarProposta)
+      dados.__relatorio = relatorio;
+      return 'custos';
+    }
+
     if (ferramenta === 'registrar_consultoria') {
       if (!dados.consultor_nome) throw new Error('Faltou o nome do consultor.');
       const dataVisita = dados.data_visita || hoje;
@@ -474,7 +539,8 @@ export default function Assistente() {
     registrar_chuva: 'Chuva',
     criar_insumo: 'Novo Insumo',
     criar_safra: 'Nova Safra',
-    registrar_consultoria: 'Consultoria'
+    registrar_consultoria: 'Consultoria',
+    marcar_folha_paga: 'Pagamento de Folha'
   };
 
   // Resumo legível de cada proposta, pra você conferir de relance antes de
@@ -503,6 +569,10 @@ export default function Assistente() {
       linhas.push(`Categoria: ${dados.categoria || '?'} · Data: ${dados.data || 'hoje'}`);
       linhas.push(dados.talhao_nome ? `Talhão: ${dados.talhao_nome}` : `Geral (entra no rateio por área)`);
       linhas.push(dados.ja_pago ? 'Status: já pago' : 'Status: pendente');
+    } else if (ferramenta === 'marcar_folha_paga') {
+      linhas.push(`Mês: ${dados.mes}/${dados.ano}`);
+      linhas.push(dados.funcionarios && dados.funcionarios.length > 0 ? `Funcionários: ${dados.funcionarios.join(', ')}` : 'Funcionários: TODOS os ativos');
+      linhas.push('O valor de cada um vem do salário já cadastrado.');
     } else {
       // Ações de cadastro simples (talhão, funcionário, insumo, safra, consultoria, chuva)
       Object.entries(dados).forEach(([chave, valor]) => {
