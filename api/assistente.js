@@ -189,6 +189,19 @@ const FERRAMENTAS = [
     }
   },
   {
+    name: 'marcar_folha_paga',
+    description: 'Marca o salário mensal (folha de pagamento) como PAGO para um ou mais funcionários, num mês/ano específico. NUNCA pergunte o valor do salário — o sistema já sabe o salário cadastrado de cada funcionário e usa ele automaticamente. Use quando o usuário disser algo como "paguei a folha de agosto de todo mundo" ou "marca o salário do João de setembro como pago".',
+    input_schema: {
+      type: 'object',
+      properties: {
+        mes: { type: 'number', description: 'Mês de 1 a 12' },
+        ano: { type: 'number' },
+        funcionarios: { type: 'array', items: { type: 'string' }, description: 'Nomes dos funcionários. Deixe vazio se o usuário disse "todos" ou não especificou ninguém em particular.' }
+      },
+      required: ['mes', 'ano']
+    }
+  },
+  {
     name: 'consultar_dados',
     description: 'Use para PERGUNTAS sobre dados já existentes (quanto foi gasto, quanto foi colhido, qual o salário de alguém, etc.) — NUNCA para cadastrar algo novo.',
     input_schema: {
@@ -240,7 +253,7 @@ export default async function handler(req, res) {
     const [talhoes, insumos, funcionarios, culturas] = await Promise.all([
       buscarSeguro(supabase.from('talhoes').select('id, nome, cultura, area_hectares')),
       buscarSeguro(supabase.from('insumos').select('id, nome, unidade, preco_unitario, tamanho_embalagem')),
-      buscarSeguro(supabase.from('funcionarios').select('id, nome, status').eq('status', 'ativo')),
+      buscarSeguro(supabase.from('funcionarios').select('id, nome, cargo, salario, status').eq('status', 'ativo')),
       buscarSeguro(supabase.from('culturas').select('nome'))
     ]);
 
@@ -253,7 +266,7 @@ Talhões cadastrados: ${JSON.stringify((talhoes || []).map(t => ({ nome: t.nome,
 
 Insumos cadastrados: ${JSON.stringify((insumos || []).map(i => ({ nome: i.nome, unidade: i.unidade, preco_embalagem: i.preco_unitario, tamanho_embalagem: i.tamanho_embalagem })))}
 
-Funcionários ativos: ${JSON.stringify((funcionarios || []).map(f => f.nome))}
+Funcionários ativos (nome, cargo, salário já cadastrado): ${JSON.stringify((funcionarios || []).map(f => ({ nome: f.nome, cargo: f.cargo, salario: f.salario })))}
 
 Culturas cadastradas: ${JSON.stringify((culturas || []).map(c => c.nome))}
 `.trim();
@@ -270,7 +283,8 @@ REGRAS IMPORTANTES:
 5. IMPORTANTE: assim que tiver todas as informações necessárias, CHAME A FERRAMENTA NA MESMA RESPOSTA — nunca escreva só um resumo em texto perguntando "confirma?" e espere o usuário dizer "sim" antes de chamar. O aplicativo já mostra uma tela própria de confirmação depois que você chama a ferramenta, então essa pergunta em texto é redundante e arriscada (ao reescrever os dados de memória numa segunda resposta, você pode esquecer algum detalhe que já tinha, como o custo). Sempre chame a ferramenta com TODOS os dados que o usuário já deu, na primeira resposta possível, escrevendo o resumo em texto JUNTO da chamada (não em vez dela).
 6. Seja direto e objetivo — sem enrolação, sem saudação longa.
 7. Em "registrar_colheita": se o usuário mencionar QUALQUER custo de colheita (ex: "custo de 4 reais por caixa", "paguei 4 reais pra colher"), SEMPRE preencha custo_colheita_unitario e custo_unidade na chamada — nunca deixe esses campos de fora quando essa informação foi dada, mesmo que venha numa frase separada dentro da mesma mensagem.
-8. Se uma ação anterior na conversa AINDA NÃO foi confirmada pelo usuário (você vê isso pelo histórico: você chamou uma ferramenta e a resposta foi só "aguardando confirmação") e a nova mensagem do usuário claramente corrige ou completa aquela mesma ação (ex: ele esqueceu de mencionar um valor e agora está complementando), chame a MESMA ferramenta de novo com TODAS as informações já reunidas (as antigas + a nova) — não só a informação nova sozinha. Isso substitui a proposta anterior por uma completa.`;
+8. Se uma ação anterior na conversa AINDA NÃO foi confirmada pelo usuário (você vê isso pelo histórico: você chamou uma ferramenta e a resposta foi só "aguardando confirmação") e a nova mensagem do usuário claramente corrige ou completa aquela mesma ação (ex: ele esqueceu de mencionar um valor e agora está complementando), chame a MESMA ferramenta de novo com TODAS as informações já reunidas (as antigas + a nova) — não só a informação nova sozinha. Isso substitui a proposta anterior por uma completa.
+9. PRINCÍPIO GERAL: nunca pergunte uma informação que já está disponível no contexto acima (nomes e salários de funcionários, preços e embalagens de insumos, área/cultura de talhões). Se o usuário disser "pague o salário de todo mundo" ou "o funcionário X", use os dados que você já tem — só pergunte o que genuinamente não está em lugar nenhum (ex: se foi terceirizada uma atividade, ou uma data ambígua).`;
 
     const mensagens = [
       ...historico,
