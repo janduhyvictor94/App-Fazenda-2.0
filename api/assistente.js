@@ -9,6 +9,11 @@
 //
 // A chave da Anthropic (ANTHROPIC_API_KEY) fica só aqui no servidor, nunca é
 // enviada pro navegador — configure ela em Vercel → Settings → Environment Variables.
+//
+// PORTADO de produção (App-Fazenda-2.0/api/assistente.js) SEM NENHUMA alteração —
+// mesma URL/chave do Supabase, mesmo modelo, mesmas 11 ferramentas. A tela que
+// chama isto (src/pages/AssistenteIAPage.jsx) é que foi reescrita pro visual novo;
+// esta função do servidor é idêntica, byte a byte, à de produção.
 
 import { createClient } from '@supabase/supabase-js';
 
