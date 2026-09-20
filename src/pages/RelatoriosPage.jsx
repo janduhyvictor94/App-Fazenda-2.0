@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { BarChart3, Filter, CalendarRange, Printer, Layers } from 'lucide-react';
 import { ResponsiveContainer, ComposedChart, Line, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
 import KpiCard from '../components/KpiCard.jsx';
-import { custosDoAno, colheitasDoAno, totaisFinanceiros, receitaColheitas, demonstrativoPorTalhao } from '../lib/data.js';
+import { custosDoAno, custosDoAnoPorTalhao, colheitasDoAno, totaisFinanceiros, receitaColheitas, demonstrativoPorTalhao } from '../lib/data.js';
 import { formatBRL, formatCompactBRL } from '../lib/format.js';
 
 const hoje = new Date();
@@ -40,6 +40,11 @@ export default function RelatoriosPage({ dados }) {
     window.print();
   }
 
+  const nomeTalhaoFiltro = useMemo(
+    () => (talhaoFiltro ? talhoes.find((t) => String(t.id) === String(talhaoFiltro))?.nome : null),
+    [talhaoFiltro, talhoes]
+  );
+
   // --- Comparativo ano a ano (visão histórica, já existia) ---
   const anos = useMemo(() => {
     const set = new Set();
@@ -48,16 +53,24 @@ export default function RelatoriosPage({ dados }) {
     return Array.from(set).sort((a, b) => a - b);
   }, [custos, colheitas]);
 
+  // Quando um talhão está filtrado, este gráfico/tabela histórica precisa
+  // mostrar SÓ aquele talhão (direto + rateio) — antes ele sempre somava a
+  // fazenda inteira, mesmo com um talhão selecionado no filtro acima, o que
+  // dava a impressão de que o filtro "não fazia nada" no relatório por área.
   const linhasAno = useMemo(
     () =>
       anos.map((ano) => {
-        const c = custosDoAno({ custos, ano });
-        const h = colheitasDoAno({ colheitas, ano });
+        const c = talhaoFiltro
+          ? custosDoAnoPorTalhao({ custos, ano, talhaoId: talhaoFiltro, talhoes })
+          : custosDoAno({ custos, ano });
+        const h = colheitasDoAno({ colheitas, ano }).filter(
+          (col) => !talhaoFiltro || String(col.talhao_id) === String(talhaoFiltro)
+        );
         const { despesasPagas } = totaisFinanceiros(c);
         const receita = receitaColheitas(h);
         return { ano, receita, despesa: despesasPagas, resultado: receita - despesasPagas };
       }),
-    [anos, custos, colheitas]
+    [anos, custos, colheitas, talhoes, talhaoFiltro]
   );
 
   return (
@@ -65,7 +78,15 @@ export default function RelatoriosPage({ dados }) {
       <div className="no-print flex flex-wrap items-start justify-between gap-3">
         <p className="text-sm text-ink-faint max-w-2xl">
           Demonstrativo de safra por talhão — mesmo cálculo de rateio do Financeiro, só que aqui já organizado pra análise e
-          impressão/PDF. Filtre por período e, se quiser, por um único talhão.
+          impressão/PDF. Filtre por período e, se quiser, por um único talhão.{' '}
+          {nomeTalhaoFiltro ? (
+            <>
+              Mostrando <span className="text-tech font-semibold">só {nomeTalhaoFiltro}</span> — todo número nesta página é
+              referente unicamente a esta área.
+            </>
+          ) : (
+            <>Mostrando a fazenda inteira (todos os talhões).</>
+          )}
         </p>
         <button
           onClick={gerarPdf}
@@ -126,7 +147,7 @@ export default function RelatoriosPage({ dados }) {
         <h1 className="text-xl font-bold text-ink">Fazenda Cassiano&apos;s — Relatório Gerencial</h1>
         <p className="text-sm text-ink-faint">
           Período: {dataInicio} até {dataFim}
-          {talhaoFiltro && ` · Talhão: ${talhoes.find((t) => String(t.id) === String(talhaoFiltro))?.nome || ''}`} · Emitido em{' '}
+          {nomeTalhaoFiltro && ` · Talhão: ${nomeTalhaoFiltro}`} · Emitido em{' '}
           {new Date().toLocaleDateString('pt-BR')}
         </p>
       </div>
@@ -145,7 +166,9 @@ export default function RelatoriosPage({ dados }) {
 
       <div className="rounded-xl2 bg-surface border border-line overflow-hidden">
         <div className="px-4 sm:px-5 py-3.5 border-b border-line-soft">
-          <h3 className="font-display font-semibold text-sm text-ink">Demonstrativo de safra por talhão (só pagos)</h3>
+          <h3 className="font-display font-semibold text-sm text-ink">
+            Demonstrativo de safra por talhão (só pagos){nomeTalhaoFiltro && <span className="text-tech"> · {nomeTalhaoFiltro}</span>}
+          </h3>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -204,7 +227,14 @@ export default function RelatoriosPage({ dados }) {
       <div className="no-print rounded-xl2 bg-surface border border-line p-4 sm:p-6">
         <div className="flex items-center gap-2 mb-4">
           <BarChart3 className="w-4 h-4 text-brand" />
-          <h3 className="font-display font-semibold text-sm text-ink">Receita, despesa e resultado por ano</h3>
+          <h3 className="font-display font-semibold text-sm text-ink">
+            Receita, despesa e resultado por ano
+            {nomeTalhaoFiltro ? (
+              <span className="text-tech"> · só {nomeTalhaoFiltro}</span>
+            ) : (
+              <span className="text-ink-faint font-normal"> · fazenda inteira</span>
+            )}
+          </h3>
         </div>
         <div className="h-64 -ml-2">
           <ResponsiveContainer width="100%" height="100%">
@@ -233,6 +263,16 @@ export default function RelatoriosPage({ dados }) {
       </div>
 
       <div className="no-print rounded-xl2 bg-surface border border-line overflow-hidden">
+        <div className="px-4 sm:px-5 py-3 border-b border-line-soft text-xs text-ink-faint">
+          {nomeTalhaoFiltro ? (
+            <>
+              Valores só de <span className="text-tech font-semibold">{nomeTalhaoFiltro}</span> (custo direto + rateio deste
+              talhão).
+            </>
+          ) : (
+            <>Valores da fazenda inteira. Selecione um talhão no filtro acima pra ver só uma área.</>
+          )}
+        </div>
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-line text-left text-ink-faint text-xs uppercase tracking-wide">

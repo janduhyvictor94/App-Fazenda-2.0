@@ -16,3 +16,12 @@ export function formatKg(value) {
 export const MESES_PT = [
   'Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'
 ];
+
+// 'YYYY-MM-DD' -> 'DD/MM/AAAA', do jeito que qualquer um lê aqui. Sem
+// libs de data — evita fuso horário jogar a data pro dia anterior/seguinte.
+export function formatDateBR(dateStr) {
+  if (!dateStr) return '';
+  const [y, m, d] = dateStr.slice(0, 10).split('-');
+  if (!y || !m || !d) return dateStr;
+  return `${d}/${m}/${y}`;
+}

@@ -11,12 +11,45 @@ import {
   custosDaSafra,
   custosDoAnoPorTalhao,
   rateioPorTalhao,
+  divisaoEtapasTalhao,
   isCustoGeral,
   totaisFinanceiros,
   categoriaLabels,
   parseNumber
 } from '../lib/data.js';
-import { formatBRL, MESES_PT } from '../lib/format.js';
+import { formatBRL, formatDateBR, MESES_PT } from '../lib/format.js';
+
+// Mostra de onde vem o custo de uma área num período — 3 origens que hoje
+// vivem em telas diferentes do app e nunca apareciam juntas: o rateio dos
+// custos gerais, os lançamentos diretos do Financeiro (custos de safra:
+// insumo, funcionário, colheita...) e o custo das etapas de campo já
+// concluídas (adubação, indução...), lançadas em Atividades.
+function DivisaoEtapas({ etapas }) {
+  if (!etapas || etapas.totalGeral <= 0) return null;
+  const linhas = [
+    { key: 'rateio', label: 'Custos rateados', valor: etapas.custosRateados, cor: 'text-tech' },
+    { key: 'safra', label: 'Custos de safra (Financeiro)', valor: etapas.custosDeSafra, cor: 'text-ink' },
+    ...etapas.etapas.map((e) => ({ key: e.key, label: e.label, valor: e.valor, cor: 'text-brand' }))
+  ].filter((l) => l.valor > 0);
+
+  return (
+    <div className="mb-3 rounded-lg bg-base/60 border border-line-soft p-3">
+      <div className="text-[10px] uppercase tracking-wide text-ink-faint font-semibold mb-2">Divisão por etapa</div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+        {linhas.map((l) => (
+          <div key={l.key} className="min-w-0">
+            <div className="text-[11px] text-ink-faint truncate">{l.label}</div>
+            <div className={`text-sm font-semibold tabular ${l.cor}`}>{formatBRL(l.valor)}</div>
+          </div>
+        ))}
+      </div>
+      <div className="mt-2 pt-2 border-t border-line-soft flex items-center justify-between text-xs">
+        <span className="text-ink-faint">Total do período</span>
+        <span className="font-semibold tabular text-ink">{formatBRL(etapas.totalGeral)}</span>
+      </div>
+    </div>
+  );
+}
 
 // Mesmos campos e valores padrão do formulário de produção
 // (App-Fazenda-2.0/src/pages/Financeiro.jsx) — só a tecnologia mudou.
@@ -115,7 +148,7 @@ function LinhaLancamento({ c, talhoes, onEditar, onExcluir, onMarcarPago }) {
 
 export default function FinanceiroPage({ dados, recarregar }) {
   const { modo, ano, safraSelecionada } = usePeriodo();
-  const { talhoes, custos } = dados;
+  const { talhoes, custos, safras = [], atividades = [] } = dados;
 
   const [open, setOpen] = useState(false);
   const [editando, setEditando] = useState(null);
@@ -129,7 +162,75 @@ export default function FinanceiroPage({ dados, recarregar }) {
   // custo geral) só daquele talhão, em vez da fazenda inteira.
   const [talhaoFiltro, setTalhaoFiltro] = useState('');
 
+  const nomeTalhaoFiltro = useMemo(
+    () => (talhaoFiltro ? talhoes.find((t) => String(t.id) === String(talhaoFiltro))?.nome : null),
+    [talhaoFiltro, talhoes]
+  );
+
+  // Todas as safras já cadastradas para o talhão filtrado, mais recente
+  // primeiro — é em cima delas que o Financeiro desta área se organiza.
+  const safrasDoTalhao = useMemo(
+    () =>
+      talhaoFiltro
+        ? [...safras]
+            .filter((s) => String(s.talhao_id) === String(talhaoFiltro))
+            .sort((a, b) => (b.data_inicio || '').localeCompare(a.data_inicio || ''))
+        : [],
+    [safras, talhaoFiltro]
+  );
+
+  // Quando um talhão é filtrado (fora do modo Safra) e ele TEM safra(s)
+  // cadastrada(s), o Financeiro desta área passa a se organizar pelo ciclo de
+  // produção de cada safra — não mais só pelo ano-calendário do seletor do
+  // topo — porque é assim que se analisa o custo de uma área na prática: por
+  // período de produção, com o rateio e as etapas de campo já separados. Um
+  // talhão sem nenhuma safra cadastrada continua no fluxo por ano, de sempre.
+  const modoPorSafra = Boolean(talhaoFiltro) && modo !== 'safra' && safrasDoTalhao.length > 0;
+
+  const gruposPorSafra = useMemo(() => {
+    if (!modoPorSafra) return null;
+    const cobertos = new Set();
+    const grupos = safrasDoTalhao.map((s) => {
+      const itens = custosDaSafra({ custos, safra: s, talhoes });
+      itens.forEach((i) => cobertos.add(i.id));
+      const etapas = divisaoEtapasTalhao({
+        custos,
+        atividades,
+        talhoes,
+        talhaoId: talhaoFiltro,
+        dataInicio: s.data_inicio,
+        dataFim: s.data_fim
+      });
+      return {
+        key: `safra-${s.id}`,
+        titulo: s.nome,
+        subtitulo: `${formatDateBR(s.data_inicio)} – ${s.data_fim ? formatDateBR(s.data_fim) : 'em andamento'}`,
+        itens,
+        etapas
+      };
+    });
+    // Lançamentos diretos deste talhão que caem fora da janela de TODA safra
+    // cadastrada — continuam visíveis aqui, sem serem descartados.
+    const foraDeSafra = custos.filter(
+      (c) => String(c.talhao_id) === String(talhaoFiltro) && !cobertos.has(c.id)
+    );
+    if (foraDeSafra.length > 0) {
+      grupos.push({
+        key: 'fora-de-safra',
+        titulo: 'Fora de safra cadastrada',
+        subtitulo: 'lançamentos deste talhão sem uma safra correspondente',
+        itens: foraDeSafra,
+        etapas: null
+      });
+    }
+    return grupos;
+  }, [modoPorSafra, safrasDoTalhao, custos, talhoes, atividades, talhaoFiltro]);
+
+  // Os cartões do topo (Pago/Pendente/Receitas) sempre somam EXATAMENTE os
+  // mesmos lançamentos exibidos na lista logo abaixo — nunca um recorte
+  // diferente (ano vs. safra) que faria os números não baterem.
   const custosEscopo = useMemo(() => {
+    if (modoPorSafra) return gruposPorSafra.flatMap((g) => g.itens);
     if (modo === 'safra' && safraSelecionada) {
       return custosDaSafra({ custos, safra: safraSelecionada, talhoes });
     }
@@ -137,12 +238,7 @@ export default function FinanceiroPage({ dados, recarregar }) {
       return custosDoAnoPorTalhao({ custos, ano, talhaoId: talhaoFiltro, talhoes });
     }
     return custosDoAno({ custos, ano });
-  }, [modo, ano, safraSelecionada, custos, talhoes, talhaoFiltro]);
-
-  const nomeTalhaoFiltro = useMemo(
-    () => (talhaoFiltro ? talhoes.find((t) => String(t.id) === String(talhaoFiltro))?.nome : null),
-    [talhaoFiltro, talhoes]
-  );
+  }, [modoPorSafra, gruposPorSafra, modo, ano, safraSelecionada, custos, talhoes, talhaoFiltro]);
 
   const { despesasPagas, despesasPendentes, receitasExtras } = totaisFinanceiros(custosEscopo);
 
@@ -268,12 +364,30 @@ export default function FinanceiroPage({ dados, recarregar }) {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <p className="text-sm text-ink-faint max-w-2xl">
-          Lançamentos de{' '}
-          <span className="text-brand font-semibold">{modo === 'safra' ? safraSelecionada?.nome : `${ano}`}</span>
-          {nomeTalhaoFiltro && <> · <span className="text-tech font-semibold">{nomeTalhaoFiltro}</span></>}.{' '}
-          Custos gerais da fazenda aparecem já rateados por área — igual ao cálculo atual, só com o selo{' '}
-          <span className="text-tech inline-flex items-center gap-0.5"><Layers className="w-3 h-3" />rateio</span> pra ficar claro
-          {!talhaoFiltro && modo !== 'safra' && <> (clique em "ver rateio por área" num lançamento geral pra ver a quebra completa)</>}.
+          {modoPorSafra ? (
+            <>
+              Financeiro de <span className="text-tech font-semibold">{nomeTalhaoFiltro}</span> — organizado por{' '}
+              <span className="text-brand font-semibold">safra</span> (todo ciclo de produção já cadastrado para esta
+              área, não só o ano {ano}), com o rateio dos custos gerais e as etapas de campo (adubação, indução...) já
+              separados em cada período.
+            </>
+          ) : (
+            <>
+              Lançamentos de{' '}
+              <span className="text-brand font-semibold">{modo === 'safra' ? safraSelecionada?.nome : `${ano}`}</span>
+              {nomeTalhaoFiltro && <> · <span className="text-tech font-semibold">{nomeTalhaoFiltro}</span></>}.{' '}
+              Custos gerais da fazenda aparecem já rateados por área — igual ao cálculo atual, só com o selo{' '}
+              <span className="text-tech inline-flex items-center gap-0.5"><Layers className="w-3 h-3" />rateio</span> pra
+              ficar claro
+              {!talhaoFiltro && modo !== 'safra' && (
+                <> (clique em "ver rateio por área" num lançamento geral pra ver a quebra completa)</>
+              )}
+              {talhaoFiltro && !modoPorSafra && (
+                <> (esta área ainda não tem safra cadastrada — cadastre uma em Safras pra organizar por período)</>
+              )}
+              .
+            </>
+          )}
         </p>
 
         <div className="flex items-center gap-2 shrink-0">
@@ -308,43 +422,83 @@ export default function FinanceiroPage({ dados, recarregar }) {
       </div>
 
       <div className="space-y-2.5">
-        {porMes.map(([mesKey, lista], idx) => {
-          const [anoLista, mesNum] = mesKey.split('-');
-          const nomeMes = `${MESES_PT[Number(mesNum) - 1]} de ${anoLista}`;
-          const total = lista.reduce((acc, c) => acc + (c.tipo_lancamento === 'despesa' ? parseNumber(c.valor) : 0), 0);
-          const isRecente = idx === 0;
-          const pendentesDoGrupo = [...new Set(lista.filter((c) => c.status_pagamento !== 'pago').map((c) => c.id))];
-          return (
-            <HistoryAccordion
-              key={mesKey}
-              title={nomeMes}
-              subtitle={`${lista.length} lançamento${lista.length > 1 ? 's' : ''}`}
-              right={formatBRL(total)}
-              defaultOpen={isRecente}
-            >
-              <div>
-                {pendentesDoGrupo.length > 0 && (
-                  <div className="flex justify-end pb-2.5 mb-2 border-b border-line-soft">
-                    <button
-                      onClick={() => marcarGrupoPago(pendentesDoGrupo)}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-brand/10 text-brand text-xs font-semibold hover:bg-brand/20 transition-colors"
-                    >
-                      <CheckCheck className="w-3.5 h-3.5" />
-                      Marcar {pendentesDoGrupo.length} como pago{pendentesDoGrupo.length > 1 ? 's' : ''}
-                    </button>
+        {modoPorSafra
+          ? gruposPorSafra.map((g, idx) => {
+              const total = g.itens.reduce((acc, c) => acc + (c.tipo_lancamento === 'despesa' ? parseNumber(c.valor) : 0), 0);
+              const pendentesDoGrupo = [...new Set(g.itens.filter((c) => c.status_pagamento !== 'pago').map((c) => c.id))];
+              return (
+                <HistoryAccordion
+                  key={g.key}
+                  title={g.titulo}
+                  subtitle={g.subtitulo}
+                  right={formatBRL(g.etapas ? g.etapas.totalGeral : total)}
+                  defaultOpen={idx === 0}
+                >
+                  <div>
+                    <DivisaoEtapas etapas={g.etapas} />
+                    {pendentesDoGrupo.length > 0 && (
+                      <div className="flex justify-end pb-2.5 mb-2 border-b border-line-soft">
+                        <button
+                          onClick={() => marcarGrupoPago(pendentesDoGrupo)}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-brand/10 text-brand text-xs font-semibold hover:bg-brand/20 transition-colors"
+                        >
+                          <CheckCheck className="w-3.5 h-3.5" />
+                          Marcar {pendentesDoGrupo.length} como pago{pendentesDoGrupo.length > 1 ? 's' : ''}
+                        </button>
+                      </div>
+                    )}
+                    <div className="text-[10px] uppercase tracking-wide text-ink-faint font-semibold mb-1.5">
+                      Lançamentos do Financeiro
+                    </div>
+                    {g.itens.length === 0 && (
+                      <p className="text-xs text-ink-faint italic">Nenhum lançamento direto do Financeiro neste período.</p>
+                    )}
+                    {[...g.itens]
+                      .sort((a, b) => (b.data || '').localeCompare(a.data || ''))
+                      .map((c) => (
+                        <LinhaLancamento key={c.id} c={c} talhoes={talhoes} onEditar={abrirEdicao} onExcluir={excluir} onMarcarPago={marcarPago} />
+                      ))}
                   </div>
-                )}
-                {[...lista]
-                  .sort((a, b) => (b.data || '').localeCompare(a.data || ''))
-                  .map((c) => (
-                    <LinhaLancamento key={c.id} c={c} talhoes={talhoes} onEditar={abrirEdicao} onExcluir={excluir} onMarcarPago={marcarPago} />
-                  ))}
-              </div>
-            </HistoryAccordion>
-          );
-        })}
+                </HistoryAccordion>
+              );
+            })
+          : porMes.map(([mesKey, lista], idx) => {
+              const [anoLista, mesNum] = mesKey.split('-');
+              const nomeMes = `${MESES_PT[Number(mesNum) - 1]} de ${anoLista}`;
+              const total = lista.reduce((acc, c) => acc + (c.tipo_lancamento === 'despesa' ? parseNumber(c.valor) : 0), 0);
+              const isRecente = idx === 0;
+              const pendentesDoGrupo = [...new Set(lista.filter((c) => c.status_pagamento !== 'pago').map((c) => c.id))];
+              return (
+                <HistoryAccordion
+                  key={mesKey}
+                  title={nomeMes}
+                  subtitle={`${lista.length} lançamento${lista.length > 1 ? 's' : ''}`}
+                  right={formatBRL(total)}
+                  defaultOpen={isRecente}
+                >
+                  <div>
+                    {pendentesDoGrupo.length > 0 && (
+                      <div className="flex justify-end pb-2.5 mb-2 border-b border-line-soft">
+                        <button
+                          onClick={() => marcarGrupoPago(pendentesDoGrupo)}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-brand/10 text-brand text-xs font-semibold hover:bg-brand/20 transition-colors"
+                        >
+                          <CheckCheck className="w-3.5 h-3.5" />
+                          Marcar {pendentesDoGrupo.length} como pago{pendentesDoGrupo.length > 1 ? 's' : ''}
+                        </button>
+                      </div>
+                    )}
+                    {[...lista]
+                      .sort((a, b) => (b.data || '').localeCompare(a.data || ''))
+                      .map((c) => (
+                        <LinhaLancamento key={c.id} c={c} talhoes={talhoes} onEditar={abrirEdicao} onExcluir={excluir} onMarcarPago={marcarPago} />
+                      ))}
+                  </div>
+                </HistoryAccordion>
+              );
+            })}
 
-        {porMes.length === 0 && (
+        {(modoPorSafra ? gruposPorSafra.length === 0 : porMes.length === 0) && (
           <p className="text-sm text-ink-faint italic">Nenhum lançamento neste período.</p>
         )}
       </div>

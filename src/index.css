@@ -11,6 +11,19 @@ html {
   color-scheme: dark;
 }
 
+/* `color-scheme: dark` no <html> não é garantia em todo navegador/SO — no
+   Windows, o Chrome já mostrou o popup de opções de um <select> em fundo
+   claro mesmo com essa regra ativa, deixando o texto claro (cor "ink" do
+   tema) ilegível sobre fundo branco. Fica explícito aqui, direto no
+   elemento, pra nunca mais depender de heurística de tema do sistema. */
+select {
+  color-scheme: dark;
+}
+select option {
+  background-color: #161F1A; /* surface-raised */
+  color: #F5FAF7; /* ink */
+}
+
 html, body, #root {
   height: 100%;
 }

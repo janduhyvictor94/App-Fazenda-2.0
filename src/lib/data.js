@@ -634,6 +634,73 @@ function diasEntre(dataInicio, dataFim) {
   return Math.round((b - a) / (1000 * 60 * 60 * 24));
 }
 
+// Tipos de atividade de campo (mesmos valores de App-Fazenda-2.0/Atividades.jsx,
+// tela "Atividades" deste protótipo) — usados aqui só pra rotular o custo de
+// cada etapa (adubação, indução...) na divisão por etapa do Financeiro.
+export const tipoAtividadeLabels = {
+  inducao: 'Indução',
+  poda: 'Poda',
+  adubacao: 'Adubação',
+  pulverizacao: 'Pulverização',
+  maturacao: 'Maturação',
+  irrigacao: 'Irrigação',
+  capina: 'Capina',
+  outro: 'Outra atividade'
+};
+
+// Divisão por etapa de UM talhão dentro de um período (ex.: a janela de uma
+// safra) — separa 3 origens de custo que hoje vivem em lugares diferentes do
+// app e nunca apareciam juntas:
+//   1) custosDeSafra   — lançamentos DIRETOS do talhão na tela Financeiro
+//      (insumo, funcionário, colheita, manutenção... o que já está na tabela
+//      `custos` com este talhao_id).
+//   2) custosRateados  — fatia deste talhão nos custos GERAIS da fazenda
+//      (mesmo cálculo de área/área-total de sempre).
+//   3) etapas          — custo das atividades de campo já CONCLUÍDAS deste
+//      talhão (adubação, indução, poda...), lançadas na tela Atividades e que
+//      NUNCA duplicam a tabela `custos` — por isso somam à parte, não por
+//      cima do item 1.
+// Nada aqui inventa número novo: é só reagrupar valores que já existem, pra
+// mostrar "de onde vem" o custo de uma área, etapa por etapa.
+export function divisaoEtapasTalhao({ custos, atividades, talhoes, talhaoId, dataInicio, dataFim }) {
+  const inicio = dataInicio || '2000-01-01';
+  const fim = dataFim || '2100-12-31';
+  const dentroDoPeriodo = (d) => d && d >= inicio && d <= fim;
+
+  const custosDiretos = (custos || []).filter(
+    (c) => String(c.talhao_id) === String(talhaoId) && dentroDoPeriodo(c.data)
+  );
+  const custosDeSafra = custosDiretos.reduce((acc, c) => acc + parseNumber(c.valor), 0);
+
+  const areaTotal = areaTotalFazenda(talhoes);
+  const talhao = talhoes.find((t) => String(t.id) === String(talhaoId));
+  const proporcao = areaTotal > 0 ? getAreaTalhao(talhao) / areaTotal : 0;
+  const custosRateados = (custos || [])
+    .filter((c) => isCustoGeral(c) && dentroDoPeriodo(c.data))
+    .reduce((acc, c) => acc + parseNumber(c.valor) * proporcao, 0);
+
+  const atividadesConcluidas = (atividades || [])
+    .filter((a) => String(a.talhao_id) === String(talhaoId) && (a.status === 'concluida' || a.status === 'concluída'))
+    .map((a) => ({ ...a, dataEfetiva: a.data_realizada || a.data_programada }))
+    .filter((a) => dentroDoPeriodo(a.dataEfetiva));
+
+  const porEtapa = {};
+  atividadesConcluidas.forEach((a) => {
+    const key = a.tipo || 'outro';
+    porEtapa[key] = (porEtapa[key] || 0) + parseNumber(a.custo_total);
+  });
+
+  const etapas = Object.entries(porEtapa)
+    .map(([key, valor]) => ({ key, label: tipoAtividadeLabels[key] || key, valor }))
+    .filter((e) => e.valor > 0)
+    .sort((a, b) => b.valor - a.valor);
+
+  const totalEtapas = etapas.reduce((acc, e) => acc + e.valor, 0);
+  const totalGeral = custosDeSafra + custosRateados + totalEtapas;
+
+  return { custosDeSafra, custosRateados, etapas, totalEtapas, totalGeral };
+}
+
 export const categoriaLabels = {
   funcionario: { label: 'Funcionário', color: 'bg-tech/15 text-tech' },
   insumo: { label: 'Insumo', color: 'bg-brand/15 text-brand' },
