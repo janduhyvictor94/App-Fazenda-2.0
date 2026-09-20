@@ -27,6 +27,51 @@ body {
 .scrollbar-hide::-webkit-scrollbar { display: none; }
 .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
 
+/* Scrollbar visível no tema escuro — sem isto, a barra de rolagem padrão do
+   Windows/Chrome em modais e listas longas fica quase invisível sobre fundo
+   escuro, e parece que o conteúdo "acabou" quando na verdade só falta rolar
+   (ex.: formulários compridos em modais, em telas menores ou com zoom 100%). */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(62, 224, 137, 0.35) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background-color: rgba(62, 224, 137, 0.35);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(62, 224, 137, 0.55);
+}
+
+/* Impressão / "gerar PDF" (Relatórios, e qualquer outra tela que precise) —
+   usa o próprio diálogo de impressão do navegador (Salvar como PDF), igual à
+   produção. Esconde a navegação/sidebar/header do app e qualquer elemento
+   marcado como .no-print, deixando só o conteúdo da página em fundo claro
+   (o tema escuro do app não é ideal pra imprimir/gerar PDF pra ler no papel). */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  html,
+  body,
+  #root {
+    background: #ffffff !important;
+    color: #111111 !important;
+  }
+  .print-area {
+    color: #111111 !important;
+  }
+}
+
 /* leve textura de grid no fundo, sem exagero */
 .bg-grid {
   background-image:

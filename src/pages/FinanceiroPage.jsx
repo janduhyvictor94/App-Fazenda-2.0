@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Clock, CheckCircle2, Layers, Plus, Edit, Trash2, Loader2, AlertTriangle, CheckCheck } from 'lucide-react';
+import { Clock, CheckCircle2, Layers, Plus, Edit, Trash2, Loader2, AlertTriangle, CheckCheck, ChevronDown, MapPin } from 'lucide-react';
 import { usePeriodo } from '../context/PeriodoContext.jsx';
 import HistoryAccordion from '../components/HistoryAccordion.jsx';
 import KpiCard from '../components/KpiCard.jsx';
@@ -9,6 +9,9 @@ import { supabase } from '../lib/supabaseClient.js';
 import {
   custosDoAno,
   custosDaSafra,
+  custosDoAnoPorTalhao,
+  rateioPorTalhao,
+  isCustoGeral,
   totaisFinanceiros,
   categoriaLabels,
   parseNumber
@@ -30,46 +33,82 @@ function formVazio() {
   };
 }
 
-function LinhaLancamento({ c, onEditar, onExcluir, onMarcarPago }) {
+function LinhaLancamento({ c, talhoes, onEditar, onExcluir, onMarcarPago }) {
   const cat = categoriaLabels[c.categoria] || categoriaLabels.outro;
+  // Um lançamento "geral" (sem talhão) na visão da fazenda inteira ainda não foi
+  // dividido em nada — é o valor cheio. `c.isRateio` (vindo de custosDaSafra /
+  // custosDoAnoPorTalhao) é a fatia JÁ proporcionalizada de UM talhão; aqui,
+  // pra um geral "cru", oferecemos ver a quebra por TODAS as áreas de uma vez.
+  const podeVerRateio = isCustoGeral(c) && !c.isRateio;
+  const [verRateio, setVerRateio] = useState(false);
+  const breakdown = useMemo(() => (podeVerRateio && verRateio ? rateioPorTalhao(parseNumber(c.valor), talhoes) : []), [podeVerRateio, verRateio, c.valor, talhoes]);
+
   return (
-    <div className="flex items-center justify-between gap-3 py-2.5 border-b border-line-soft last:border-0">
-      <div className="flex items-center gap-2.5 min-w-0">
-        <span className={`text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded-md font-semibold ${cat.color}`}>
-          {cat.label}
-        </span>
-        <span className="text-sm text-ink truncate">{c.descricao || 'Lançamento'}</span>
-        {c.isRateio && (
-          <span className="hidden sm:flex items-center gap-1 text-[10px] text-tech shrink-0">
-            <Layers className="w-3 h-3" /> rateio
+    <div className="py-2.5 border-b border-line-soft last:border-0">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <span className={`text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded-md font-semibold ${cat.color}`}>
+            {cat.label}
           </span>
-        )}
-      </div>
-      <div className="flex items-center gap-2 shrink-0">
-        {c.status_pagamento === 'pago' ? (
-          <CheckCircle2 className="w-3.5 h-3.5 text-brand shrink-0" />
-        ) : (
-          <button
-            onClick={() => onMarcarPago(c)}
-            title="Marcar como pago"
-            className="text-amber hover:text-brand transition-colors shrink-0"
-          >
-            <Clock className="w-3.5 h-3.5" />
-          </button>
-        )}
-        <span className={`text-sm font-semibold tabular ${c.tipo_lancamento === 'receita' ? 'text-brand' : 'text-ink'}`}>
-          {c.tipo_lancamento === 'despesa' ? '- ' : '+ '}
-          {formatBRL(parseNumber(c.valor))}
-        </span>
-        <div className="flex items-center gap-0.5 shrink-0">
-          <button onClick={() => onEditar(c)} className="p-1 text-ink-faint hover:text-ink transition-colors">
-            <Edit className="w-3.5 h-3.5" />
-          </button>
-          <button onClick={() => onExcluir(c)} className="p-1 text-ink-faint hover:text-rose transition-colors">
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
+          <span className="text-sm text-ink truncate">{c.descricao || 'Lançamento'}</span>
+          {c.isRateio && (
+            <span className="hidden sm:flex items-center gap-1 text-[10px] text-tech shrink-0">
+              <Layers className="w-3 h-3" /> rateio
+            </span>
+          )}
+          {podeVerRateio && (
+            <button
+              onClick={() => setVerRateio((v) => !v)}
+              className="hidden sm:flex items-center gap-1 text-[10px] text-tech hover:text-tech/80 shrink-0"
+            >
+              <Layers className="w-3 h-3" /> geral · ver rateio por área
+              <ChevronDown className={`w-3 h-3 transition-transform ${verRateio ? 'rotate-180' : ''}`} />
+            </button>
+          )}
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          {c.status_pagamento === 'pago' ? (
+            <CheckCircle2 className="w-3.5 h-3.5 text-brand shrink-0" />
+          ) : (
+            <button
+              onClick={() => onMarcarPago(c)}
+              title="Marcar como pago"
+              className="text-amber hover:text-brand transition-colors shrink-0"
+            >
+              <Clock className="w-3.5 h-3.5" />
+            </button>
+          )}
+          <span className={`text-sm font-semibold tabular ${c.tipo_lancamento === 'receita' ? 'text-brand' : 'text-ink'}`}>
+            {c.tipo_lancamento === 'despesa' ? '- ' : '+ '}
+            {formatBRL(parseNumber(c.valor))}
+          </span>
+          <div className="flex items-center gap-0.5 shrink-0">
+            <button onClick={() => onEditar(c)} className="p-1 text-ink-faint hover:text-ink transition-colors">
+              <Edit className="w-3.5 h-3.5" />
+            </button>
+            <button onClick={() => onExcluir(c)} className="p-1 text-ink-faint hover:text-rose transition-colors">
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
       </div>
+      {podeVerRateio && verRateio && (
+        <div className="mt-2 ml-1 pl-3 border-l-2 border-tech/30 space-y-1">
+          {breakdown.length === 0 ? (
+            <p className="text-[11px] text-ink-faint italic">Cadastre a área (hectares) dos talhões pra calcular o rateio.</p>
+          ) : (
+            breakdown.map((r) => (
+              <div key={r.talhao.id} className="flex items-center justify-between gap-2 text-[11px]">
+                <span className="text-ink-faint flex items-center gap-1 min-w-0 truncate">
+                  <MapPin className="w-3 h-3 shrink-0" /> {r.talhao.nome}
+                  <span className="text-ink-faint/70">({(r.proporcao * 100).toFixed(1)}% · {r.areaHa} ha)</span>
+                </span>
+                <span className="text-ink-muted font-semibold tabular shrink-0">{formatBRL(r.valor)}</span>
+              </div>
+            ))
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -84,12 +123,26 @@ export default function FinanceiroPage({ dados, recarregar }) {
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState(null);
 
+  // Filtro "ver só este talhão" — independente do seletor Ano/Safra do topo.
+  // No modo Safra, a safra já é de um talhão só, então o filtro fica escondido
+  // (seria redundante). No modo Ano, some tudo (direto + fatia rateada de cada
+  // custo geral) só daquele talhão, em vez da fazenda inteira.
+  const [talhaoFiltro, setTalhaoFiltro] = useState('');
+
   const custosEscopo = useMemo(() => {
     if (modo === 'safra' && safraSelecionada) {
       return custosDaSafra({ custos, safra: safraSelecionada, talhoes });
     }
+    if (talhaoFiltro) {
+      return custosDoAnoPorTalhao({ custos, ano, talhaoId: talhaoFiltro, talhoes });
+    }
     return custosDoAno({ custos, ano });
-  }, [modo, ano, safraSelecionada, custos, talhoes]);
+  }, [modo, ano, safraSelecionada, custos, talhoes, talhaoFiltro]);
+
+  const nomeTalhaoFiltro = useMemo(
+    () => (talhaoFiltro ? talhoes.find((t) => String(t.id) === String(talhaoFiltro))?.nome : null),
+    [talhaoFiltro, talhoes]
+  );
 
   const { despesasPagas, despesasPendentes, receitasExtras } = totaisFinanceiros(custosEscopo);
 
@@ -215,17 +268,37 @@ export default function FinanceiroPage({ dados, recarregar }) {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <p className="text-sm text-ink-faint max-w-2xl">
-          Lançamentos de <span className="text-brand font-semibold">{modo === 'safra' ? safraSelecionada?.nome : `${ano}`}</span>.
+          Lançamentos de{' '}
+          <span className="text-brand font-semibold">{modo === 'safra' ? safraSelecionada?.nome : `${ano}`}</span>
+          {nomeTalhaoFiltro && <> · <span className="text-tech font-semibold">{nomeTalhaoFiltro}</span></>}.{' '}
           Custos gerais da fazenda aparecem já rateados por área — igual ao cálculo atual, só com o selo{' '}
-          <span className="text-tech inline-flex items-center gap-0.5"><Layers className="w-3 h-3" />rateio</span> pra ficar claro.
+          <span className="text-tech inline-flex items-center gap-0.5"><Layers className="w-3 h-3" />rateio</span> pra ficar claro
+          {!talhaoFiltro && modo !== 'safra' && <> (clique em "ver rateio por área" num lançamento geral pra ver a quebra completa)</>}.
         </p>
 
-        <button
-          onClick={abrirNovo}
-          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-brand text-base font-semibold text-sm hover:bg-brand/90 transition-colors shrink-0"
-        >
-          <Plus className="w-4 h-4" /> Novo lançamento
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          {modo !== 'safra' && (
+            <select
+              value={talhaoFiltro}
+              onChange={(e) => setTalhaoFiltro(e.target.value)}
+              className="rounded-xl bg-surface-raised border border-line px-3 py-2.5 text-sm text-ink"
+              title="Ver só um talhão (direto + rateio)"
+            >
+              <option value="">Fazenda inteira (geral)</option>
+              {talhoes.map((t) => (
+                <option key={t.id} value={t.id}>
+                  Só {t.nome}
+                </option>
+              ))}
+            </select>
+          )}
+          <button
+            onClick={abrirNovo}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-brand text-base font-semibold text-sm hover:bg-brand/90 transition-colors shrink-0"
+          >
+            <Plus className="w-4 h-4" /> Novo lançamento
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
@@ -264,7 +337,7 @@ export default function FinanceiroPage({ dados, recarregar }) {
                 {[...lista]
                   .sort((a, b) => (b.data || '').localeCompare(a.data || ''))
                   .map((c) => (
-                    <LinhaLancamento key={c.id} c={c} onEditar={abrirEdicao} onExcluir={excluir} onMarcarPago={marcarPago} />
+                    <LinhaLancamento key={c.id} c={c} talhoes={talhoes} onEditar={abrirEdicao} onExcluir={excluir} onMarcarPago={marcarPago} />
                   ))}
               </div>
             </HistoryAccordion>

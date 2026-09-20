@@ -167,6 +167,44 @@ export function custosDaSafra({ custos, safra, talhoes }) {
   return [...diretos, ...globaisRateados];
 }
 
+// Detalha um custo "geral" (sem talhão) por área — mesma fórmula usada em
+// custosDaSafra e no Painel de Inteligência (valor × área do talhão / área
+// total da fazenda), só que aqui devolve a quebra por TODOS os talhões de uma
+// vez, em vez de só a fatia de um. Usado no Financeiro pra mostrar, pra cada
+// lançamento geral, quanto cai em cada área.
+export function rateioPorTalhao(valor, talhoes) {
+  const areaTotal = areaTotalFazenda(talhoes);
+  if (areaTotal <= 0) return [];
+  return talhoes
+    .map((t) => {
+      const areaHa = getAreaTalhao(t);
+      const proporcao = areaHa / areaTotal;
+      return { talhao: t, areaHa, proporcao, valor: valor * proporcao };
+    })
+    .filter((r) => r.areaHa > 0)
+    .sort((a, b) => b.valor - a.valor);
+}
+
+// Custos de UM talhão específico dentro de um ano inteiro: os lançamentos
+// diretos dele + a fatia rateada de cada custo geral da fazenda — mesma regra
+// de custosDaSafra, só que parametrizada por ano/talhão em vez de depender de
+// existir uma safra cadastrada. Usado no filtro "ver só este talhão" do
+// Financeiro (fora do modo Safra, que já é implicitamente por talhão).
+export function custosDoAnoPorTalhao({ custos, ano, talhaoId, talhoes }) {
+  const doAno = custosDoAno({ custos, ano });
+  const areaTotal = areaTotalFazenda(talhoes);
+  const talhao = talhoes.find((t) => String(t.id) === String(talhaoId));
+  const areaTalhao = getAreaTalhao(talhao);
+  const proporcao = areaTotal > 0 ? areaTalhao / areaTotal : 0;
+
+  const diretos = doAno.filter((c) => String(c.talhao_id) === String(talhaoId));
+  const globaisRateados = doAno
+    .filter((c) => isCustoGeral(c))
+    .map((c) => ({ ...c, valor: parseNumber(c.valor) * proporcao, isRateio: true }));
+
+  return [...diretos, ...globaisRateados];
+}
+
 export function totaisFinanceiros(custosLista) {
   const despesasPagas = custosLista
     .filter((c) => c.tipo_lancamento === 'despesa' && c.status_pagamento === 'pago')
@@ -443,6 +481,81 @@ export function indicadoresPorTalhao({ talhoes, custos, colheitas, ano }) {
       margemPorHa: areaHa > 0 ? margem / areaHa : 0
     };
   });
+}
+
+// ---------------------------------------------------------------------------
+// Demonstrativo de safra por talhão, pra Relatórios — mesma regra de
+// produção (App-Fazenda-2.0/src/pages/Relatorios.jsx, aba "Safra & Custos"):
+// só custos PAGOS entram na conta (é o resultado realizado, não o previsto),
+// custo direto = custos pagos do talhão + atividades concluídas do talhão no
+// período, custo indireto = rateio dos custos gerais pagos pela área. Aceita
+// um intervalo de datas livre (não precisa ser o ano inteiro) e um talhaoId
+// opcional pra filtrar o resultado só daquele talhão.
+// ---------------------------------------------------------------------------
+export function demonstrativoPorTalhao({ custos, colheitas, atividades, talhoes, dataInicio, dataFim, talhaoId }) {
+  const inicio = dataInicio || '2000-01-01';
+  const fim = dataFim || '2100-12-31';
+  const dentroDoPeriodo = (data) => data && data >= inicio && data <= fim;
+
+  const custosNoPeriodo = (custos || []).filter((c) => dentroDoPeriodo(c.data));
+  const colheitasNoPeriodo = (colheitas || []).filter((c) => dentroDoPeriodo(c.data));
+  const atividadesConcluidasNoPeriodo = (atividades || [])
+    .filter((a) => a.status === 'concluida' || a.status === 'concluída')
+    .map((a) => ({ ...a, dataEfetiva: a.data_realizada || a.data_programada }))
+    .filter((a) => dentroDoPeriodo(a.dataEfetiva));
+
+  const custosPagosNoPeriodo = custosNoPeriodo.filter((c) => c.status_pagamento === 'pago');
+  const areaTotal = areaTotalFazenda(talhoes);
+  const custosGeraisPeriodo = custosPagosNoPeriodo.filter(isCustoGeral).reduce((acc, c) => acc + parseNumber(c.valor), 0);
+  const rateioPorHa = areaTotal > 0 ? custosGeraisPeriodo / areaTotal : 0;
+
+  const talhoesRelevantes = talhaoId ? talhoes.filter((t) => String(t.id) === String(talhaoId)) : talhoes;
+
+  const linhas = talhoesRelevantes
+    .map((t) => {
+      const area = getAreaTalhao(t);
+      const receita = colheitasNoPeriodo
+        .filter((c) => String(c.talhao_id) === String(t.id))
+        .reduce((acc, c) => acc + parseNumber(c.valor_total), 0);
+      const custoFinDireto = custosPagosNoPeriodo
+        .filter((c) => String(c.talhao_id) === String(t.id))
+        .reduce((acc, c) => acc + parseNumber(c.valor), 0);
+      const custoAtivDireto = atividadesConcluidasNoPeriodo
+        .filter((a) => String(a.talhao_id) === String(t.id))
+        .reduce((acc, a) => acc + parseNumber(a.custo_total), 0);
+      const custoDireto = custoFinDireto + custoAtivDireto;
+      const custoIndireto = area * rateioPorHa;
+      const custoTotal = custoDireto + custoIndireto;
+      const lucro = receita - custoTotal;
+      return {
+        id: t.id,
+        nome: t.nome,
+        cultura: t.cultura,
+        area,
+        receita,
+        custoDireto,
+        custoIndireto,
+        custoTotal,
+        lucro,
+        lucroPorHa: area > 0 ? lucro / area : 0,
+        custoPorHa: area > 0 ? custoTotal / area : 0
+      };
+    })
+    .filter((t) => t.receita > 0 || t.custoTotal > 0);
+
+  const totais = linhas.reduce(
+    (acc, l) => ({
+      area: acc.area + l.area,
+      receita: acc.receita + l.receita,
+      custoDireto: acc.custoDireto + l.custoDireto,
+      custoIndireto: acc.custoIndireto + l.custoIndireto,
+      custoTotal: acc.custoTotal + l.custoTotal,
+      lucro: acc.lucro + l.lucro
+    }),
+    { area: 0, receita: 0, custoDireto: 0, custoIndireto: 0, custoTotal: 0, lucro: 0 }
+  );
+
+  return { linhas, totais, custosGeraisPeriodo };
 }
 
 // Regras simples (sem IA de verdade) que viram alertas de texto — comparam

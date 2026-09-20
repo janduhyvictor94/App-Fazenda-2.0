@@ -11,14 +11,19 @@ import {
   Trash2,
   Loader2,
   AlertTriangle,
-  TrendingUp
+  TrendingUp,
+  Calculator,
+  Lock,
+  CalendarRange
 } from 'lucide-react';
+import { format, isSameMonth, isBefore, isAfter, startOfDay, endOfDay, parseISO } from 'date-fns';
 import Modal from '../components/Modal.jsx';
 import HistoryAccordion from '../components/HistoryAccordion.jsx';
 import KpiCard from '../components/KpiCard.jsx';
 import { supabase } from '../lib/supabaseClient.js';
 import { parseNumber } from '../lib/data.js';
 import { formatBRL } from '../lib/format.js';
+import { calcularFolha, calcularRescisao } from '../lib/folha.js';
 
 // Mesmos valores de status usados em produção (App-Fazenda-2.0/src/pages/Funcionarios.jsx):
 // 'ativo' | 'inativo' (= desligado) | 'ferias'. O painel de leitura original desta tela tinha
@@ -42,9 +47,13 @@ function formVazio() {
   };
 }
 
-function FuncionarioCard({ f, desligado, onEditar, onExcluir, onReajustar, onDesligar }) {
+function FuncionarioCard({ f, desligado, onEditar, onExcluir, onReajustar, onDesligar, onVerHistorico }) {
   return (
-    <div className={`rounded-xl2 border p-4 flex items-center justify-between gap-3 ${desligado ? 'bg-surface border-line opacity-80' : 'bg-surface border-line'}`}>
+    <div
+      className={`rounded-xl2 border p-4 flex items-center justify-between gap-3 cursor-pointer transition-colors ${desligado ? 'bg-surface border-line opacity-80 hover:opacity-100' : 'bg-surface border-line hover:border-brand/40'}`}
+      onClick={() => onVerHistorico(f)}
+      title="Ver histórico de folha, 13º, férias e rescisão"
+    >
       <div className="flex items-center gap-3 min-w-0">
         <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${desligado ? 'bg-line-soft text-ink-faint' : 'bg-brand/15 text-brand'}`}>
           <User className="w-4 h-4" />
@@ -77,7 +86,14 @@ function FuncionarioCard({ f, desligado, onEditar, onExcluir, onReajustar, onDes
           )}
         </div>
 
-        <div className="flex items-center gap-0.5 border-l border-line pl-2">
+        <div className="flex items-center gap-0.5 border-l border-line pl-2" onClick={(e) => e.stopPropagation()}>
+          <button
+            onClick={() => onVerHistorico(f)}
+            title="Folha, 13º, férias e rescisão"
+            className="p-1.5 text-ink-faint hover:text-tech transition-colors"
+          >
+            <Calculator className="w-4 h-4" />
+          </button>
           {!desligado && (
             <button
               onClick={() => onReajustar(f)}
@@ -109,12 +125,16 @@ function FuncionarioCard({ f, desligado, onEditar, onExcluir, onReajustar, onDes
 }
 
 export default function FuncionariosPage({ dados, recarregar }) {
-  const { funcionarios, talhoes = [] } = dados;
+  const { funcionarios, talhoes = [], custos = [] } = dados;
 
   const ativos = useMemo(() => funcionarios.filter((f) => !isDesligado(f)), [funcionarios]);
   const desligados = useMemo(() => funcionarios.filter(isDesligado), [funcionarios]);
 
   const folhaMensal = ativos.reduce((acc, f) => acc + parseNumber(f.salario), 0);
+
+  // Custos já lançados de folha (categoria 'funcionario') — usados pra cruzar com os eventos
+  // calculados (calcularFolha) e saber o que já foi pago/pendente/ainda não lançado.
+  const custosFuncionarios = useMemo(() => custos.filter((c) => c.categoria === 'funcionario'), [custos]);
 
   // --- Cadastro (criar/editar) ---
   const [open, setOpen] = useState(false);
@@ -283,6 +303,108 @@ export default function FuncionariosPage({ dados, recarregar }) {
     }
   }
 
+  // --- Folha & Histórico (13º, férias, rescisão) — ao clicar no funcionário ---
+  const anoAtual = new Date().getFullYear();
+  const [folhaOpen, setFolhaOpen] = useState(false);
+  const [folhaAlvo, setFolhaAlvo] = useState(null);
+  const [filtroInicio, setFiltroInicio] = useState(`${anoAtual}-01-01`);
+  const [filtroFim, setFiltroFim] = useState(`${anoAtual}-12-31`);
+  const [lancandoId, setLancandoId] = useState(null);
+
+  function abrirHistorico(f) {
+    setFolhaAlvo(f);
+    setFiltroInicio(`${anoAtual}-01-01`);
+    setFiltroFim(`${anoAtual}-12-31`);
+    setFolhaOpen(true);
+  }
+
+  // Mesma lógica de produção: cruza cada evento calculado (salário/13º/férias) com os custos já
+  // lançados (categoria 'funcionario', descrição "Folha: Tipo - Nome") pra saber o status de cada um.
+  const eventosFolha = useMemo(() => {
+    if (!folhaAlvo) return [];
+    const calculados = calcularFolha(folhaAlvo);
+    const hoje = new Date();
+    const dataCorte = folhaAlvo.data_inicio_contabil ? parseISO(folhaAlvo.data_inicio_contabil) : null;
+
+    const comStatus = calculados.map((evento) => {
+      const custo = custosFuncionarios.find((c) => {
+        const dataCusto = parseISO(c.data);
+        return isSameMonth(dataCusto, evento.data_pagamento) && c.descricao?.includes(folhaAlvo.nome) && c.descricao?.includes(evento.tipo);
+      });
+      let status = 'provisionado';
+      if (dataCorte && isBefore(evento.data_pagamento, dataCorte)) {
+        status = 'ignorado';
+      } else if (custo) {
+        status = custo.status_pagamento === 'pago' ? 'pago' : 'pendente_financeiro';
+      } else if (isBefore(evento.data_pagamento, hoje)) {
+        status = 'pendente_lancamento';
+      }
+      return { ...evento, status, custoId: custo?.id };
+    });
+
+    return comStatus.filter((evento) => {
+      const dataEvt = startOfDay(evento.data_pagamento);
+      const inicio = filtroInicio ? startOfDay(parseISO(filtroInicio)) : null;
+      const fim = filtroFim ? endOfDay(parseISO(filtroFim)) : null;
+      if (inicio && isBefore(dataEvt, inicio)) return false;
+      if (fim && isAfter(dataEvt, fim)) return false;
+      return true;
+    });
+  }, [folhaAlvo, custosFuncionarios, filtroInicio, filtroFim]);
+
+  const rescisaoAlvo = useMemo(() => (folhaAlvo ? calcularRescisao(folhaAlvo, custosFuncionarios) : null), [folhaAlvo, custosFuncionarios]);
+
+  const eventosValidos = eventosFolha.filter((e) => e.status !== 'ignorado');
+  const totalSalarios = eventosValidos.filter((e) => e.tipo === 'Salário Mensal').reduce((acc, e) => acc + e.valor, 0);
+  const totalFerias = eventosValidos.filter((e) => e.tipo.includes('Férias')).reduce((acc, e) => acc + e.valor, 0);
+  const totalDecimo = eventosValidos.filter((e) => e.tipo.includes('13º')).reduce((acc, e) => acc + e.valor, 0);
+  const custoTotalPeriodo = eventosValidos.reduce((acc, e) => acc + e.valor, 0);
+
+  async function lancarEvento(evento, statusInicial) {
+    if (!confirm(`Lançar "${evento.tipo}" (${evento.referencia}) como ${statusInicial === 'pago' ? 'PAGO' : 'PENDENTE'}?`)) return;
+    setLancandoId(evento.id);
+    try {
+      const payload = {
+        descricao: `Folha: ${evento.tipo} - ${folhaAlvo.nome}`,
+        categoria: 'funcionario',
+        valor: Number(evento.valor.toFixed(2)),
+        data: format(evento.data_pagamento, 'yyyy-MM-dd'),
+        status_pagamento: statusInicial,
+        tipo_lancamento: 'despesa',
+        observacoes: `Ref: ${evento.referencia}. ${evento.detalhe}`,
+        talhao_id: folhaAlvo.talhao_id || null
+      };
+      const { error } = await supabase.from('custos').insert([payload]);
+      if (error) throw error;
+      await recarregar();
+    } catch (err) {
+      alert(`Não foi possível lançar o custo.\n\nMotivo: ${err.message || 'Erro desconhecido'}`);
+    } finally {
+      setLancandoId(null);
+    }
+  }
+
+  async function alternarStatusEvento(evento, novoStatus) {
+    setLancandoId(evento.id);
+    try {
+      const { error } = await supabase.from('custos').update({ status_pagamento: novoStatus }).eq('id', evento.custoId);
+      if (error) throw error;
+      await recarregar();
+    } catch (err) {
+      alert(`Não foi possível atualizar o status do pagamento.\n\nMotivo: ${err.message || 'Erro desconhecido'}`);
+    } finally {
+      setLancandoId(null);
+    }
+  }
+
+  const statusBadge = {
+    ignorado: { label: 'HISTÓRICO', cls: 'bg-line-soft text-ink-faint' },
+    pago: { label: 'PAGO', cls: 'bg-brand/15 text-brand' },
+    pendente_financeiro: { label: 'PENDENTE', cls: 'bg-amber/15 text-amber' },
+    pendente_lancamento: { label: 'A LANÇAR', cls: 'bg-rose/15 text-rose' },
+    provisionado: { label: 'FUTURO', cls: 'bg-line-soft text-ink-faint' }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -312,6 +434,7 @@ export default function FuncionariosPage({ dados, recarregar }) {
             onExcluir={excluir}
             onReajustar={abrirReajuste}
             onDesligar={abrirDesligar}
+            onVerHistorico={abrirHistorico}
           />
         ))}
         {ativos.length === 0 && <p className="text-sm text-ink-faint italic">Nenhum funcionário ativo no momento.</p>}
@@ -324,7 +447,7 @@ export default function FuncionariosPage({ dados, recarregar }) {
         >
           <div className="space-y-2.5">
             {desligados.map((f) => (
-              <FuncionarioCard key={f.id} f={f} desligado onEditar={abrirEdicao} onExcluir={excluir} />
+              <FuncionarioCard key={f.id} f={f} desligado onEditar={abrirEdicao} onExcluir={excluir} onVerHistorico={abrirHistorico} />
             ))}
           </div>
         </HistoryAccordion>
@@ -599,6 +722,144 @@ export default function FuncionariosPage({ dados, recarregar }) {
             </button>
           </div>
         </form>
+      </Modal>
+
+      {/* Folha & Histórico — salário, 13º, férias e rescisão, ao clicar no funcionário */}
+      <Modal
+        open={folhaOpen}
+        onClose={() => setFolhaOpen(false)}
+        title={folhaAlvo ? `Folha & Histórico — ${folhaAlvo.nome}` : 'Folha & Histórico'}
+        description="Salário, 13º e férias calculados a partir da admissão e do histórico de reajustes. Use o período abaixo pra ver só uma faixa de datas."
+        maxWidth="max-w-4xl"
+      >
+        {folhaAlvo && (
+          <div className="space-y-5">
+            <div className="p-3 rounded-xl bg-base border border-line-soft flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-2 text-ink-muted text-xs font-semibold uppercase tracking-wide">
+                <CalendarRange className="w-4 h-4" /> Período
+              </div>
+              <input
+                type="date"
+                value={filtroInicio}
+                onChange={(e) => setFiltroInicio(e.target.value)}
+                className="rounded-lg bg-surface-raised border border-line px-2.5 py-1.5 text-xs text-ink"
+              />
+              <span className="text-ink-faint text-xs">até</span>
+              <input
+                type="date"
+                value={filtroFim}
+                onChange={(e) => setFiltroFim(e.target.value)}
+                className="rounded-lg bg-surface-raised border border-line px-2.5 py-1.5 text-xs text-ink"
+              />
+            </div>
+
+            {rescisaoAlvo && (
+              <div className="p-4 rounded-xl bg-rose/5 border border-rose/25 space-y-3">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <h4 className="font-bold text-rose flex items-center gap-2 text-sm">
+                    <Lock className="w-4 h-4" /> Resumo de rescisão — funcionário desligado
+                  </h4>
+                  <p className="text-xs text-rose/80">
+                    Salário base na saída: <b>{formatBRL(rescisaoAlvo.salarioNaSaida)}</b>
+                  </p>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  <div className="bg-base rounded-lg p-3 border border-line-soft">
+                    <p className="text-[10px] font-bold text-ink-faint uppercase">Já recebido (histórico)</p>
+                    <p className="text-lg font-black text-ink">{formatBRL(rescisaoAlvo.totalRecebidoHistorico)}</p>
+                    <p className="text-[10px] text-ink-faint mt-0.5">
+                      Salários: {formatBRL(rescisaoAlvo.totalSalariosRecebidos)} · Férias: {formatBRL(rescisaoAlvo.totalFeriasRecebidas)} · 13º:{' '}
+                      {formatBRL(rescisaoAlvo.totalDecimoRecebido)}
+                    </p>
+                  </div>
+                  <div className="bg-base rounded-lg p-3 border border-line-soft">
+                    <p className="text-[10px] font-bold text-ink-faint uppercase">13º a receber na saída</p>
+                    <p className="text-lg font-black text-brand">{formatBRL(rescisaoAlvo.decimoRescisao.valor)}</p>
+                    <p className="text-[10px] text-ink-faint mt-0.5">{rescisaoAlvo.decimoRescisao.detalhe}</p>
+                  </div>
+                  <div className="bg-base rounded-lg p-3 border border-line-soft">
+                    <p className="text-[10px] font-bold text-ink-faint uppercase">Férias a receber na saída</p>
+                    <p className="text-lg font-black text-brand">{formatBRL(rescisaoAlvo.feriasRescisao.valor)}</p>
+                    <p className="text-[10px] text-ink-faint mt-0.5">{rescisaoAlvo.feriasRescisao.detalhe}</p>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between pt-2 border-t border-rose/20">
+                  <span className="text-sm font-bold text-rose">Total a acertar na rescisão (13º + férias)</span>
+                  <span className="text-lg font-black text-rose">{formatBRL(rescisaoAlvo.totalRescisao)}</span>
+                </div>
+                <p className="text-[10px] text-ink-faint">
+                  Não inclui aviso prévio, multa de FGTS ou outros itens que o app não tem dados pra calcular — só salário, 13º e férias
+                  proporcionais/em aberto.
+                </p>
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
+              <KpiCard label="Total salários" value={formatBRL(totalSalarios)} icon={Wallet} tone="brand" />
+              <KpiCard label="Total 13º" value={formatBRL(totalDecimo)} icon={TrendingUp} tone="tech" />
+              <KpiCard label="Total férias" value={formatBRL(totalFerias)} icon={Calendar} tone="tech" />
+              <KpiCard label="Custo total" value={formatBRL(custoTotalPeriodo)} icon={Calculator} tone="neutral" />
+            </div>
+
+            <div className="rounded-xl border border-line overflow-hidden">
+              <div className="max-h-[360px] overflow-y-auto divide-y divide-line-soft">
+                {eventosFolha.map((evento) => {
+                  const badge = statusBadge[evento.status];
+                  return (
+                    <div key={evento.id} className="p-3 bg-base flex items-center justify-between gap-3 flex-wrap">
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold text-ink capitalize">{evento.referencia}</div>
+                        <div className="text-xs text-ink-faint">
+                          {evento.tipo} · vence {format(evento.data_pagamento, 'dd/MM/yyyy')}
+                        </div>
+                        <div className="text-[11px] text-ink-faint">{evento.detalhe}</div>
+                      </div>
+                      <div className="flex items-center gap-2.5 shrink-0">
+                        <span className="text-sm font-bold text-ink tabular">{formatBRL(evento.valor)}</span>
+                        <span className={`text-[10px] font-bold uppercase px-2 py-1 rounded-full ${badge.cls}`}>{badge.label}</span>
+                        {evento.status === 'ignorado' && (
+                          <span className="text-[11px] text-ink-faint italic flex items-center gap-1">
+                            <Lock className="w-3 h-3" /> bloqueado
+                          </span>
+                        )}
+                        {(evento.status === 'pago' || evento.status === 'pendente_financeiro') && (
+                          <select
+                            value={evento.status === 'pago' ? 'pago' : 'pendente'}
+                            disabled={lancandoId === evento.id}
+                            onChange={(e) => alternarStatusEvento(evento, e.target.value)}
+                            className="rounded-lg bg-surface-raised border border-line px-2 py-1 text-xs font-bold text-ink"
+                          >
+                            <option value="pago">Pago</option>
+                            <option value="pendente">Pendente</option>
+                          </select>
+                        )}
+                        {evento.status === 'pendente_lancamento' && (
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              onClick={() => lancarEvento(evento, 'pendente')}
+                              disabled={lancandoId === evento.id}
+                              className="px-2.5 py-1 rounded-lg text-xs font-bold text-amber border border-amber/30 hover:bg-amber/10 disabled:opacity-40"
+                            >
+                              Pendente
+                            </button>
+                            <button
+                              onClick={() => lancarEvento(evento, 'pago')}
+                              disabled={lancandoId === evento.id}
+                              className="px-2.5 py-1 rounded-lg text-xs font-bold bg-brand text-base hover:bg-brand/90 disabled:opacity-40"
+                            >
+                              Pago
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+                {eventosFolha.length === 0 && <p className="p-4 text-sm text-ink-faint italic">Nenhum evento de folha neste período.</p>}
+              </div>
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   );

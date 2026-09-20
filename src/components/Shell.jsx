@@ -89,10 +89,10 @@ export default function Shell({ page, onNavigate, children }) {
   const navMais = NAV.filter((n) => !MOBILE_PRINCIPAL.includes(n.id));
 
   return (
-    <div className="min-h-screen bg-base text-ink font-body">
+    <div className="min-h-screen bg-base text-ink font-body overflow-x-hidden">
       <div className="flex min-h-screen">
         {/* Sidebar — desktop */}
-        <aside className="hidden lg:flex lg:w-64 lg:flex-col lg:fixed lg:inset-y-0 border-r border-line bg-surface/60 backdrop-blur-xl">
+        <aside className="no-print hidden lg:flex lg:w-64 lg:flex-col lg:fixed lg:inset-y-0 border-r border-line bg-surface/60 backdrop-blur-xl">
           <div className="flex items-center gap-3 px-6 py-7">
             <div className="w-9 h-9 rounded-xl bg-brand/15 border border-brand/30 flex items-center justify-center shadow-glow-brand">
               <Leaf className="w-4.5 h-4.5 text-brand" strokeWidth={2.25} />
@@ -135,26 +135,30 @@ export default function Shell({ page, onNavigate, children }) {
           </nav>
         </aside>
 
-        {/* Conteúdo */}
-        <div className="flex-1 lg:pl-64">
-          <header className="sticky top-0 z-30 bg-base/85 backdrop-blur-xl border-b border-line">
+        {/* Conteúdo — min-w-0 é essencial aqui: sem isso, um item flex não
+            encolhe abaixo do tamanho do próprio conteúdo, então qualquer texto
+            longo em qualquer tela empurra essa coluna (e o cabeçalho/seletor de
+            período dentro dela) pra além da borda direita da janela — some sem
+            aviso, sem scroll, em qualquer zoom que não sobre espaço de sobra. */}
+        <div className="flex-1 min-w-0 lg:pl-64">
+          <header className="no-print sticky top-0 z-30 bg-base/85 backdrop-blur-xl border-b border-line">
             <div className="px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between gap-3">
-              <div className="lg:hidden flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-brand/15 border border-brand/30 flex items-center justify-center">
+              <div className="lg:hidden flex items-center gap-2 min-w-0 shrink">
+                <div className="w-7 h-7 rounded-lg bg-brand/15 border border-brand/30 flex items-center justify-center shrink-0">
                   <Leaf className="w-3.5 h-3.5 text-brand" />
                 </div>
-                <span className="font-display font-bold text-sm">Fazenda Cassiano&apos;s</span>
+                <span className="font-display font-bold text-sm truncate">Fazenda Cassiano&apos;s</span>
               </div>
-              <div className="hidden lg:block">
-                <h1 className="font-display font-bold text-lg text-ink">
+              <div className="hidden lg:block min-w-0">
+                <h1 className="font-display font-bold text-lg text-ink truncate">
                   {NAV.find((n) => n.id === page)?.label}
                 </h1>
               </div>
-              {!PAGINAS_SEM_PERIODO.has(page) && <PeriodoSwitcher />}
+              {!PAGINAS_SEM_PERIODO.has(page) && <div className="shrink-0"><PeriodoSwitcher /></div>}
             </div>
           </header>
 
-          <main className="px-4 sm:px-6 lg:px-8 py-6 pb-28 lg:pb-10 max-w-6xl">{children}</main>
+          <main className="px-4 sm:px-6 lg:px-8 py-6 pb-28 lg:pb-10 max-w-6xl mx-auto w-full min-w-0">{children}</main>
         </div>
       </div>
 
@@ -193,7 +197,7 @@ export default function Shell({ page, onNavigate, children }) {
         </div>
       )}
 
-      <nav className="lg:hidden fixed bottom-0 inset-x-0 z-30 bg-surface backdrop-blur-xl border-t border-line pb-[env(safe-area-inset-bottom,0px)]">
+      <nav className="no-print lg:hidden fixed bottom-0 inset-x-0 z-30 bg-surface backdrop-blur-xl border-t border-line pb-[env(safe-area-inset-bottom,0px)]">
         <div className="flex items-stretch justify-around">
           {navMobile.map((item) => {
             const Icon = item.icon;

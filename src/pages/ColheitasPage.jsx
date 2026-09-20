@@ -464,7 +464,6 @@ export default function ColheitasPage({ dados, recarregar }) {
               title={nome}
               subtitle={`${lista.length} colheita${lista.length > 1 ? 's' : ''}`}
               right={formatBRL(subtotal)}
-              defaultOpen
             >
               <div className="space-y-2">
                 {dias.map((dia) => (
